@@ -1,0 +1,20 @@
+# OS artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local Claude Code settings (contains user-specific paths)
+.claude/
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*~
