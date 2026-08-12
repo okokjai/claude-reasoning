@@ -25,9 +25,46 @@ A comprehensive reasoning engine that chains structured contract templates with 
 ## Requirements
 
 - **Claude Code CLI** (Desktop or CLI mode)
-- **MCP Servers** (configured in `mcp_servers.json`):
+- **MCP Servers** (recommended, configured in `mcp_servers.json`):
   - `sequential-thinking` — Reasoning node DAG engine (branching/backtracking/visualization)
   - `unified-fetch` — Multi-engine search (4 engines) + scrape (6 engines) with adaptive fallback
+
+---
+
+## ⚠️ MCP Dependencies & Fallback
+
+**This skill is designed for MCP-enabled environments**, but has built-in fallback paths.
+
+### With MCP (Recommended — Full Power)
+
+| Feature | Tool | Stage |
+|---------|------|-------|
+| Reasoning branching & backtracking | `sequential-thinking` | Decomposition, Hypothesis, Critique |
+| Multi-engine search (4 engines) | `unified-fetch search` | Verification |
+| Multi-engine web scraping (6 engines) | `unified-fetch scrape` | Verification |
+
+### Without MCP (Degraded Mode)
+
+The skill auto-detects available tools and degrades gracefully:
+
+| Feature | With MCP (CLI Full Mode) | Without MCP (Desktop Mode) |
+|---------|--------------------------|----------------------------|
+| Reasoning branching | ✅ Branching + backtracking | ❌ Linear reasoning (text-only) |
+| Search | ✅ unified-fetch (4 engines) | ⚠️ Built-in WebSearch (1 engine) |
+| Scraping | ✅ unified-fetch (6 engines) | ⚠️ Built-in WebFetch |
+| Evidence cap | 5/5 | 3/5 |
+| Quality assessment cap | 45/45 | 24/30 |
+
+**Fallback logic** is defined in:
+- `contracts/A2.md` — Platform detection (CLI Full Mode vs Desktop Mode)
+- `contracts/C1.md` — Skip strategy (scale-adaptive degradation)
+- `stages/stage-1-decomposition.md` — `can_branch=false` precondition check
+
+> **Tip**: Even without `unified-fetch`, you can still run the full reasoning pipeline. Install just `sequential-thinking` for the best experience:
+> ```bash
+> npx -y @anthropic-ai/mcp-server-sequential-thinking
+> ```
+> Then add it to your `mcp_servers.json`.
 
 ---
 
