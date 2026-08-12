@@ -4,7 +4,7 @@
 
 A comprehensive reasoning engine that chains structured contract templates with DAG orchestration via `sequential-thinking` MCP. Zero Python dependency — pure Markdown + MCP tools.
 
-> This is the English international version. The original Chinese version is available in the [claude-reasoning-distillation](https://github.com/your-org/claude-reasoning-distillation) repository.
+> This is the English international version. The original Chinese version is available in the [claude-reasoning-distillation](https://github.com/okokjai/claude-reasoning-distillation) repository.
 
 ---
 
@@ -74,10 +74,10 @@ The skill auto-detects available tools and degrades gracefully:
 
    ```bash
    # Linux / macOS
-   git clone https://github.com/your-org/claude-reasoning.git ~/.claude/skills/claude-reasoning
+   git clone https://github.com/okokjai/claude-reasoning.git ~/.claude/skills/claude-reasoning
 
    # Windows (Git Bash)
-   git clone https://github.com/your-org/claude-reasoning.git "$HOME/.claude/skills/claude-reasoning"
+   git clone https://github.com/okokjai/claude-reasoning.git "$HOME/.claude/skills/claude-reasoning"
    ```
 
 2. **Configure MCP Servers** in `~/.claude/mcp_servers.json`:

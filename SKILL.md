@@ -20,7 +20,7 @@ depends_on:
 
 # Claude Reasoning v1.0.0 — Graph-Based Reasoning Pipeline
 
-> **English international edition of claude-reasoning-distillation v7.5.1** — the original Chinese skill is published separately as [claude-reasoning-distillation](https://github.com/your-org/claude-reasoning-distillation).
+> **English international edition of claude-reasoning-distillation v7.5.1** — the original Chinese skill is published separately as [claude-reasoning-distillation](https://github.com/okokjai/claude-reasoning-distillation).
 
 ## Usage
 
