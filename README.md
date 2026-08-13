@@ -1,5 +1,12 @@
 # Claude Reasoning v1.0.0
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=social)](https://github.com/okokjai/claude-reasoning)
+[![GitHub Release](https://img.shields.io/github/v/release/okokjai/claude-reasoning)](https://github.com/okokjai/claude-reasoning/releases)
+[![Platform: Claude Code](https://img.shields.io/badge/Platform-Claude%20Code-000000.svg?logo=claude)](https://claude.com/claude-code)
+[![Zero Python](https://img.shields.io/badge/Zero-Python%20Dependency-blue.svg)]()
+[![MCP](https://img.shields.io/badge/MCP-Ready-orange.svg)]()
+
 **Graph-Based Reasoning Pipeline for Claude Code**
 
 A comprehensive reasoning engine that chains structured contract templates with DAG orchestration via `sequential-thinking` MCP. Zero Python dependency — pure Markdown + MCP tools.
