@@ -104,6 +104,8 @@ brainstorm_packet:
   original_frame: ...
   selected_frame: ...
   backup_frame: ...
+  candidate_frame_count: 0..4
+  selected_frame_count: 0..2
   hidden_constraints: []
   frame_comparison: ...
   cheapest_falsifier: ...
@@ -114,7 +116,7 @@ brainstorm_packet:
   sequential_branches: []
 ```
 
-`hidden_constraints` records constraints discovered during ATTEND or comparison. `frame_comparison` includes the surviving and retired frames plus relevance, falsifiability, feasibility, and risk rationale. `cheapest_falsifier` includes the experiment, change-result, and preserve-result. `iteration_count` is an integer from `0` through `1`. `framing_status` is `confirmed` only when the framing is supported by the available context, `assumed` when it relies on a conservative assumption, and `uncertain` when material ambiguity remains. `residual_uncertainty` records unresolved issues when a bounded limit prevents another iteration. `sequential_branches` records each fixed B node's branch ID and phase, in execution order.
+`hidden_constraints` records constraints discovered during ATTEND or comparison. `candidate_frame_count` is an integer from `0` through `4`; `selected_frame_count` is an integer from `0` through `2` and must equal the number of non-null primary/backup selections. `frame_comparison` includes the surviving and retired frames plus relevance, falsifiability, feasibility, and risk rationale. `cheapest_falsifier` includes the experiment, change-result, and preserve-result. `iteration_count` is an integer from `0` through `1`. It remains `0` when B9 emits `no_new_angle`; it becomes `1` only after the single permitted material-change loop completes. `framing_status` is `confirmed` only when the framing is supported by the available context, `assumed` when it relies on a conservative assumption, and `uncertain` when material ambiguity remains. `residual_uncertainty` records unresolved issues when a bounded limit prevents another iteration. `sequential_branches` records each fixed B node's branch ID and phase, in execution order.
 
 ## Safety boundary
 

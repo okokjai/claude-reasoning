@@ -242,6 +242,18 @@ if ! grep -q 'failure_route' "$SKILL_DIR/stages/stage-5.5-hallucination-harness.
   echo "  [FAIL] Stage 5.5 failure_route is missing"
   CONTRACT_FAIL=1
 fi
+if ! grep -q 'candidate_frame_count' "$SKILL_DIR/stages/stage-0-mini-brainstorming.md" || ! grep -q 'selected_frame_count' "$SKILL_DIR/stages/stage-0-mini-brainstorming.md"; then
+  echo "  [FAIL] Stage 0 frame count fields are missing"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'no_new_angle.*iteration_count=0\|iteration_count=0.*no_new_angle' "$SKILL_DIR/stages/stage-0-mini-brainstorming.md"; then
+  echo "  [FAIL] Stage 0 does not bind no_new_angle to iteration_count=0"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'revision_target.*problem_definition' "$SKILL_DIR/stages/stage-5-critique.md"; then
+  echo "  [FAIL] Stage 5 does not forbid revision_target aliases"
+  CONTRACT_FAIL=1
+fi
 if ! grep -q 'candidate input, not evidence' "$SKILL_DIR/contracts/C2.md" && ! grep -q 'candidate input, not evidence' "$SKILL_DIR/stages/stage-0-mini-brainstorming.md"; then
   echo "  [FAIL] Candidate/evidence boundary is missing"
   CONTRACT_FAIL=1
