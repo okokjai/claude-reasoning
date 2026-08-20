@@ -69,7 +69,7 @@ Critique Stage internal perspective division:
 
 Run one lightweight framing stress test in addition to the existing critique perspectives. This perspective is separate from Hallucination Detection and must consume the Stage 0 candidate framing without treating it as evidence. Select exactly one `stress_axis` from `risk`, `scale`, `time`, `constraint`, or `stakeholder`, then create exactly one `harder_frame` that preserves the question while making that axis harder. Test whether the `preliminary_conclusion` survives against the harder frame. Do not rerun Stage 0's DIVERGE, ATTEND, or CONVERGE phases here.
 
-The Stage 0 route is bounded by `stage_0_revision_count < 1`. Set `revision_target: stage-0` only when the problem definition itself is invalid (for example, the selected frame does not represent the user's problem or a material constraint makes the question ill-posed); this is a framing revision, not a normal hypothesis revision. A framing mismatch that can be handled without changing the problem definition remains a Stage 1 fix. Preserve the existing routes: a hypothesis defect targets Stage 2, and an evidence defect targets Stage 3. Never route a framing defect to Stage 2 or Stage 3 merely because its consequences appear there.
+The Stage 0 route is bounded by `stage_0_revision_count < 1`. Set `revision_target: stage-0` only when the problem definition itself is invalid (for example, the selected frame does not represent the user's problem or a material constraint makes the question ill-posed); this is a framing revision, not a normal hypothesis revision. A framing mismatch that can be handled without changing the problem definition is a separately classified decomposition mismatch and may target Stage 1. If `stage_0_revision_count == 1` and the defect is still a framing defect, set `revision_target: none` and record the unresolved framing issue in `residual_uncertainty`; do not route that defect to Stage 1. Preserve the existing routes: a hypothesis defect targets Stage 2, and an evidence defect targets Stage 3. Never route a framing defect to Stage 2 or Stage 3 merely because its consequences appear there.
 
 ```yaml
 problem_reframing_check:
@@ -82,7 +82,7 @@ problem_reframing_check:
   revision_target: none|stage-0|stage-1|stage-2|stage-3
 ```
 
-The output must contain exactly one stress axis and one harder frame. `revision_target: stage-0` is allowed at most once per reasoning run; after that limit, record the unresolved framing issue in `blind_spot` and `residual_uncertainty`, set `revision_target` to the nearest permitted non-Stage-0 target or `none`, and continue without another Stage 0 route.
+The output must contain exactly one stress axis and one harder frame. `revision_target: stage-0` is allowed at most once per reasoning run. If `stage_0_revision_count == 1` and the defect remains a framing defect, record the unresolved framing issue in `blind_spot` and `residual_uncertainty`, set `revision_target: none`, and continue without another Stage 0 route. Only a separately classified decomposition mismatch may target Stage 1; hypothesis and evidence defects retain their Stage 2 and Stage 3 targets respectively.
 
 **Input**
 - `brainstorm_packet` — Candidate framing packet from Stage 0 (`selected_frame` is the original frame; it is not evidence)
@@ -100,15 +100,16 @@ The output must contain exactly one stress axis and one harder frame. `revision_
 - `problem_reframing_check` — Exactly one-axis, one-harder-frame result with the fields defined above
 - `hallucination_check` — Hallucination detection results — `{entity_count, entity_sourced, entity_unsourced, citation_count, citation_real, citation_fabricated, non_quantitative_factors_listed, pass}`
 - `price_notes` — (optional) Price presentation check — `{unit_defined, currency_defined, occupancy_noted, disclaimer_added}`
-- `fix_requirements` — Revision requirements based on blind spot findings, including the defect class and `revision_target` (`stage-0` only for an invalid problem definition; `stage-2` for hypothesis defects; `stage-3` for evidence defects)
+- `fix_requirements` — Revision requirements based on blind spot findings, including the defect class and `revision_target` (`stage-0` only for an invalid problem definition when `stage_0_revision_count < 1`; `stage-1` only for a separately classified decomposition mismatch with a valid problem definition; `stage-2` for hypothesis defects; `stage-3` for evidence defects; otherwise `none` with residual uncertainty recorded)
 - `needs_revision` — Whether revision is needed (yes/no)
-- `revision_branches` — (optional) Backtrack revision records. Framing records contain `{revision_kind: framing, revision_target: stage-0, revision_reason, stage_0_revision_count, new_branch_id}`; hypothesis/evidence records retain `{original_hypothesis, revision_reason, new_branch_id}` and target Stage 2/3 respectively
+- `residual_uncertainty` — Mandatory record of unresolved framing issues or other blind spots accepted when no permitted revision route remains; use an explicit empty value when none remains
+- `revision_branches` — (optional) Backtrack revision records. Framing records contain `{revision_kind: framing, revision_target: stage-0, revision_reason, stage_0_revision_count, new_branch_id}` only when the counter is below 1; when the counter is 1, the framing record must instead use `revision_target: none` and include `residual_uncertainty` (and must not target Stage 1). Decomposition-mismatch records that target Stage 1 contain `{revision_kind: decomposition-mismatch, revision_target: stage-1, revision_reason, affected_fields, new_branch_id}` and mean the problem definition remains valid but the decomposition must be corrected. Hypothesis/evidence records retain `{original_hypothesis, revision_reason, new_branch_id}` and target Stage 2/3 respectively
 
 **Linear Degradation Output (used when can_branch=false)**
 - `perspectives` — Recorded as text (not sequential-thinking branches), each containing `{name, analysis(>=2 sentences)}`
 - `problem_reframing_check` — The same required fields, with exactly one `stress_axis` and one `harder_frame`; record the check linearly and do not call sequential-thinking
 - `hallucination_check` — Same as above (hallucination detection produced independently by the critique perspective)
-- `revision_branches` — Framing entries contain `{revision_kind: framing, revision_target: stage-0, revision_reason, stage_0_revision_count, linear_note}`; hypothesis/evidence entries retain `{original_hypothesis, revision_reason, linear_note}` and their Stage 2/3 targets (text records, no sequential-thinking branches created)
+- `revision_branches` — Framing entries contain `{revision_kind: framing, revision_target: stage-0, revision_reason, stage_0_revision_count, new_branch_id}` only while the counter is below 1; at `stage_0_revision_count == 1`, use `{revision_kind: framing, revision_target: none, revision_reason, stage_0_revision_count, residual_uncertainty, linear_note}` and do not route to Stage 1. Separately classified decomposition-mismatch entries may target Stage 1 and contain `{revision_kind: decomposition-mismatch, revision_target: stage-1, revision_reason, affected_fields, linear_note}`; hypothesis/evidence entries retain `{original_hypothesis, revision_reason, linear_note}` and their Stage 2/3 targets (text records, no sequential-thinking branches created)
 
 ### Perspective-Mode Mapping Table
 
@@ -127,7 +128,7 @@ The output must contain exactly one stress axis and one harder frame. `revision_
 | **Precision** | **Required** | **Required** | **Required** | **Required** | **Required** |
 | **Problem Reframing Check** | **Required** | **Required** | **Required** | **Required** | **Required** |
 
-Small problems: 5 core perspectives (Correctness, Completeness, Risk, Hallucination Detection, Execution Feasibility)
+Small problems: 5 original core perspectives (Correctness, Completeness, Risk, Hallucination Detection, Execution Feasibility) plus the always-required Problem Reframing Check
 
 ### Hallucination Detection Rules
 
