@@ -110,6 +110,7 @@ When re-entering from Stage 5.5 with `failure_route=stage-5`, consume `failure_c
 - `problem_reframing_check` — Exactly one-axis, one-harder-frame result with the fields defined above
 - `hallucination_check` — Preliminary hallucination screen only; it is not the Stage 5.5 gate and must not be used as the final hallucination judgment
 - `confidence_table` — Mandatory confidence annotation table passed to Stage 6; each entry contains `{claim, source_tier, cross_validation_count, confidence, notes}`
+- `precision_audit` — Mandatory precision audit passed to Stage 6; contains the six completeness/alignment booleans, `issues_found`, and `precision_score` defined below
 - `price_notes` — (optional) Price presentation check — `{unit_defined, currency_defined, occupancy_noted, disclaimer_added}`
 - `fix_requirements` — Revision requirements based on blind spot findings, including the defect class and `revision_target` (`stage-0` only for an invalid problem definition when `stage_0_revision_count < 1`; `stage-1` only for a separately classified decomposition mismatch with a valid problem definition; `stage-2` for hypothesis defects; `stage-3` for evidence defects; otherwise `none` with residual uncertainty recorded)
 - `needs_revision` — Whether revision is needed (yes/no)
