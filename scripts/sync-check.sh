@@ -56,7 +56,7 @@ for f in contracts/A0.md contracts/A1.md contracts/A2.md contracts/A3.md contrac
   if [ ! -f "$SKILL_DIR/$f" ]; then echo "  [FAIL] Missing $f"; NODE_FAIL=1; fi
 done
 # Stage layer
-for f in stages/stage-1-decomposition.md stages/stage-2-hypothesis.md stages/stage-3-verification.md stages/stage-4-synthesis.md stages/stage-5-critique.md stages/stage-5.5-hallucination-harness.md stages/stage-6-conclusion.md; do
+for f in stages/stage-0-mini-brainstorming.md stages/stage-1-decomposition.md stages/stage-2-hypothesis.md stages/stage-3-verification.md stages/stage-4-synthesis.md stages/stage-5-critique.md stages/stage-5.5-hallucination-harness.md stages/stage-6-conclusion.md; do
   if [ ! -f "$SKILL_DIR/$f" ]; then echo "  [FAIL] Missing $f"; NODE_FAIL=1; fi
 done
 # Mode layer
@@ -68,7 +68,7 @@ for f in quality/self-assessment.md CHANGELOG.md; do
   if [ ! -f "$SKILL_DIR/$f" ]; then echo "  [FAIL] Missing $f"; NODE_FAIL=1; fi
 done
 if [ "$NODE_FAIL" -eq 0 ]; then
-  echo "  [OK] All node files present (8 contracts + 7 stages + 5 modes + 1 quality + 1 changelog)"
+  echo "  [OK] All node files present (8 contracts + 8 stages + 5 modes + 1 quality + 1 changelog)"
 else
   FAIL=1
 fi
