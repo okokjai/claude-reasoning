@@ -83,6 +83,16 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 |  contracts/A4.md: Source quality (T1-T5 + marketing detection)     |
 |       |                                                             |
 |       v                                                             |
+|  A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 →     |
+|  Stage 4 → Stage 5 → Stage 5.5 → Stage 6                              |
+|                                                                     |
+|  stages/stage-0-mini-brainstorming.md -> bounded mini brainstorm   |
+|       |  +-- DIVERGE: at most four distinct frames                |
+|       |  +-- ATTEND: compare constraints and conflicts             |
+|       |  +-- CONVERGE: one primary, at most one backup             |
+|       |  +-- FALSIFIER / one bounded ITERATE or no_new_angle       |
+|       |                                                             |
+|       v                                                             |
 |  stages/stage-1-decomposition.md -> sequential-thinking decomposit. |
 |       |  +-- Sub-problem A (independent branch)                    |
 |       |  +-- Sub-problem B (independent branch)                    |
@@ -107,8 +117,9 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 |  stages/stage-5-critique.md -> sequential-thinking critique        |
 |       |  +-- Correctness perspective (branch)                       |
 |       |  +-- Risk perspective (branch)                              |
-|       |  +-- ... other perspectives (branch)                        |
-|       |  +-- if blind spot found -> backtrack to Stage 2            |
+|       |  +-- Problem Reframing Check (one lightweight harder frame)  |
+|       |  +-- framing defect -> Stage 0 at most once                 |
+|       |  +-- hypothesis defect -> Stage 2; evidence defect -> Stage 3 |
 |       |                                                             |
 |       v                                                             |
 |  stages/stage-5.5-hallucination-harness.md -> independent          |
@@ -125,7 +136,9 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 |                                                                     |
 +-------------------------------------------------------------------+
 
-> **Fallback path**: If `can_branch=false` (sequential-thinking unavailable at runtime), Stages 1/2/5 degrade to linear reasoning. Branches are recorded as text instead of sequentialthinking calls.
+> **Stage path**: `A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6`.
+>
+> **Fallback path**: If `can_branch=false` (sequential-thinking unavailable at runtime), Stage 0, Stages 1/2/5 degrade to linear reasoning. The same phases, node labels, and bounded decisions are recorded as text in place of sequential-thinking calls; no stage is skipped.
 ```
 
 ### Stage Rules
@@ -134,11 +147,12 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 |-------|-----------|--------|
 | Contracts A1 + A2 | Contract templates (problem characteristics + reasoning strategy) | Classification and strategy only |
 | Contract C0 | Contract template (user context capture) | Structured user constraints |
+| Stage 0: Mini Brainstorming | `sequentialthinking` with linear fallback | Mandatory bounded framing before decomposition: at most 4 divergent frames, at most 2 selected, at most 1 iteration; no_new_angle is valid |
 | Stage 1: Decomposition | `sequentialthinking` | Sub-problems need independent branch development |
 | Stage 2: Hypothesis | `sequentialthinking` | Each hypothesis needs independent branch; Stage 5 can backtrack to revise here |
 | Stage 3: Verification | `unified-fetch` | Requires actual search/browse/scrape (built-in 4-engine search + 6-engine scrape fallback) |
 | Stage 4: Synthesis | None (pure reasoning) | Merging evidence does not need tools |
-| Stage 5: Critique | `sequentialthinking` | Multi-perspective branching + backtracking revision |
+| Stage 5: Critique | `sequentialthinking` | Multi-perspective branching + backtracking revision; includes one lightweight Problem Reframing Check, not the full Stage 0 brainstorm |
 | Stage 5.5: Anti-Hallucination Harness | None (pure reasoning) | Independent P0 gate, three checks: entity/source/cross-reference |
 | Stage 6: Conclusion | None (P0 gate check) | Final judgment does not need tools |
 
@@ -149,6 +163,10 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 ---
 
 ## Backtracking Revision Mechanism (sequential-thinking exclusive)
+
+Stage 0 is mandatory for every reasoning task after C0 and before Stage 1. Its full mini brainstorm is distinct from Stage 5's lightweight Problem Reframing Check: Stage 0 runs the fixed DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER path, while Stage 5 creates one harder frame on exactly one stress axis and does not rerun those phases. A Stage 5 framing defect may return to Stage 0 at most once; hypothesis and evidence defects retain their Stage 2/3 routes.
+
+Stage 0 uses a fixed budget: no more than four divergent frames, no more than two selected frames (one primary and at most one backup), and no more than one iteration. `no_new_angle` is a valid terminal result when no material framing defect, changed hard constraint, or changed falsifier warrants iteration. Do not ask a user question when a conservative assumption is safe; ask at most one question only when unresolved ambiguity materially changes the solution space, and otherwise record the assumption and uncertainty. When `can_branch=false`, retain all Stage 0 phases and node labels as linear text and do not call sequential-thinking.
 
 ```
 When a blind spot is found during the critique stage:
@@ -188,7 +206,7 @@ When a blind spot is found during the critique stage:
 
 | Tool | Purpose | When Used |
 |------|---------|-----------|
-| `sequentialthinking` | Reasoning nodes (branching/backtracking/visualization) | Decomposition, Hypothesis, Critique stages |
+| `sequentialthinking` | Reasoning nodes (branching/backtracking/visualization) | Stage 0 bounded brainstorm, Decomposition, Hypothesis, Critique stages; Stage 0 uses a linear fallback when unavailable |
 | `mcp__unified-fetch__search` | Multi-engine search (Hound -> DDG -> Google -> Direct) | Verification stage (preferred) |
 | `mcp__unified-fetch__scrape` | Multi-engine web scraping (Hound -> newspaper3k -> Trafilatura -> readability -> jusText -> Direct) | Verification stage, known URL needs full text |
 | `mcp__unified-fetch__status` | Check engine health | Platform detection |
@@ -237,11 +255,12 @@ When a blind spot is found during the critique stage:
 
 | Stage | File | Tool |
 |-------|------|------|
+| Stage 0: Mini Brainstorming | `stages/stage-0-mini-brainstorming.md` | sequential-thinking with linear fallback |
 | Stage 1: Decomposition | `stages/stage-1-decomposition.md` | sequential-thinking |
 | Stage 2: Hypothesis | `stages/stage-2-hypothesis.md` | sequential-thinking |
 | Stage 3: Verification | `stages/stage-3-verification.md` | unified-fetch |
 | Stage 4: Synthesis | `stages/stage-4-synthesis.md` | None (pure reasoning) |
-| Stage 5: Critique | `stages/stage-5-critique.md` | sequential-thinking |
+| Stage 5: Critique | `stages/stage-5-critique.md` | sequential-thinking; includes lightweight Problem Reframing Check |
 | Stage 5.5: Anti-Hallucination Harness | `stages/stage-5.5-hallucination-harness.md` | None (pure reasoning P0 gate) |
 | Stage 6: Conclusion | `stages/stage-6-conclusion.md` | None (P0 gate check) |
 
@@ -393,7 +412,9 @@ ${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-patterns/cache/{topic-categ
 
 ## Principles
 
-- **Decompose first, then hypothesize** — do not skip steps
+- **Decompose first, then hypothesize** — do not skip steps; mandatory Stage 0 first clarifies the framing before decomposition
+- **Stage 0 is fixed-budget** — at most 4 divergent frames, 2 selected frames, and 1 iteration; `no_new_angle` is valid, and ask at most one clarification only for a material ambiguity
+- **Stage 5 reframing is lightweight** — its Problem Reframing Check tests one harder frame and does not replace or rerun Stage 0's full brainstorm
 - **At least 2 competing hypotheses per sub-problem** — avoid confirmation bias
 - **Critique layer is mandatory** — at least 3 perspectives for high-risk problems
 - **Branches can be backtracked and revised** — when a blind spot is found during critique, backtrack to the hypothesis stage rather than starting over
