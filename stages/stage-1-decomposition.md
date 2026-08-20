@@ -33,21 +33,21 @@ sequentialthinking call example:
 - `primary_mode` — Primary mode from A2 contract output
 - `scale` — Problem scale from A2 contract output
 - `platform_mode` — Platform mode from A2 contract output
-- `primary_domain` — Primary domain from A1 contract output
+- `primary_domain` — Primary domain from A1 contract output (ambient A1/user context)
 - `brainstorm_packet` — Mandatory candidate framing packet from Stage 0
-- `stage_0_uncertainty` — (optional) Residual uncertainty from Stage 0
 - `disclaimer_text` — (optional) Disclaimer text from A2 contract output
 - `can_branch` — sequential-thinking availability flag (yes/no) from A2 contract output
-- `user_constraints` — (optional) User constraints from C0 contract output
-- `success_criteria` — (optional) Success criteria from C0 contract output
+- `user_constraints` — Required C0-shaped context field; empty list is the explicit default when C0 does not trigger
+- `implicit_assumptions` — Required C0-shaped context field; empty list is the explicit default when C0 does not trigger
+- `success_criteria` — Required C0-shaped context field; empty list is the explicit default when C0 does not trigger
 
 **Input handling**:
 - Require `brainstorm_packet` before decomposition; if it is missing or incomplete, return to Stage 0 rather than proceeding.
 - Use `brainstorm_packet.selected_frame` as the initial framing of `core_problem`.
-- Preserve `original_frame`, `backup_frame`, `hidden_constraints`, and `cheapest_falsifier` as decomposition context, including any `stage_0_uncertainty`.
+- Preserve `original_frame`, `backup_frame`, `hidden_constraints`, and `cheapest_falsifier` as decomposition context. Use `brainstorm_packet.framing_status`, `brainstorm_packet.hidden_constraints`, and `brainstorm_packet.frame_comparison` as the canonical Stage 0 uncertainty/framing-status sources.
 - Translate the selected framing into `core_problem`, `sub_problems`, and `immutable_constraints` without silently changing its material scope.
 - Treat every brainstorm frame and other packet content as candidate input only; never elevate it into a verified claim or evidence. Claims and evidence remain subject to Stage 2, Stage 3, Stage 5.5, and Stage 6 gates.
-- Compare the resulting decomposition with the packet. Record any material mismatch as a `handoff_issue` and return to Stage 0 for framing revision; do not silently reconcile a material mismatch in Stage 1.
+- Compare the resulting decomposition with the packet. When a mismatch is present, emit a conditional `handoff_issue` only if the mismatch is material. Its required shape is `{kind, summary, affected_fields, materiality, route, framing_revision_request}`; `route` is `Stage 0` when the framing is invalid and `Stage 1` when the framing is valid but the decomposition is invalid. Follow the corresponding C2 route semantics; do not silently reconcile a material mismatch.
 
 **Output (mandatory)**
 - `core_problem` — One-sentence summary of the core problem
@@ -57,4 +57,4 @@ sequentialthinking call example:
 - `immutable_constraints` — Immutable constraints
 - `user_constraints` — (optional, from C0) User-provided constraints
 - `sequential_branches` — sequential-thinking branchId for each sub-problem
-- `handoff_issue` — (when present) recorded mismatch between the Stage 0 framing and Stage 1 decomposition, with materiality and return-to-Stage-0 status
+- `handoff_issue` — (conditional, omit when no material mismatch) mismatch between the Stage 0 framing and Stage 1 decomposition, with required shape `{kind, summary, affected_fields, materiality, route, framing_revision_request}`
