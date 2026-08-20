@@ -65,27 +65,50 @@ Critique Stage internal perspective division:
   The two must not share the same self-assessment paragraph
 ```
 
+**Problem Reframing Check (required for every mode)**
+
+Run one lightweight framing stress test in addition to the existing critique perspectives. This perspective is separate from Hallucination Detection and must consume the Stage 0 candidate framing without treating it as evidence. Select exactly one `stress_axis` from `risk`, `scale`, `time`, `constraint`, or `stakeholder`, then create exactly one `harder_frame` that preserves the question while making that axis harder. Test whether the `preliminary_conclusion` survives against the harder frame. Do not rerun Stage 0's DIVERGE, ATTEND, or CONVERGE phases here.
+
+The Stage 0 route is bounded by `stage_0_revision_count < 1`. Set `revision_target: stage-0` only when the problem definition itself is invalid (for example, the selected frame does not represent the user's problem or a material constraint makes the question ill-posed); this is a framing revision, not a normal hypothesis revision. A framing mismatch that can be handled without changing the problem definition remains a Stage 1 fix. Preserve the existing routes: a hypothesis defect targets Stage 2, and an evidence defect targets Stage 3. Never route a framing defect to Stage 2 or Stage 3 merely because its consequences appear there.
+
+```yaml
+problem_reframing_check:
+  original_frame: ...
+  harder_frame: ...
+  stress_axis: risk|scale|time|constraint|stakeholder
+  conclusion_survives: yes|no|uncertain
+  blind_spot: ...
+  revision_required: yes|no
+  revision_target: none|stage-0|stage-1|stage-2|stage-3
+```
+
+The output must contain exactly one stress axis and one harder frame. `revision_target: stage-0` is allowed at most once per reasoning run; after that limit, record the unresolved framing issue in `blind_spot` and `residual_uncertainty`, set `revision_target` to the nearest permitted non-Stage-0 target or `none`, and continue without another Stage 0 route.
+
 **Input**
+- `brainstorm_packet` — Candidate framing packet from Stage 0 (`selected_frame` is the original frame; it is not evidence)
 - `preliminary_conclusion` — Preliminary conclusion from Synthesis stage output
 - `evidence_matrix` — Evidence matrix from Verification stage output
 - `primary_mode` — Reasoning mode
 - `primary_domain` — Domain
 - `scale` — Problem scale
 - `can_branch` — sequential-thinking availability flag (yes/no)
+- `stage_0_revision_count` — Number of Stage 0 returns already used in this reasoning run (must be less than 1 for a Stage 0 route)
 
 **Output (mandatory)**
 - `perspectives` — Critique perspective results, each containing `{name, challenge, blind_spot, analysis(>=2 sentences)}`
-- `required_perspectives` — List of executed perspectives
+- `required_perspectives` — List of executed perspectives; includes `Problem Reframing Check` for every mode
+- `problem_reframing_check` — Exactly one-axis, one-harder-frame result with the fields defined above
 - `hallucination_check` — Hallucination detection results — `{entity_count, entity_sourced, entity_unsourced, citation_count, citation_real, citation_fabricated, non_quantitative_factors_listed, pass}`
 - `price_notes` — (optional) Price presentation check — `{unit_defined, currency_defined, occupancy_noted, disclaimer_added}`
-- `fix_requirements` — Revision requirements based on blind spot findings
+- `fix_requirements` — Revision requirements based on blind spot findings, including the defect class and `revision_target` (`stage-0` only for an invalid problem definition; `stage-2` for hypothesis defects; `stage-3` for evidence defects)
 - `needs_revision` — Whether revision is needed (yes/no)
-- `revision_branches` — (optional) Backtrack revision records, each containing `{original_hypothesis, revision_reason, new_branch_id}`
+- `revision_branches` — (optional) Backtrack revision records. Framing records contain `{revision_kind: framing, revision_target: stage-0, revision_reason, stage_0_revision_count, new_branch_id}`; hypothesis/evidence records retain `{original_hypothesis, revision_reason, new_branch_id}` and target Stage 2/3 respectively
 
 **Linear Degradation Output (used when can_branch=false)**
 - `perspectives` — Recorded as text (not sequential-thinking branches), each containing `{name, analysis(>=2 sentences)}`
+- `problem_reframing_check` — The same required fields, with exactly one `stress_axis` and one `harder_frame`; record the check linearly and do not call sequential-thinking
 - `hallucination_check` — Same as above (hallucination detection produced independently by the critique perspective)
-- `revision_branches` — Each entry containing `{original_hypothesis, revision_reason, linear_note}` (text record, no sequential-thinking branches created)
+- `revision_branches` — Framing entries contain `{revision_kind: framing, revision_target: stage-0, revision_reason, stage_0_revision_count, linear_note}`; hypothesis/evidence entries retain `{original_hypothesis, revision_reason, linear_note}` and their Stage 2/3 targets (text records, no sequential-thinking branches created)
 
 ### Perspective-Mode Mapping Table
 
@@ -102,6 +125,7 @@ Critique Stage internal perspective division:
 | Execution Feasibility | Required | Action-only | Required | Required | Required |
 | Non-Quantitative Factors | Required | Optional | Optional | Optional | Optional |
 | **Precision** | **Required** | **Required** | **Required** | **Required** | **Required** |
+| **Problem Reframing Check** | **Required** | **Required** | **Required** | **Required** | **Required** |
 
 Small problems: 5 core perspectives (Correctness, Completeness, Risk, Hallucination Detection, Execution Feasibility)
 
