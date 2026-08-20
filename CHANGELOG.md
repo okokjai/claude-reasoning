@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (2026-08-20)
+
+1. **Stage 0 Mini Brainstorm** — Added a mandatory fixed-DAG framing pass before decomposition, with at most four divergent frames, two selected frames, and one iteration.
+2. **Stage 5 Reframing** — Added one lightweight harder-frame check that distinguishes framing defects from hypothesis and evidence defects without rerunning the full brainstorm.
+3. **Safety and Fallback Bounds** — Kept brainstorm output candidate-only, so it cannot bypass verification or quality gates; when sequential-thinking is unavailable, the same bounded phases are recorded linearly.
+
 ## v1.0.0 (2026-08-12)
 **English Edition — derived from claude-reasoning-distillation v7.5.1**
 

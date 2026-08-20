@@ -22,7 +22,7 @@ A comprehensive reasoning engine that chains structured contract templates with 
 
 | Category | Capabilities |
 |----------|-------------|
-| 🏗️ **Graph Architecture** | 8 contracts, 7 stages, 5 reasoning modes, 1 quality layer — DAG orchestration |
+| 🏗️ **Graph Architecture** | 8 contracts, 8 stages, 5 reasoning modes, 1 quality layer — DAG orchestration |
 | 📋 **Structured Contracts** | Native Markdown templates with explicit input/output fields + validation rules |
 | 🌲 **DAG Branching** | Sequential-thinking for full reasoning traceability with backtracking revision |
 | 🔍 **Multi-Engine Search** | Integrated with [**unified-fetch**](https://github.com/okokjai/unified-fetch) — 4 search engines + 6 scrape engines |
@@ -48,10 +48,20 @@ A comprehensive reasoning engine that chains structured contract templates with 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Contract Framework Layer                          │
-│   A1 → A0 → A2 → C0 → C1 → A3 → A4                                  │
-│   Problem classification → Mode routing → Strategy → Verification    │
+│                     Contract Framework Layer                         │
+│   A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2                   │
+│   → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6               │
+│   Problem classification → framing → verification                    │
 └─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────┐
+│              Stage 0: Mini Brainstorm                │
+│   Fixed DAG: DIVERGE → ATTEND → EVALUATE →           │
+│   CONVERGE → FALSIFIER → one bounded ITERATE         │
+│   At most 4 frames, 2 selected, 1 iteration          │
+│   Candidate packet only; never evidence or claims    │
+└──────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -72,7 +82,8 @@ A comprehensive reasoning engine that chains structured contract templates with 
 │        │                                                             │
 │        ▼                                                             │
 │   Stage 5: Critique        ──→ sequential-thinking (multi-perspective│
-│        │                     ──→ Backtrack revision (if blind spot)  │
+│        │                     ──→ One lightweight harder-frame check  │
+│        │                     ──→ Framing defect may return to Stage 0│
 │        ▼                                                             │
 │   Stage 5.5: Anti-Halluc.  ──→ P0 gate (entity/source/cross-ref)    │
 │        │                                                             │
@@ -87,6 +98,16 @@ A comprehensive reasoning engine that chains structured contract templates with 
 │   Full scale (/50) or simplified scale (/30) → verdict → memory      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+## 🧠 Stage 0 Mini Brainstorm and Stage 5 Reframing
+
+Every reasoning task runs a mandatory **Stage 0 Mini Brainstorm** after C0 and before decomposition. Its purpose is to identify the problem worth solving before breaking it into sub-problems. The stage follows a fixed DAG — `DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER → ITERATE` — rather than open-ended exploration.
+
+Stage 0 is deliberately bounded: it generates at most four materially distinct frames, selects at most two (one primary and one backup), and allows at most one iteration. `no_new_angle` is a valid result when another pass is not justified. Its `brainstorm_packet` contains candidate framings and uncertainty only; it cannot register claims, provide evidence, or bypass Stage 3 verification, the Stage 5.5 anti-hallucination gate, or Stage 6 conclusion gates.
+
+Stage 5 adds a separate lightweight harder-frame check. It stresses the preliminary conclusion along exactly one axis and routes back to Stage 0 only when the problem framing itself is invalid; hypothesis and evidence defects retain their existing Stage 2 and Stage 3 routes. It does not rerun the full Stage 0 DAG.
+
+When sequential-thinking is unavailable, the same phases, node labels, and bounded decisions are recorded as linear text. No stage is skipped and no candidate framing is promoted to verified evidence by the fallback.
 
 ---
 
@@ -191,7 +212,8 @@ claude-reasoning/
 │   ├── C1.md                   # Skip strategy
 │   └── C2.md                   # Inter-stage transfer edges
 │
-├── stages/                     # Execution pipeline (7 stages)
+├── stages/                     # Execution pipeline (8 stages)
+│   ├── stage-0-mini-brainstorming.md
 │   ├── stage-1-decomposition.md
 │   ├── stage-2-hypothesis.md
 │   ├── stage-3-verification.md
