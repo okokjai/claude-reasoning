@@ -1,4 +1,4 @@
-# Stage 0: Mini Brainstorming (mandatory fixed DAG)
+# Stage 0: Mini Brainstorming (mandatory bounded control-flow graph)
 
 **Position**: Mandatory for every reasoning task after C0 and before Stage 1.
 
@@ -20,15 +20,15 @@
 
 All C0 and A2 fields required by this contract must be available before `brainstorm-core` runs. If a field is missing, record it as `unknown` or return to the prior contract that owns the field; never silently invent it. A missing mandatory Stage 0 packet blocks Stage 1.
 
-The fixed path is:
+The forward path is fixed and bounded. B9 has two mutually exclusive exits:
 
 ```text
-C0 → B0 brainstorm-core → B1/B2/B3/B4 DIVERGE → B5 frame-attend
-   → B6 frame-evaluate → B7 frame-converge → B8 frame-falsifier
-   → B9 frame-iterate (at most once) → Stage 1
+B8 → B9 → no_new_angle → Stage 1
+B9 (iteration_count=0 and material change)
+   → B5 → B6 → B7 → B8 → B9 → Stage 1
 ```
 
-The `B` nodes below are the only permitted Stage 0 nodes and branch IDs. Their labels are stable even when execution degrades to linear text.
+The second line is the only permitted loop. It returns to comparison at B5 rather than creating a new B1–B4 branch family. After that one loop, Stage 0 must enter Stage 1; a second B9 iteration is not run. This bounded loop is part of the control-flow graph, not an invitation to create an unbounded DAG.
 
 | B node | Branch ID | Phase | Required action |
 |---|---|---|---|
@@ -43,11 +43,11 @@ The `B` nodes below are the only permitted Stage 0 nodes and branch IDs. Their l
 | B8 | `frame-falsifier` | FALSIFIER | Record the cheapest experiment, the result that would change the selected frame, and the result that would preserve it. |
 | B9 | `frame-iterate` | ITERATE | Revisit the framing only when the bounded iteration rule below permits it; otherwise emit `no_new_angle`. |
 
-### Fixed DAG and bounded expansion
+### Bounded control-flow and expansion
 
-When `can_branch=true`, execute the fixed DAG with the B labels above through sequential-thinking. `B1`–`B4` may produce **at most four** materially distinct frames; do not create additional divergence nodes. A frame is materially distinct only when its pain, target outcome, broken assumption, or distinction basis differs in a way that could change the solution space. `B7` may select no more than two frames total: exactly one primary and at most one backup.
+When `can_branch=true`, execute the bounded control-flow graph with the B labels above through sequential-thinking. `B1`–`B4` may produce **at most four** materially distinct frames; do not create additional divergence nodes. A frame is materially distinct only when its pain, target outcome, broken assumption, or distinction basis differs in a way that could change the solution space. `B7` may select no more than two frames total: exactly one primary and at most one backup.
 
-`B9` permits **at most one** iteration, and only for one of these material changes: a material framing defect, a changed hard constraint, or a changed falsifier. The iteration must return through the fixed comparison/convergence path rather than create a new branch family. If none applies, emit `no_new_angle` and continue. Iteration and branch limits terminate expansion and record residual uncertainty instead of generating more nodes.
+`B9` permits **at most one** iteration. If `iteration_count=0` and one of the permitted material changes is present, follow exactly `B9 → B5 → B6 → B7 → B8 → B9 → Stage 1`; do not recreate `B1`–`B4`. If none applies, follow `B8 → B9 → no_new_angle → Stage 1`. If `iteration_count=1`, do not run B9 again; record any remaining issue in residual uncertainty and terminate Stage 0. Iteration and branch limits terminate expansion and record residual uncertainty instead of generating more nodes.
 
 ## Phase behavior
 
@@ -88,7 +88,7 @@ The falsifier is a test design only. It does not execute verification or registe
 
 ### ITERATE (B9)
 
-Use the single permitted iteration only when a material framing defect, changed hard constraint, or changed falsifier is identified. Increment `iteration_count` and update the packet after re-comparison. Otherwise set `no_new_angle: true`, retain the current framing, and continue without expanding the DAG. A second requested iteration is not run; record the residual uncertainty and terminate Stage 0.
+Use the single permitted iteration only when a material framing defect, changed hard constraint, or changed falsifier is identified. With `iteration_count=0`, run `B9 → B5 → B6 → B7 → B8 → B9`, increment `iteration_count`, and then enter Stage 1 without another loop. Otherwise set `no_new_angle: true`, retain the current framing, and continue without expanding the graph. A second requested iteration is not run; record the residual uncertainty and terminate Stage 0.
 
 ## Clarification rule
 

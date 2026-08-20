@@ -4,6 +4,13 @@
 
 **Input**
 - `verification_plan` — Verification plan from Hypothesis stage output
+- `failure_route` — (conditional) `stage-3` route marker when re-entering after a Stage 5.5 evidence/source failure
+- `failure_context` — (conditional) `{affected_claims, failure_reason, required_changes, evidence_snapshot, claim_registry_snapshot}` consumed on a Stage 3 rerun
+- `hypotheses` — Aggregated hypotheses from Stage 2
+- `claim_registry` — Mandatory pre-search claim registry from Stage 2; update every entry after verification
+- `search_paths_required` — Required positive search paths from Stage 2
+- `negative_search_queries` — Paired negative search queries from Stage 2
+- `verification_paths` — Domain-aware verification paths from A2 contract output
 - `platform_mode` — Platform mode from A2 contract output
 - `primary_tool` — Primary search tool from A2 contract output
 - `evidence_cap` — Evidence sufficiency cap from A2 contract output
@@ -21,8 +28,12 @@
 - `verification_complete` — Search calls completed? (yes/no)
 - `browse_verified` — Scrape secondary verification completed? (yes/no)
 - `browse_skip_reason` — (optional) Reason for skipping scrape
+- `source_quality_matrix` — Source tier and marketing annotation for each evidence source
+- `claim_verification_status` — Aggregated verification status by registered claim
+- `claim_registry` — Complete updated claim registry passed to Stage 5.5
+- `data_gap_list` — Data gaps discovered during verification
 
-### Call Rules
+When re-entering from Stage 5.5 with `failure_route=stage-3`, consume `failure_context`, preserve unaffected evidence and registry entries, and rerun the required verification paths for every affected claim before emitting the updated aggregates and claim registry.
 
 ```
 1. unified-fetch search(query, max_results=5)
@@ -114,7 +125,7 @@ claim_registry = [
     type: "A/B/C/D/E",
     verification_threshold: "Corresponding threshold (see A3 contract)",
     sources_found: [],
-    verification_status: "Unverified/Partially Verified/Verified",
+    verification_status: "failed/partial/passed",
     notes: "Special notes"
   }
 ]

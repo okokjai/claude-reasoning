@@ -57,7 +57,7 @@ A comprehensive reasoning engine that chains structured contract templates with 
                               ▼
 ┌──────────────────────────────────────────────────────┐
 │              Stage 0: Mini Brainstorm                │
-│   Fixed DAG: DIVERGE → ATTEND → EVALUATE →           │
+│   Bounded control-flow: DIVERGE → ATTEND → EVALUATE → │
 │   CONVERGE → FALSIFIER → one bounded ITERATE         │
 │   At most 4 frames, 2 selected, 1 iteration          │
 │   Candidate packet only; never evidence or claims    │
@@ -101,7 +101,7 @@ A comprehensive reasoning engine that chains structured contract templates with 
 
 ## 🧠 Stage 0 Mini Brainstorm and Stage 5 Reframing
 
-Every reasoning task runs a mandatory **Stage 0 Mini Brainstorm** after C0 and before decomposition. Its purpose is to identify the problem worth solving before breaking it into sub-problems. The stage follows a fixed DAG — `DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER → ITERATE` — rather than open-ended exploration.
+Every reasoning task runs a mandatory **Stage 0 Mini Brainstorm** after C0 and before decomposition. Its purpose is to identify the problem worth solving before breaking it into sub-problems. The stage follows a bounded control-flow graph — `DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER → ITERATE` — rather than open-ended exploration.
 
 Stage 0 is deliberately bounded: it generates at most four materially distinct frames, selects at most two (one primary and one backup), and allows at most one iteration. `no_new_angle` is a valid result when another pass is not justified. Its `brainstorm_packet` contains candidate framings and uncertainty only; it cannot register claims, provide evidence, or bypass Stage 3 verification, the Stage 5.5 anti-hallucination gate, or Stage 6 conclusion gates.
 

@@ -31,10 +31,14 @@ sequentialthinking call example:
 **Input**
 - `core_problem` — Core problem from Decomposition stage output
 - `sub_problems` — List of sub-problems from Decomposition stage output
+- `known_facts` — Known facts from Decomposition stage output
+- `immutable_constraints` — Immutable constraints from Decomposition stage output
 - `primary_mode` — Reasoning mode
 - `scale` — Problem scale
 - `hypothesis_count` — Number of hypotheses to generate
-- `can_branch` — sequential-thinking availability flag (yes/no)
+- `can_branch` — sequential-thinking availability flag (`true`/`false`)
+- `verification_paths` — Domain-aware verification paths from A2 contract output
+- `negative_search_queries` — Negative search queries derived from the verification paths
 
 **Output (mandatory)**
 - `hypothesis_a` — Hypothesis A — `{description, verification_method, risk_level}`
@@ -43,4 +47,8 @@ sequentialthinking call example:
 - `null_hypothesis` — Null hypothesis (status quo / no difference / baseline)
 - `most_dangerous_hypothesis` — Least likely but most consequential hypothesis
 - `verification_plan` — Verification plan for each hypothesis, containing `{hypothesis, tool, query, expected_evidence}`
+- `hypotheses` — Aggregated hypothesis list used by the Stage 2 -> Stage 3 transfer
+- `claim_registry` — Completed claim registration for every claim entering verification, each containing `{claim, type, verification_threshold, sources_found, verification_status, notes}`. Use the canonical status values `failed`, `partial`, or `passed`.
+- `search_paths_required` — Required positive search paths from `verification_paths`
+- `negative_search_queries` — Negative search queries paired with the required positive paths
 - `sequential_branches` — sequential-thinking branchId for each hypothesis

@@ -60,7 +60,7 @@ sequentialthinking call example (blind spot found, backtrack and revise):
 
 ```
 Critique Stage internal perspective division:
-  Critique perspective (Hallucination Detection) — produces hallucination_check
+  Critique perspective (Preliminary Hallucination Screen) — produces `hallucination_check` as a non-authoritative diagnostic
   Correctness perspective (P0 Gate) — independently verifies passing_gate_1 ~ gate_4 before the Conclusion stage
   The two must not share the same self-assessment paragraph
 ```
@@ -90,17 +90,26 @@ The output must contain exactly one stress axis and one harder frame. `revision_
 - `confirmed_facts` — Confirmed facts from Synthesis stage output
 - `residual_uncertainty` — Residual uncertainty from Synthesis stage output; required even when empty
 - `evidence_matrix` — Evidence matrix from Verification stage output
-- `primary_mode` — Reasoning mode
-- `primary_domain` — Domain
-- `scale` — Problem scale
-- `can_branch` — sequential-thinking availability flag (yes/no)
+- `source_quality_matrix` — Source quality matrix from Verification stage output
+- `claim_verification_status` — Claim verification status from Verification stage output
+- `claim_registry` — Updated claim registry carried from Stage 4 and used to align critique claims with verification status
+- `claim_registry` — Updated claim registry carried from Stage 4 and used to align critique claims with verification status
+- `data_gap_list` — Data gaps from Verification stage output
+- `primary_mode` — Reasoning mode from A2
+- `primary_domain` — Domain from A1
+- `scale` — Problem scale from A2
+- `can_branch` — sequential-thinking availability flag (`true`/`false`)
 - `stage_0_revision_count` — Number of Stage 0 returns already used in this reasoning run (must be less than 1 for a Stage 0 route)
+- `failure_route` — (conditional) `stage-5` route marker when re-entering after a Stage 5.5 conclusion/precision failure
+- `failure_context` — (conditional) `{affected_claims, failure_reason, required_changes, evidence_snapshot, claim_registry_snapshot}` consumed on a Stage 5 rerun
+
+When re-entering from Stage 5.5 with `failure_route=stage-5`, consume `failure_context`, preserve the current evidence and registry snapshots, and revise only the affected conclusion wording, precision, or annotations before rerunning the independent Stage 5.5 gate.
 
 **Output (mandatory)**
 - `perspectives` — Critique perspective results, each containing `{name, challenge, blind_spot, analysis(>=2 sentences)}`
 - `required_perspectives` — List of executed perspectives; includes `Problem Reframing Check` for every mode
 - `problem_reframing_check` — Exactly one-axis, one-harder-frame result with the fields defined above
-- `hallucination_check` — Hallucination detection results — `{entity_count, entity_sourced, entity_unsourced, citation_count, citation_real, citation_fabricated, non_quantitative_factors_listed, pass}`
+- `hallucination_check` — Preliminary hallucination screen only; it is not the Stage 5.5 gate and must not be used as the final hallucination judgment
 - `confidence_table` — Mandatory confidence annotation table passed to Stage 6; each entry contains `{claim, source_tier, cross_validation_count, confidence, notes}`
 - `price_notes` — (optional) Price presentation check — `{unit_defined, currency_defined, occupancy_noted, disclaimer_added}`
 - `fix_requirements` — Revision requirements based on blind spot findings, including the defect class and `revision_target` (`stage-0` only for an invalid problem definition when `stage_0_revision_count < 1`; `stage-1` only for a separately classified decomposition mismatch with a valid problem definition; `stage-2` for hypothesis defects; `stage-3` for evidence defects; otherwise `none` with residual uncertainty recorded)

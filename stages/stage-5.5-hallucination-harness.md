@@ -10,7 +10,7 @@
 - `preliminary_conclusion` — Preliminary conclusion from Stage 4 output
 - `evidence_matrix` — Evidence matrix from Stage 3 output
 - `source_quality_matrix` — Source quality matrix from Stage 3 output
-- `claim_registry` — Claim registry from Stage 2 output
+- `claim_registry` — Mandatory updated claim registry from Stage 3; every conclusion claim must be present and have a verification status
 - `scale` — Problem scale from A2 contract output
 - `primary_domain` — Primary domain from A1 contract output
 
@@ -20,6 +20,8 @@
 - `cross_reference_check` — Cross-reference check results
 - `hallucination_pass` — All three checks passed (yes/no)
 - `hallucination_fail_reason` — Failure reason if not passed
+- `failure_route` — Conditional route when `hallucination_pass=no`: `stage-3` for entity/source/evidence failures or missing cross-reference evidence; `stage-5` for evidence-backed conclusion wording, precision, annotation, or concealed-conflict defects
+- `failure_context` — Required on failure; `{affected_claims, failure_reason, required_changes, evidence_snapshot, claim_registry_snapshot}` for the selected rerun target
 - `hallucination_details` — Detailed records for each check
 
 ---
@@ -122,7 +124,7 @@ cross_reference_check.pass conditions:
   - Single-source dependencies and isolated judgments allowed to pass (but must be annotated)
   - concealed_conflicts = 0 (zero tolerance for concealed contradictions)
 
-Any failure -> gate blocks, return to Stage 3 for supplemental verification or Stage 5 for conclusion revision
+Any failure -> gate blocks before Stage 6. Set `failure_route=stage-3` for missing/insufficient evidence, entity or source verification, or missing cross-reference evidence; set `failure_route=stage-5` when the evidence exists but the conclusion's wording, precision, annotations, or concealed conflict require revision. The required `failure_context` accompanies either route.
 ```
 
 ---
@@ -133,12 +135,12 @@ Any failure -> gate blocks, return to Stage 3 for supplemental verification or S
 |------|-----------------------------|--------------------------------------|
 | Role | Find blind spots, propose revisions | Verify entity/source/cross-reference authenticity |
 | Output | `fix_requirements`, `blind_spots_handled` | `hallucination_pass`, `hallucination_fail_reason` |
-| Failure handling | Backtrack revision to Stage 2 | Return to Stage 3 or Stage 5 |
+| Failure handling | Route by `failure_route`: evidence/source/entity or missing cross-reference evidence -> Stage 3; evidence-backed conclusion wording/precision/annotation or concealed-conflict defect -> Stage 5 |
 | Substitutability | Not substitutable | Not substitutable (independent gate) |
 
 **Execution Order**: Stage 5 (Critique) -> Stage 5.5 (Anti-Hallucination Harness) -> Stage 6 (Conclusion)
 
-If Stage 5 finds that backtrack revision is needed, complete the revision first, then enter Stage 5.5.
+If Stage 5.5 passes, enter Stage 6 with `hallucination_pass=yes`. If it fails, do not enter Stage 6 and follow the structured `failure_route` to Stage 3 or Stage 5.
 
 ---
 

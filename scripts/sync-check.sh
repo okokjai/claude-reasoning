@@ -186,7 +186,73 @@ if [ -f "$SKILL_FILE" ]; then
   fi
 fi
 
-echo "== Step 5: Date check =="
+echo "== Step 4.5: Contract semantic checks =="
+CONTRACT_FAIL=0
+CAN_BRANCH_FILES=(
+  "$SKILL_DIR/contracts/A2.md"
+  "$SKILL_DIR/contracts/C1.md"
+  "$SKILL_DIR/stages/stage-0-mini-brainstorming.md"
+  "$SKILL_DIR/stages/stage-1-decomposition.md"
+  "$SKILL_DIR/stages/stage-2-hypothesis.md"
+  "$SKILL_DIR/stages/stage-5-critique.md"
+)
+for file in "${CAN_BRANCH_FILES[@]}"; do
+  if grep -Eq 'can_branch[^[:cntrl:]]*(yes/no|yes\|no)' "$file" 2>/dev/null; then
+    echo "  [FAIL] Legacy can_branch yes/no value in $(basename "$file")"
+    CONTRACT_FAIL=1
+  fi
+done
+if ! grep -q 'Stage 0/1/2/5 sequential-thinking calls' "$SKILL_DIR/contracts/C1.md"; then
+  echo "  [FAIL] C1 does not cover Stage 0 linear fallback"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'Stage 0 remains mandatory' "$SKILL_DIR/contracts/C1.md"; then
+  echo "  [FAIL] C1 does not preserve mandatory Stage 0 precedence"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'B9 → B5 → B6 → B7 → B8 → B9' "$SKILL_DIR/stages/stage-0-mini-brainstorming.md"; then
+  echo "  [FAIL] Stage 0 B9 bounded loop is not explicit"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'no_new_angle' "$SKILL_DIR/stages/stage-0-mini-brainstorming.md"; then
+  echo "  [FAIL] Stage 0 no_new_angle termination is missing"
+  CONTRACT_FAIL=1
+fi
+if grep -q 'Stage 0 -> Stage 1.*stage_0_uncertainty' "$SKILL_DIR/contracts/C2.md"; then
+  echo "  [FAIL] C2 retains dangling stage_0_uncertainty transfer"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'Stage 3 -> Stage 5.5.*claim_registry' "$SKILL_DIR/contracts/C2.md"; then
+  echo "  [FAIL] C2 does not require claim_registry before Stage 5.5"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'Stage 4 -> Stage 5.*source_quality_matrix.*claim_verification_status.*data_gap_list' "$SKILL_DIR/contracts/C2.md"; then
+  echo "  [FAIL] C2 does not pass verification aggregates to Stage 5"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'failure_route=stage-3' "$SKILL_DIR/contracts/C2.md" || ! grep -q 'failure_route=stage-5' "$SKILL_DIR/contracts/C2.md"; then
+  echo "  [FAIL] C2 does not define both Stage 5.5 failure routes"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'Stage 6 -> Stage 1' "$SKILL_DIR/contracts/C2.md"; then
+  echo "  [FAIL] C2 does not define the post-gate Stage 6 route"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'failure_route' "$SKILL_DIR/stages/stage-5.5-hallucination-harness.md"; then
+  echo "  [FAIL] Stage 5.5 failure_route is missing"
+  CONTRACT_FAIL=1
+fi
+if ! grep -q 'candidate input, not evidence' "$SKILL_DIR/contracts/C2.md" && ! grep -q 'candidate input, not evidence' "$SKILL_DIR/stages/stage-0-mini-brainstorming.md"; then
+  echo "  [FAIL] Candidate/evidence boundary is missing"
+  CONTRACT_FAIL=1
+fi
+if [ "$CONTRACT_FAIL" -eq 0 ]; then
+  echo "  [OK] Cross-stage semantic contract checks passed"
+else
+  FAIL=1
+fi
+
+ echo "== Step 5: Date check =="
 if [ -f "$SKILL_FILE" ]; then
   SKILL_DATE=$(grep -o '2026-08-[0-9][0-9]' "$SKILL_FILE" 2>/dev/null | head -1)
   if [ -z "$SKILL_DATE" ]; then

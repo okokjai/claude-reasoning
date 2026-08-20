@@ -36,12 +36,12 @@ sequentialthinking call example:
 - `primary_domain` — Primary domain from A1 contract output (ambient A1/user context)
 - `brainstorm_packet` — Mandatory candidate framing packet from Stage 0
 - `disclaimer_text` — (optional) Disclaimer text from A2 contract output
-- `can_branch` — sequential-thinking availability flag (yes/no) from A2 contract output
+- `can_branch` — sequential-thinking availability flag (`true`/`false`) from A2 contract output
 - `user_constraints` — Required C0-shaped context field; empty list is the explicit default when C0 does not trigger
 - `implicit_assumptions` — Required C0-shaped context field; empty list is the explicit default when C0 does not trigger
 - `success_criteria` — Required C0-shaped context field; empty list is the explicit default when C0 does not trigger
 
-**Input handling**:
+If `gate_failure_class` and `revision_count` are present, correct only the affected decomposition fields from `fix_requirements`; the orchestration layer owns the counter and must not re-enter this route after the bounded retry limit.
 - Require `brainstorm_packet` before decomposition; if it is missing or incomplete, return to Stage 0 rather than proceeding.
 - Use `brainstorm_packet.selected_frame` as the initial framing of `core_problem`.
 - Preserve `original_frame`, `backup_frame`, `hidden_constraints`, and `cheapest_falsifier` as decomposition context. Use `brainstorm_packet.framing_status`, `brainstorm_packet.hidden_constraints`, and `brainstorm_packet.frame_comparison` as the canonical Stage 0 uncertainty/framing-status sources.
@@ -58,6 +58,8 @@ sequentialthinking call example:
 - `user_constraints` — Required C0 pass-through; preserve the structured list, or emit `[]` when C0 does not trigger
 - `implicit_assumptions` — Required C0 pass-through; preserve the structured list, or emit `[]` when C0 does not trigger
 - `success_criteria` — Required C0 pass-through; preserve the structured list, or emit `[]` when C0 does not trigger
+- `gate_failure_class` — (conditional) Stage 6 post-gate classification when re-entering for decomposition correction
+- `revision_count` — (conditional) Stage 6-to-Stage 1 counter; stop this route when the bounded retry limit is reached
 - `sequential_branches` — sequential-thinking branchId for each sub-problem
 - `framing_revision_request` — (conditional, Stage 0 route only) top-level return payload with shape `{reason, affected_fields, invalid_frame, requested_change, stage_0_revision_count}`; omit when no Stage 0 return is requested
 - `handoff_issue` — (conditional, omit when no material mismatch) mismatch between the Stage 0 framing and Stage 1 decomposition, with required shape `{kind, summary, affected_fields, materiality, route, framing_revision_request_record}`; the reference is not a nested duplicate

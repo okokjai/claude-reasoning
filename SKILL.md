@@ -164,7 +164,7 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 
 ## Backtracking Revision Mechanism (sequential-thinking exclusive)
 
-Stage 0 is mandatory for every reasoning task after C0 and before Stage 1. Its full mini brainstorm is distinct from Stage 5's lightweight Problem Reframing Check: Stage 0 runs the fixed DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER path, while Stage 5 creates one harder frame on exactly one stress axis and does not rerun those phases. A Stage 5 framing defect may return to Stage 0 at most once; hypothesis and evidence defects retain their Stage 2/3 routes.
+Stage 0 is mandatory for every reasoning task after C0 and before Stage 1. Its full mini brainstorm is distinct from Stage 5's lightweight Problem Reframing Check: Stage 0 runs the bounded DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER path, with at most one explicit B9 → B5 → B6 → B7 → B8 → B9 loop, while Stage 5 creates one harder frame on exactly one stress axis and does not rerun those phases. A Stage 5 framing defect may return to Stage 0 at most once; hypothesis and evidence defects retain their Stage 2/3 routes.
 
 Stage 0 uses a fixed budget: no more than four divergent frames, no more than two selected frames (one primary and at most one backup), and no more than one iteration. `no_new_angle` is a valid terminal result when no material framing defect, changed hard constraint, or changed falsifier warrants iteration. Do not ask a user question when a conservative assumption is safe; ask at most one question only when unresolved ambiguity materially changes the solution space, and otherwise record the assumption and uncertainty. When `can_branch=false`, retain all Stage 0 phases and node labels as linear text and do not call sequential-thinking.
 
@@ -413,7 +413,7 @@ ${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-patterns/cache/{topic-categ
 ## Principles
 
 - **Decompose first, then hypothesize** — do not skip steps; mandatory Stage 0 first clarifies the framing before decomposition
-- **Stage 0 is fixed-budget** — at most 4 divergent frames, 2 selected frames, and 1 iteration; `no_new_angle` is valid, and ask at most one clarification only for a material ambiguity
+- **Stage 0 is bounded control-flow** — at most 4 divergent frames, 2 selected frames, and 1 explicit B9 → B5 → B6 → B7 → B8 → B9 iteration; `no_new_angle` is valid, and ask at most one clarification only for a material ambiguity
 - **Stage 5 reframing is lightweight** — its Problem Reframing Check tests one harder frame and does not replace or rerun Stage 0's full brainstorm
 - **At least 2 competing hypotheses per sub-problem** — avoid confirmation bias
 - **Critique layer is mandatory** — at least 3 perspectives for high-risk problems

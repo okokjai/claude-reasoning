@@ -3,15 +3,22 @@
 **Execution**: Pure reasoning. Execute P0 gate checks, output the conclusion card, write to Memory.
 
 **Input**
+- `fallback_mode` — Degradation mode from C1
+- `skip_compensation` — Compensation records from C1
+- `skippable_stages` — (optional) Skipped-stage records from C1
 - `preliminary_conclusion` — Preliminary conclusion from Synthesis stage output
 - `fix_requirements` — Revision requirements from Critique stage output
 - `needs_revision` — Revision flag from Critique stage (yes/no)
-- `hallucination_pass` — Gate result from Stage 5.5 Anti-Hallucination Harness (yes/no)
+- `hallucination_pass` — Gate result from Stage 5.5 Anti-Hallucination Harness (yes/no); Stage 5.5 must pass before this stage begins
 - `hallucination_fail_reason` — Failure reason from Stage 5.5 (if applicable)
+- `precision_audit` — Precision audit from Stage 5
+- `confidence_table` — Confidence table from Stage 5
 - `evidence_quality` — Evidence quality from Verification stage output
 - `platform_mode` — Platform mode from A2 contract output
 - `evidence_cap` — Evidence sufficiency cap from A2 contract output
 - `disclaimer_text` — (optional) Disclaimer text from A2 contract output
+- `gate_failure_class` — (conditional output) Post-Stage-5.5 failure classification when a Stage 6 gate fails
+- `revision_count` — (conditional output) Stage 6-to-Stage 1 revision counter; orchestration owns it, increments on each Stage 6 -> Stage 1 return, and stops this route when `revision_count=1`
 
 **Output (mandatory)**
 - `passing_gate_1` — Evidence sufficiency >= 3? (yes/no)
@@ -62,9 +69,12 @@ Each point in the conclusion card must carry an evidence level label, automatica
 
 ### Termination Condition Gates (P0)
 
-```
+```text
 Execution order: Gate 1 -> 2 -> 3 -> 4
-Any gate triggers -> return to Decomposition stage and re-execute
+
+Stage 5.5 must pass before Stage 6 begins. If Stage 5.5 fails, follow its `failure_route`: `stage-3` for evidence/entity/source/cross-reference defects or `stage-5` for conclusion wording, precision, or annotation defects.
+
+A Stage 6 gate failure is a post-Stage-5.5 failure. When it requires decomposition correction, emit `gate_failure_class`, `fix_requirements`, and `revision_count` and route to Stage 1 / Decomposition through the C2 conditional edge; do not use this rule to override the targeted Stage 5.5 routes or the Stage 5 framing/hypothesis/evidence routes.
 ```
 
 **Gate 1: Evidence Sufficiency**
