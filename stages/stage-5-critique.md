@@ -93,7 +93,6 @@ The output must contain exactly one stress axis and one harder frame. `revision_
 - `source_quality_matrix` — Source quality matrix from Verification stage output
 - `claim_verification_status` — Claim verification status from Verification stage output
 - `claim_registry` — Updated claim registry carried from Stage 4 and used to align critique claims with verification status
-- `claim_registry` — Updated claim registry carried from Stage 4 and used to align critique claims with verification status
 - `data_gap_list` — Data gaps from Verification stage output
 - `primary_mode` — Reasoning mode from A2
 - `primary_domain` — Domain from A1

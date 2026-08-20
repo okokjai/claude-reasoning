@@ -110,10 +110,11 @@ brainstorm_packet:
   no_new_angle: false
   iteration_count: 0
   framing_status: confirmed|assumed|uncertain
+  residual_uncertainty: ...
   sequential_branches: []
 ```
 
-`hidden_constraints` records constraints discovered during ATTEND or comparison. `frame_comparison` includes the surviving and retired frames plus relevance, falsifiability, feasibility, and risk rationale. `cheapest_falsifier` includes the experiment, change-result, and preserve-result. `iteration_count` is an integer from `0` through `1`. `framing_status` is `confirmed` only when the framing is supported by the available context, `assumed` when it relies on a conservative assumption, and `uncertain` when material ambiguity remains. `sequential_branches` records each fixed B node's branch ID and phase, in execution order.
+`hidden_constraints` records constraints discovered during ATTEND or comparison. `frame_comparison` includes the surviving and retired frames plus relevance, falsifiability, feasibility, and risk rationale. `cheapest_falsifier` includes the experiment, change-result, and preserve-result. `iteration_count` is an integer from `0` through `1`. `framing_status` is `confirmed` only when the framing is supported by the available context, `assumed` when it relies on a conservative assumption, and `uncertain` when material ambiguity remains. `residual_uncertainty` records unresolved issues when a bounded limit prevents another iteration. `sequential_branches` records each fixed B node's branch ID and phase, in execution order.
 
 ## Safety boundary
 

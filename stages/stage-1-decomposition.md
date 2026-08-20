@@ -59,7 +59,7 @@ If `gate_failure_class` and `revision_count` are present, correct only the affec
 - `implicit_assumptions` — Required C0 pass-through; preserve the structured list, or emit `[]` when C0 does not trigger
 - `success_criteria` — Required C0 pass-through; preserve the structured list, or emit `[]` when C0 does not trigger
 - `gate_failure_class` — (conditional) Stage 6 post-gate classification when re-entering for decomposition correction
-- `revision_count` — (conditional) Stage 6-to-Stage 1 counter; stop this route when the bounded retry limit is reached
+- `revision_count` — (conditional) Stage 6-to-Stage 1 counter; starts at `0`, is incremented by orchestration on the return, and blocks a second return
 - `sequential_branches` — sequential-thinking branchId for each sub-problem
 - `framing_revision_request` — (conditional, Stage 0 route only) top-level return payload with shape `{reason, affected_fields, invalid_frame, requested_change, stage_0_revision_count}`; omit when no Stage 0 return is requested
 - `handoff_issue` — (conditional, omit when no material mismatch) mismatch between the Stage 0 framing and Stage 1 decomposition, with required shape `{kind, summary, affected_fields, materiality, route, framing_revision_request_record}`; the reference is not a nested duplicate

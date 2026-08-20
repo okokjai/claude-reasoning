@@ -18,7 +18,7 @@
 - `evidence_cap` — Evidence sufficiency cap from A2 contract output
 - `disclaimer_text` — (optional) Disclaimer text from A2 contract output
 - `gate_failure_class` — (conditional output) Post-Stage-5.5 failure classification when a Stage 6 gate fails
-- `revision_count` — (conditional output) Stage 6-to-Stage 1 revision counter; orchestration owns it, increments on each Stage 6 -> Stage 1 return, and stops this route when `revision_count=1`
+- `revision_count` — (conditional output) Stage 6-to-Stage 1 revision counter; starts at `0`, orchestration increments it on the return, and no second Stage 6-to-Stage 1 return is allowed
 
 **Output (mandatory)**
 - `passing_gate_1` — Evidence sufficiency >= 3? (yes/no)
