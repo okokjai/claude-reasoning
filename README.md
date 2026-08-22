@@ -3,7 +3,7 @@
 # 🧠 Claude Reasoning
 
 **Graph-based reasoning pipeline for Claude Code**
-**structured contracts · DAG orchestration · 5 reasoning modes · zero Python**
+**structured contracts · forward DAG-shaped pipeline · 5 reasoning modes · zero Python**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=social)](https://github.com/okokjai/claude-reasoning)
@@ -12,7 +12,7 @@
 [![Zero Python](https://img.shields.io/badge/Zero-Python%20Dependency-blue.svg)]()
 [![MCP](https://img.shields.io/badge/MCP-Ready-orange.svg)]()
 
-A comprehensive reasoning engine that chains structured contract templates with DAG orchestration via `sequential-thinking` MCP. Zero Python dependency — pure Markdown + MCP tools.
+A comprehensive reasoning engine that chains structured contract templates with a forward DAG-shaped pipeline + bounded conditional control-flow via `sequential-thinking` MCP. Zero Python dependency — pure Markdown + MCP tools.
 
 </div>
 
@@ -22,9 +22,9 @@ A comprehensive reasoning engine that chains structured contract templates with 
 
 | Category | Capabilities |
 |----------|-------------|
-| 🏗️ **Graph Architecture** | 8 contracts, 8 stages, 5 reasoning modes, 1 quality layer — DAG orchestration |
+| 🏗️ **Graph Architecture** | 8 contracts, 8 stages, 5 reasoning modes, 1 quality layer — forward DAG-shaped pipeline + bounded conditional control-flow |
 | 📋 **Structured Contracts** | Native Markdown templates with explicit input/output fields + validation rules |
-| 🌲 **DAG Branching** | Sequential-thinking for full reasoning traceability with backtracking revision |
+| 🌲 **DAG Branching** | Sequential-thinking for full reasoning traceability with bounded backtracking revision (DAG-shaped, not free DAG) |
 | 🔍 **Multi-Engine Search** | Integrated with [**unified-fetch**](https://github.com/okokjai/unified-fetch) — 4 search engines + 6 scrape engines |
 | 🛡️ **Anti-Hallucination** | Three-check P0 gate (entity existence, source verification, cross-reference) |
 | 🔬 **Verifier Separation** | Gates, scores, and hallucination judgments from independent perspectives |
@@ -105,9 +105,48 @@ Every reasoning task runs a mandatory **Stage 0 Mini Brainstorm** after C0 and b
 
 Stage 0 is deliberately bounded: it generates at most four materially distinct frames, selects at most two (one primary and one backup), and allows at most one iteration. `no_new_angle` is a valid result when another pass is not justified. Its `brainstorm_packet` contains candidate framings and uncertainty only; it cannot register claims, provide evidence, or bypass Stage 3 verification, the Stage 5.5 anti-hallucination gate, or Stage 6 conclusion gates.
 
-Stage 5 adds a separate lightweight harder-frame check. It stresses the preliminary conclusion along exactly one axis and routes back to Stage 0 only when the problem framing itself is invalid; hypothesis and evidence defects retain their existing Stage 2 and Stage 3 routes. It does not rerun the full Stage 0 DAG.
+Stage 5 adds a separate lightweight harder-frame check. It stresses the preliminary conclusion along exactly one axis and routes back to Stage 0 only when the problem framing itself is invalid; hypothesis and evidence defects retain their existing Stage 2 and Stage 3 routes. It does not rerun the full Stage 0 control-flow graph.
 
 When sequential-thinking is unavailable, the same phases, node labels, and bounded decisions are recorded as linear text. No stage is skipped and no candidate framing is promoted to verified evidence by the fallback.
+
+
+## 🔄 Claim Lifecycle & Failure Routes
+
+`claim_registry` is the single source of truth for verifiable claims:
+
+```
+Stage 2 (register) → Stage 3 (verify + negative search + T1-T5) → Stage 4/5 (synthesize/critique) → Stage 5.5 (P0 gate)
+```
+
+Failure routes (bounded, with `failure_context` + `revision bounds`):
+
+| Route | Trigger | Payload |
+|-------|---------|---------|
+| Stage 5.5 → Stage 3 | entity/source missing or cross-ref needs evidence | `failure_route=stage-3`, `failure_context{...}` |
+| Stage 5.5 → Stage 5 | wording/precision/annotation or concealed conflict | `failure_route=stage-5`, `failure_context{...}` |
+| Stage 6 → Stage 1 | post-gate decomposition fix (≤1, `revision_count 0..1`) | `gate_failure_class` + `fix_requirements` |
+| Stage 5 → Stage 0/1/2/3 | framing → Stage 0 (≤1, `stage_0_revision_count 0..1`), hypothesis → Stage 2, evidence → Stage 3 | `fix_requirements` + `revision_branches` |
+
+Bounds: per-round revision limit ≤3, `stage_0_revision_count` ≤1, `no_new_angle=true` ⇒ `iteration_count=0`. See `contracts/C2.md` for the full edge table.
+
+## 🔀 Branching Control: `can_branch`
+
+| `can_branch` | Engine | Behavior |
+|--------------|--------|----------|
+| `true` | `sequential-thinking` available | Full branching/backtracking via MCP |
+| `false` | unavailable (Desktop / session-injected missing) | **Linear degradation**: same stages, same `B0-B9` labels and `brainstorm_packet` schema, recorded as text; **no stage is skipped** (Stage 0 stays mandatory) |
+
+`can_branch=false` changes execution, not presence. `contracts/C1.md` owns skip rules; only `C1` may shorten later stages under listed conditions.
+
+## 📦 Stage 0 Packet Invariants
+
+| Field | Range | Rule |
+|-------|-------|------|
+| `candidate_frame_count` | `0..4` | `B1-B4` at most four materially distinct frames |
+| `selected_frame_count` | `0..2` | `1` primary + at most `1` backup; equals number of non-null selections |
+| `iteration_count` | `0..1` | `0` with `no_new_angle=true`, `1` after the single `B9 → B5 → B6 → B7 → B8 → B9` loop |
+| `no_new_angle` | `true|false` | `true` ⇒ `iteration_count` must be `0` |
+| `framing_status` | `confirmed|assumed|uncertain` | canonical Stage 0 uncertainty field (no `stage_0_uncertainty` alias) |
 
 ---
 
@@ -132,14 +171,14 @@ bash ~/.claude/skills/claude-reasoning/scripts/sync-check.sh
 
 ### MCP Configuration
 
-Add to your `~/.claude/mcp_servers.json`:
+Add to your `~/.claude.json` (Windows: `C:/Users/<you>/.claude.json`) or `~/.claude/mcp_servers.json` (both are checked):
 
 ```json
 {
   "mcpServers": {
     "sequential-thinking": {
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-sequential-thinking"]
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
     },
     "unified-fetch": {
       "command": "python3",
@@ -170,7 +209,7 @@ The skill auto-detects available tools and degrades gracefully:
 **Tip**: Even without `unified-fetch`, you can still run the full reasoning pipeline. Install just `sequential-thinking` for the best experience:
 
 ```bash
-npx -y @anthropic-ai/mcp-server-sequential-thinking
+npx -y @modelcontextprotocol/server-sequential-thinking
 ```
 
 ---
@@ -224,7 +263,11 @@ claude-reasoning/
 │
 ├── modes/                      # 5 reasoning mode templates
 ├── quality/                    # Quality self-assessment
+├── docs/
+│   └── plans/                  # Stage 0 mini-brainstorm plan & audit notes
 └── scripts/                    # Validation & maintenance
+    ├── sync-check.sh           # Structure + semantic + release checks
+    └── memory-cleanup.sh       # Reasoning log rotation (dry-run supported)
 ```
 
 ---

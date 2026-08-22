@@ -141,7 +141,7 @@ When re-entering from Stage 5.5 with `failure_route=stage-5`, consume `failure_c
 | **Precision** | **Required** | **Required** | **Required** | **Required** | **Required** |
 | **Problem Reframing Check** | **Required** | **Required** | **Required** | **Required** | **Required** |
 
-Small problems: 5 original core perspectives (Correctness, Completeness, Risk, Hallucination Detection, Execution Feasibility) plus the always-required Problem Reframing Check
+Small problems: 5 original core perspectives (Correctness, Completeness, Risk, Hallucination Detection, Execution Feasibility) plus the always-required Problem Reframing Check = 6 required (A2 small=6); medium/large add Contrarian/Time/External/Non-Quantitative per mode mapping
 
 ### Hallucination Detection Rules
 

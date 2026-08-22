@@ -1,6 +1,6 @@
 # Reasoning Quality Self-Assessment
 
-## Full Scale (Medium/Large Problems, 10 Dimensions, /50)
+## Full Scale (Medium/Large Problems, 10 Mandatory Dimensions + Optional Freshness, /50 Base)
 
 **Input**
 - `logic_closed` — Logical closure from Stage 6 output (yes/no)
@@ -22,11 +22,11 @@
 - `domain_fitness` — Domain fitness (1-5)
 - `precision_score` — Precision (1-5)
 - `total_score` — Total score
-- `denominator` — Denominator (after deducting N/A dimensions). Rule: only external data type may deduct freshness_score (10 dimensions -> 9 dimensions -> /45); all other dimensions are mandatory, always /50
+- `denominator` — Denominator (10 mandatory scoring dimensions x 5 = /50; optional `freshness_score` when external-data adds +5 -> /55; simplified scale is 6 dimensions x 6 = /36)
 - `passing` — Whether passed (>=80% x quality_cap) (yes/no)
 - `verdict` — Final determination (`Pass` / `Needs Improvement` / `Redo`)
 
-## Simplified Scale (Small Problems, 5 Dimensions, /30)
+## Simplified Scale (Small Problems, 6 Dimensions, /36)
 
 **Input**
 - `logic_closed` — Logical closure from Stage 6 output (yes/no)
@@ -43,7 +43,7 @@
 - `actionability` — Conclusion actionability (1-6)
 - `precision_score` — Precision (1-6)
 - `total_score` — Total score
-- `denominator` — 30
+- `denominator` — 36 (6 dimensions x 6)
 - `passing` — Whether passed (>=80% x quality_cap) (yes/no)
 - `verdict` — Final determination (`Pass` / `Needs Improvement` / `Redo`)
 

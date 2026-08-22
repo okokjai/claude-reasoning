@@ -45,8 +45,8 @@ Each point in the conclusion card must carry an evidence level label, automatica
 
 | Condition | Evidence Level | Derivation Rule |
 |-----------|---------------|-----------------|
-| Type A claim + >=2 independent sources (at least 1 T1/T2) | `[Confirmed]` | claim_type=A, source_tier=T1/T2, cross_validation>=2 |
-| Type A claim + single source or T3 source | `[Partially Confirmed]` | claim_type=A, source_tier=T3 or cross_validation<2 |
+| Type A claim + >=2 independent sources (at least 1 T1/T2) or >=2 consistent T3/T4/T5 | `[Confirmed]` | claim_type=A, `verification failed` if single-source or all-T3; T3/T4/T5-only confirmed must be marked `not independently verified` |
+| Type A claim + single source (any tier) or all-T3 | `[Unknown]` / `verification failed` (do not cite as fact) | claim_type=A, single-source or all-T3 = failed per A3/A4 |
 | Type B claim | `[Partially Confirmed]` | claim_type=B (subjective evaluation, inherently lacks Type A certainty) |
 | Type E claim | `[Speculative]` | claim_type=E, accompanied by basis for speculation |
 | Verification failed (no source) | `[Unknown]` | verification_status=Unverified |

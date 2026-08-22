@@ -51,9 +51,10 @@ When re-entering from Stage 5.5 with `failure_route=stage-3`, consume `failure_c
 
 ### Cross-Validation Rules
 
-- [ ] Does the same fact have >=2 **independent sources**?
+- [ ] Does the same fact have >=2 **independent sources** (at least 1 T1/T2; or >=2 consistent T3/T4/T5 marked `not independently verified`)?
   - Independent source definition: different websites, different authors, different organizations — not part of the same marketing network
   - If multiple sources are actually the same marketing campaign (same writing style, same keyword stacks, same site group) -> treat as single source
+  - Single-source Type A -> `verification failed` (see A3); all-T3 Type A -> `verification failed` (see A4)
 - [ ] Data discrepancy >20% across sources -> flag as "major contradiction"
 - [ ] Price/prediction data -> take multi-source median, annotate "consensus range"
 - [ ] Comparison data -> returns must be annotated with corresponding risk

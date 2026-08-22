@@ -1,7 +1,7 @@
 ---
 name: claude-reasoning
-version: 1.0.0
-description: Comprehensive reasoning engine — reasoning chains x structured contract templates. Graph architecture: contracts, stages, modes in separate files with DAG orchestration. Native Markdown contract templates with explicit input/output fields + validation rules + sequential-thinking DAG branching/backtracking/visualization. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
+version: 1.1.0
+description: Comprehensive reasoning engine — reasoning chains x structured contract templates. Graph architecture: contracts, stages, modes in separate files with a forward DAG-shaped pipeline + bounded conditional control-flow. Native Markdown contract templates with explicit input/output fields + validation rules + sequential-thinking DAG branching/backtracking/visualization. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
 triggers:
   - "reasoning"
   - "structured reasoning"
@@ -10,15 +10,15 @@ triggers:
   - "why"
   - "root cause"
 requires:
-  - "unified-fetch (MCP Server) — multi-engine search/scrape (4 search + 6 scrape, built-in fallback, configured in mcp_servers.json)"
-  - "sequential-thinking (MCP Server) — reasoning node branching/backtracking/visualization (configured in mcp_servers.json)"
+  - "unified-fetch (MCP Server) — multi-engine search/scrape (4 search + 6 scrape, built-in fallback, configured in ~/.claude.json or mcp_servers.json)"
+  - "sequential-thinking (MCP Server) — reasoning node branching/backtracking/visualization (configured in ~/.claude.json or mcp_servers.json, package @modelcontextprotocol/server-sequential-thinking)"
 depends_on:
   - using-superpowers@* — upstream routing
   - auto-fix-loop@* — technical fixes requiring root cause analysis
   - evolution@* — system evolution requiring design decisions
 ---
 
-# Claude Reasoning v1.0.0 — Graph-Based Reasoning Pipeline
+# Claude Reasoning v1.1.0 — Graph-Based Reasoning Pipeline
 
 ## Usage
 
@@ -56,13 +56,13 @@ Examples:
 
 ## Design Philosophy
 
-This skill uses **native Markdown structured prompt templates** (explicit input/output fields + validation rules) with the **sequential-thinking MCP Server** DAG node engine (branching/backtracking/visualization). This is a "contract template"-driven reasoning chain architecture with zero Python dependency — usable directly in any environment.
+This skill uses **native Markdown structured prompt templates** (explicit input/output fields + validation rules) with the **sequential-thinking MCP Server** forward DAG-shaped pipeline + bounded conditional control-flow engine (branching/backtracking/visualization). This is a "contract template"-driven reasoning chain architecture with zero Python dependency — usable directly in any environment.
 
 **Graph structure**: Contracts (node types) → Stages (execution nodes) → Quality Self-Assessment (terminal nodes), with C2 contract defining edges (required/optional transfer fields).
 
 ---
 
-## Core Architecture: Reasoning Chain DAG
+## Core Architecture: Reasoning Chain (Forward DAG-shaped Pipeline + Bounded Control-Flow)
 
 ```
 +-------------------------------------------------------------------+
@@ -137,6 +137,8 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 +-------------------------------------------------------------------+
 
 > **Stage path**: `A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6`.
+>
+> **Topology note**: Forward DAG-shaped pipeline with bounded conditional control-flow: the single `B9 → B5 → B6 → B7 → B8 → B9` loop and the `Stage 5/5.5/6` bounded reroutes are conditional edges with `revision_count`/`stage_0_revision_count` bounds, not a free DAG.
 >
 > **Fallback path**: If `can_branch=false` (sequential-thinking unavailable at runtime), Stage 0, Stages 1/2/5 degrade to linear reasoning. The same phases, node labels, and bounded decisions are recorded as text in place of sequential-thinking calls; no stage is skipped.
 ```
@@ -440,7 +442,7 @@ ${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-patterns/cache/{topic-categ
     +-- Files referenced in each node file exist
 
 [ ] Step 5: MCP toolchain reconciliation
-    +-- requires declarations vs actual mcp_servers.json consistent
+    +-- requires declarations vs actual ~/.claude.json / mcp_servers.json consistent
     +-- MCP tools mentioned in SKILL.md vs actually available tools consistent
 
 [ ] Step 6: Dead code check

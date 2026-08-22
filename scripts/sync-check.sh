@@ -298,6 +298,111 @@ if [ -f "$SKILL_DIR/contracts/A2.md" ]; then
   fi
 fi
 
+
+echo "== Step 7: README alignment (P0) =="
+README_FAIL=0
+README="$SKILL_DIR/README.md"
+if [ -f "$README" ]; then
+  if grep -q "DAG orchestration" "$README" 2>/dev/null; then
+    echo "  [FAIL] README still contains 'DAG orchestration' (use forward DAG-shaped pipeline)"; README_FAIL=1
+  else
+    echo "  [OK] README DAG terminology aligned"
+  fi
+  if grep -q "@modelcontextprotocol/server-sequential-thinking" "$README" 2>/dev/null; then
+    echo "  [OK] README uses @modelcontextprotocol package"
+  else
+    echo "  [FAIL] README missing @modelcontextprotocol/server-sequential-thinking"; README_FAIL=1
+  fi
+  if grep -q "@anthropic-ai/mcp-server-sequential-thinking" "$README" 2>/dev/null; then
+    echo "  [FAIL] README still references legacy @anthropic-ai package"; README_FAIL=1
+  fi
+  if grep -q "can_branch" "$README" 2>/dev/null; then
+    echo "  [OK] README documents can_branch"
+  else
+    echo "  [FAIL] README missing can_branch documentation"; README_FAIL=1
+  fi
+  if grep -q "candidate_frame_count" "$README" 2>/dev/null && grep -q "selected_frame_count" "$README" 2>/dev/null && grep -q "no_new_angle" "$README" 2>/dev/null; then
+    echo "  [OK] README packet invariants present"
+  else
+    echo "  [FAIL] README missing Stage 0 packet invariants"; README_FAIL=1
+  fi
+  if grep -q "docs/" "$README" 2>/dev/null && grep -q "plans" "$README" 2>/dev/null && grep -q "memory-cleanup.sh" "$README" 2>/dev/null; then
+    echo "  [OK] README project tree complete"
+  else
+    echo "  [FAIL] README project tree missing docs/plans or memory-cleanup.sh"; README_FAIL=1
+  fi
+  if grep -q "claim_registry" "$README" 2>/dev/null && grep -q "failure_route" "$README" 2>/dev/null; then
+    echo "  [OK] README claim lifecycle / failure routes documented"
+  else
+    echo "  [FAIL] README missing claim lifecycle / failure routes"; README_FAIL=1
+  fi
+else
+  echo "  [WARN] README.md not found"
+fi
+if [ "$README_FAIL" -ne 0 ]; then FAIL=1; fi
+
+echo "== Step 8: Contract closure (P1 semantic) =="
+CLOSE_FAIL=0
+# data_type enum closure
+if grep -q "legacy alias.*internal-logic" "$SKILL_DIR/contracts/A0.md" 2>/dev/null && grep -q "legacy alias.*internal-logic" "$SKILL_DIR/contracts/A1.md" 2>/dev/null; then
+  echo "  [OK] data_type enum closure (A1/A0 legacy alias documented)"
+else
+  echo "  [FAIL] data_type enum closure missing legacy alias note in A0/A1"; CLOSE_FAIL=1
+fi
+# Type A threshold consistency
+if grep -q "not independently verified" "$SKILL_DIR/contracts/A3.md" 2>/dev/null && grep -q "not independently verified" "$SKILL_DIR/stages/stage-3-verification.md" 2>/dev/null; then
+  echo "  [OK] Type A threshold unified (not independently verified)"
+else
+  echo "  [FAIL] Type A threshold not unified"; CLOSE_FAIL=1
+fi
+if grep -q "verification failed" "$SKILL_DIR/stages/stage-6-conclusion.md" 2>/dev/null; then
+  echo "  [OK] Stage 6 Type A single-source = verification failed"
+else
+  echo "  [FAIL] Stage 6 missing single-source verification failed handling"; CLOSE_FAIL=1
+fi
+# C2 field closure: check key rows exist
+if grep -q "A1 -> Stage 0" "$SKILL_DIR/contracts/C2.md" 2>/dev/null; then
+  echo "  [OK] C2 has A1->Stage 0 edge"
+else
+  echo "  [FAIL] C2 missing A1->Stage 0 edge"; CLOSE_FAIL=1
+fi
+if grep -q "Stage 3 -> Stage 2" "$SKILL_DIR/contracts/C2.md" 2>/dev/null; then
+  echo "  [OK] C2 has Stage 3->Stage 2 rerun edge"
+else
+  echo "  [FAIL] C2 missing Stage 3->Stage 2 edge"; CLOSE_FAIL=1
+fi
+if grep -q "Stage 6 -> Quality" "$SKILL_DIR/contracts/C2.md" 2>/dev/null && grep -q "hypothesis_count.*ambient" "$SKILL_DIR/contracts/C2.md" 2>/dev/null; then
+  echo "  [OK] C2 Stage6->Quality includes ambient fields"
+else
+  echo "  [FAIL] C2 Stage6->Quality missing ambient fields"; CLOSE_FAIL=1
+fi
+# quality denominator
+if grep -q "/36" "$SKILL_DIR/quality/self-assessment.md" 2>/dev/null && grep -q "/50" "$SKILL_DIR/quality/self-assessment.md" 2>/dev/null; then
+  echo "  [OK] quality denominator /50 base + /36 simplified aligned"
+else
+  echo "  [FAIL] quality denominator not aligned (/50 + /36 expected)"; CLOSE_FAIL=1
+fi
+if [ "$CLOSE_FAIL" -ne 0 ]; then FAIL=1; fi
+
+echo "== Step 9: Release/tag status (WARN only) =="
+if git -C "$SKILL_DIR" tag --list 2>/dev/null | grep -q "v"; then
+  echo "  [OK] git tags present: $(git -C "$SKILL_DIR" tag --list | tr '\n' ' ')"
+else
+  echo "  [WARN] no git tags yet (expected v1.1.0 after release)"
+fi
+if grep -q "^## Unreleased" "$SKILL_DIR/CHANGELOG.md" 2>/dev/null; then
+  echo "  [WARN] CHANGELOG still has Unreleased section (move to v1.1.0 on release)"
+fi
+if [ -x "$(command -v gh 2>/dev/null)" ] || command -v gh >/dev/null 2>&1; then
+  if gh release list --repo okokjai/claude-reasoning 2>/dev/null | grep -q "v"; then
+    echo "  [OK] GitHub releases present"
+  else
+    echo "  [WARN] no GitHub releases yet (create v1.1.0 after tag)"
+  fi
+else
+  echo "  [WARN] gh CLI not available, skip GitHub release check"
+fi
+
 if [ "$FAIL" -eq 0 ]; then
   echo "=== All checks passed ==="
 else
