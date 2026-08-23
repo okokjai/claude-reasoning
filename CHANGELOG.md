@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.2.0 (2026-08-23)
+**README restyle (open-deepthink style) + full English localization**
+
+1. **README.md rewritten** — open-deepthink inspired structure:
+   - "What This Is (and Is Not)" honest declaration (not a LangGraph orchestrator, not a free-form brainstorm, sequential-thinking is a node logger, quality versus one long prompt unevaluated)
+   - "The Core Problem with Flat Expert Panels" motivation essay
+   - "What Makes Claude Reasoning Different" — 11-row comparison table (Typical Expert Panel vs Claude Reasoning)
+   - "Stage-by-Stage Breakdown" table — tool/mechanism/output per stage
+   - **Mermaid architecture diagram** with all backtracking routes (Stage 5→Stage 0/2/3, Stage 5.5→Stage 3/5, Stage 6→Stage 1)
+   - Execution Enforcement section translated to English
+2. **Full English localization** — zero Chinese characters remaining across all `.md`/`.py`/`.sh` files:
+   - `SKILL.md` — Post-Edit Sync section translated
+   - `mcp-toolchain.md` — Execution Enforcement section translated
+   - `CHANGELOG.md` — all Chinese entries translated to English
+   - `scripts/gate-check.py` — all Chinese error messages → English
+   - `scripts/contract-gen.py` / `scripts/trail-log.sh` — hook `decision` `allow` → `approve` (schema alignment)
+3. **Triggered by** — user request: "README style + all English, reference open-deepthink".
+
 ## v1.1.3 (2026-08-23)
 **L1 Honest Naming — "degrade" → "linear mode"**
 
