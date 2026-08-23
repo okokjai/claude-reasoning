@@ -135,4 +135,4 @@ Skip strategy per **`contracts/C1.md`**; only C1 may shorten later stages, and n
 
 ## Post-Edit Sync (Mandatory)
 
-任何修改後，`bash scripts/sync-check.sh` 必須 All checks passed 才算完成。完整 post-edit checklist（MCP toolchain reconciliation、dead code check、date check、memory volume check）逐項規則見 sync-check.sh 各 Step 與 Step 8 的 memory-cleanup.sh。
+After any modification, `bash scripts/sync-check.sh` must pass all checks before claiming completion. The full post-edit checklist (MCP toolchain reconciliation, dead code check, date check, memory volume check) is defined in sync-check.sh's individual Steps and Step 8's memory-cleanup.sh.

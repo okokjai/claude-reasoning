@@ -2,33 +2,102 @@
 
 # 🧠 Claude Reasoning
 
-**Graph-based reasoning pipeline for Claude Code**
-**structured contracts · forward DAG-shaped pipeline · 5 reasoning modes · zero Python**
+**Structured reasoning pipeline for Claude Code — not another flat expert panel.**
+
+**Contracts · Forward DAG-shaped pipeline · 5 reasoning modes · Zero Python dependency**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=social)](https://github.com/okokjai/claude-reasoning)
 [![GitHub Release](https://img.shields.io/github/v/release/okokjai/claude-reasoning)](https://github.com/okokjai/claude-reasoning/releases)
 [![Platform: Claude Code](https://img.shields.io/badge/Platform-Claude%20Code-000000.svg?logo=claude)](https://claude.com/claude-code)
 [![Zero Python](https://img.shields.io/badge/Zero-Python%20Dependency-blue.svg)]()
 [![MCP](https://img.shields.io/badge/MCP-Ready-orange.svg)]()
 
-A comprehensive reasoning engine that chains structured contract templates with a forward DAG-shaped pipeline + bounded conditional control-flow via `sequential-thinking` MCP. Zero Python dependency — pure Markdown + MCP tools.
-
 </div>
 
 ---
 
-## ✨ Features
+## What This Is (and Is Not)
 
-| Category | Capabilities |
-|----------|-------------|
-| 🏗️ **Graph Architecture** | 8 contracts, 8 stages, 5 reasoning modes, 1 quality layer — forward DAG-shaped pipeline + bounded conditional control-flow |
-| 📋 **Structured Contracts** | Native Markdown templates with explicit input/output fields + validation rules |
-| 🌲 **DAG Branching** | Sequential-thinking for full reasoning traceability with bounded backtracking revision (DAG-shaped, not free DAG) |
-| 🔍 **Multi-Engine Search** | Integrated with [**unified-fetch**](https://github.com/okokjai/unified-fetch) — 4 search engines + 6 scrape engines |
-| 🛡️ **Anti-Hallucination** | Three-check P0 gate (entity existence, source verification, cross-reference) |
-| 🔬 **Verifier Separation** | Gates, scores, and hallucination judgments from independent perspectives |
-| 🐍 **Zero Python** | Pure Markdown + MCP tools — no Python dependencies |
+This is a **structured reasoning pipeline**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality layer — all driven by Markdown contract templates and MCP tools. It chains problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → hallucination gate → conclusion, with bounded backtracking between stages.
+
+Most multi-agent reasoning systems give you breadth through parallelism. Claude Reasoning gives you **depth through structured iteration, bounded control-flow, and verifier separation**.
+
+**What this is not:**
+- It is **not** a LangGraph-based Python orchestrator. The "DAG" is a **forward DAG-shaped pipeline with bounded conditional control-flow** — executed by the LLM reading contract templates, not by a runtime state machine.
+- It is **not** a free-form brainstorming canvas. Stage 0 is bounded: at most 4 frames, 2 selected, 1 iteration.
+- `sequential-thinking` is a **node logger**, not a DAG engine. `can_branch=false` removes branch visualization, not core reasoning. All stages, contracts, and output schemas are identical in both modes.
+- Output quality versus a single long prompt is **unevaluated**. See [`CHANGELOG.md`](CHANGELOG.md) for the evolution history.
+
+---
+
+## The Core Problem with Flat Expert Panels
+
+Typical "expert panel" reasoning setups work like this:
+
+- Spawn N agents with static personas.
+- Run them in parallel or loose conversation.
+- Synthesize once.
+- Done.
+
+You get diversity of perspective, but no **structured depth**: no decomposition-first approach, no falsification search, no independent hallucination gate, no verifier separation. The agents do not become meaningfully better at the *specific* problem over time.
+
+Claude Reasoning treats reasoning as a **structured pipeline of contract-driven stages**, each with explicit input/output schemas, validation rules, and bounded control-flow. The result is compounding depth rather than repeated breadth.
+
+---
+
+## What Makes Claude Reasoning Different
+
+| Dimension | Typical Expert Panel | Claude Reasoning |
+|-----------|--------------------|------------------|
+| **Orchestration** | Loose conversation or flat parallel | Forward DAG-shaped pipeline + bounded conditional control-flow |
+| **Framing** | Implicit or none | Mandatory Stage 0: bounded DIVERGE→ATTEND→CONVERGE→FALSIFIER→ITERATE, at most 4 frames, 1 iteration |
+| **Decomposition** | Ad-hoc per agent | Stage 1 structured decomposition before any hypothesis |
+| **Hypothesis** | Single-sweep generation | Stage 2: ≥2 competing hypotheses + null hypothesis + `claim_registry` |
+| **Verification** | Trust agent reports | Stage 3: multi-engine search + entity existence check (P0) + negative search (falsification) + T1–T5 source annotation |
+| **Critique** | Self-reported | Stage 5: multi-perspective (6–12) + independent Problem Reframing Check |
+| **Hallucination gate** | None | Stage 5.5: independent P0 gate (entity/source/cross-reference), not self-reported |
+| **Conclusion** | Single answer | Stage 6: P0 gates + evidence language calibration (`[Confirmed]`/`[Partially Confirmed]`/`[Speculative]`/`[Unknown]`/`[Contested]`) |
+| **Quality** | Implicit | Full /50 or simplified /36 self-assessment → Memory |
+| **Backtrack bounds** | None | ≤3 revisions per round, Stage 0 ≤1 return, `no_new_angle` ⇒ `iteration_count=0` |
+| **Failure routes** | Manual retry | Structured: Stage 5.5→Stage 3/5, Stage 5→Stage 0/1/2/3, Stage 6→Stage 1, each with `failure_context` |
+| **Verifier separation** | Same perspective | Gates, scores, and hallucination judgments from independent perspectives |
+
+---
+
+## Architecture: Forward DAG-shaped Pipeline
+
+```mermaid
+---
+title: Claude Reasoning Pipeline
+---
+flowchart TD
+    A1["A1: Problem<br/>Characteristics"]
+    A0["A0: Mode<br/>Routing"]
+    A2["A2: Reasoning<br/>Strategy"]
+    C0["C0: User<br/>Context"]
+    S0["Stage 0: Mini<br/>Brainstorm"]
+    S1["Stage 1:<br/>Decomposition"]
+    S2["Stage 2:<br/>Hypothesis"]
+    S3["Stage 3:<br/>Verification"]
+    S4["Stage 4:<br/>Synthesis"]
+    S5["Stage 5:<br/>Critique"]
+    S55["Stage 5.5:<br/>Anti-Hallucination"]
+    S6["Stage 6:<br/>Conclusion"]
+    Q["Quality<br/>Self-Assessment"]
+
+    A1 --> A0 --> A2 --> C0 --> S0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S55 --> S6 --> Q
+
+    S5 -.->|framing defect<br/>≤1 return| S0
+    S5 -.->|hypothesis defect| S2
+    S5 -.->|evidence defect| S3
+    S55 -.->|entity/source fail| S3
+    S55 -.->|wording/precision fail| S5
+    S6 -.->|decomposition fix<br/>≤1 return| S1
+```
+
+**Stage path**: `A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6 → Quality`
+
+**Topology note**: Forward DAG-shaped pipeline with bounded conditional control-flow: the single `B9 → B5 → B6 → B7 → B8 → B9` loop in Stage 0 and the Stage 5/5.6/6 bounded reroutes are conditional edges with `revision_count`/`stage_0_revision_count` bounds, not a free DAG.
 
 ---
 
@@ -44,71 +113,25 @@ A comprehensive reasoning engine that chains structured contract templates with 
 
 ---
 
-## 🏗️ Architecture
+## Stage-by-Stage Breakdown
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Contract Framework Layer                         │
-│   A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2                   │
-│   → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6               │
-│   Problem classification → framing → verification                    │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────┐
-│              Stage 0: Mini Brainstorm                │
-│   Bounded control-flow: DIVERGE → ATTEND → EVALUATE → │
-│   CONVERGE → FALSIFIER → one bounded ITERATE         │
-│   At most 4 frames, 2 selected, 1 iteration          │
-│   Candidate packet only; never evidence or claims    │
-└──────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Stage Execution Pipeline                          │
-│                                                                      │
-│   Stage 1: Decomposition   ──→ sequential-thinking (branching)       │
-│        │                                                             │
-│        ▼                                                             │
-│   Stage 2: Hypothesis      ──→ sequential-thinking (branching)       │
-│        │                                                             │
-│        ▼                                                             │
-│   Stage 3: Verification    ──→ unified-fetch (search + scrape)       │
-│        │                     ──→ Entity existence check (P0)         │
-│        │                     ──→ Negative search (falsification)     │
-│        │                     ──→ Source quality annotation (T1-T5)   │
-│        ▼                                                             │
-│   Stage 4: Synthesis       ──→ Pure reasoning (evidence merge)       │
-│        │                                                             │
-│        ▼                                                             │
-│   Stage 5: Critique        ──→ sequential-thinking (multi-perspective│
-│        │                     ──→ One lightweight harder-frame check  │
-│        │                     ──→ Framing defect may return to Stage 0│
-│        ▼                                                             │
-│   Stage 5.5: Anti-Halluc.  ──→ P0 gate (entity/source/cross-ref)    │
-│        │                                                             │
-│        ▼                                                             │
-│   Stage 6: Conclusion      ──→ P0 gates + Conclusion Card + Memory   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Quality Self-Assessment                          │
-│   Full scale (/50) or simplified scale (/30) → verdict → memory      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| Stage | Tool | Key Mechanism | Output |
+|-------|------|---------------|--------|
+| **A1** | None | Classify `data_type` / `primary_domain`; non-trigger conditions exit early | Classification record |
+| **A0** | None | Route `primary_mode` via priority rules (10 rules, high→low confidence) | Routed mode |
+| **A2** | `unified-fetch status` | Detect platform mode; generate `verification_paths` per domain; set `can_branch` | Reasoning strategy plan |
+| **C0** | None | Capture user constraints, implicit assumptions, success criteria | Structured context |
+| **Stage 0** | `sequential-thinking` | Bounded control-flow: DIVERGE (≤4 frames) → ATTEND → EVALUATE → CONVERGE (≤2) → FALSIFIER → ITERATE (≤1) | `brainstorm_packet` (candidate only, never evidence) |
+| **Stage 1** | `sequential-thinking` | Decompose core problem into sub-problems with dependencies and tool requirements | `core_problem` + `sub_problems` |
+| **Stage 2** | `sequential-thinking` | Generate ≥2 competing hypotheses + null hypothesis; complete `claim_registry` (P0, before any search) | Hypotheses + `verification_plan` + `claim_registry` |
+| **Stage 3** | `unified-fetch` | Multi-engine search + scrape; entity existence check (P0); negative search (falsification); T1–T5 source annotation | `evidence_matrix` + `source_quality_matrix` + `claim_verification_status` |
+| **Stage 4** | None | Merge evidence, resolve contradictions, emit `preliminary_conclusion` | `confirmed_facts` + `preliminary_conclusion` + `residual_uncertainty` |
+| **Stage 5** | `sequential-thinking` | Multi-perspective critique (6–12, per mode mapping) + Problem Reframing Check + precision audit ± backtrack | `fix_requirements` + `revision_branches` + `precision_audit` |
+| **Stage 5.5** | None | Independent P0 gate: entity existence check + source verification + cross-reference check | `hallucination_pass` (yes/no) + `failure_route` on fail |
+| **Stage 6** | None | P0 gates (evidence sufficiency, hallucination, output compliance, confidence) + Conclusion Card with evidence language calibration | Conclusion + `evidence_levels` + Memory write |
+| **Quality** | None | Self-assessment /50 or /36; write Pattern Asset to Memory | `verdict` (`Pass`/`Needs Improvement`/`Redo`) |
 
-## 🧠 Stage 0 Mini Brainstorm and Stage 5 Reframing
-
-Every reasoning task runs a mandatory **Stage 0 Mini Brainstorm** after C0 and before decomposition. Its purpose is to identify the problem worth solving before breaking it into sub-problems. The stage follows a bounded control-flow graph — `DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER → ITERATE` — rather than open-ended exploration.
-
-Stage 0 is deliberately bounded: it generates at most four materially distinct frames, selects at most two (one primary and one backup), and allows at most one iteration. `no_new_angle` is a valid result when another pass is not justified. Its `brainstorm_packet` contains candidate framings and uncertainty only; it cannot register claims, provide evidence, or bypass Stage 3 verification, the Stage 5.5 anti-hallucination gate, or Stage 6 conclusion gates.
-
-Stage 5 adds a separate lightweight harder-frame check. It stresses the preliminary conclusion along exactly one axis and routes back to Stage 0 only when the problem framing itself is invalid; hypothesis and evidence defects retain their existing Stage 2 and Stage 3 routes. It does not rerun the full Stage 0 control-flow graph.
-
-When sequential-thinking is unavailable, the same phases, node labels, and bounded decisions are recorded as linear text. No stage is skipped and no candidate framing is promoted to verified evidence by the fallback.
-
+---
 
 ## 🔄 Claim Lifecycle & Failure Routes
 
@@ -129,6 +152,8 @@ Failure routes (bounded, with `failure_context` + `revision bounds`):
 
 Bounds: per-round revision limit ≤3, `stage_0_revision_count` ≤1, `no_new_angle=true` ⇒ `iteration_count=0`. See `contracts/C2.md` for the full edge table.
 
+---
+
 ## 🔀 Branching Control: `can_branch`
 
 | `can_branch` | Engine | Behavior |
@@ -137,6 +162,8 @@ Bounds: per-round revision limit ≤3, `stage_0_revision_count` ≤1, `no_new_an
 | `false` | unavailable (Desktop / session-injected missing) | **Linear mode**: same stages, same `B0-B9` labels and `brainstorm_packet` schema, recorded as text; **no stage is skipped** (Stage 0 stays mandatory) |
 
 `can_branch=false` changes execution, not presence. `contracts/C1.md` owns skip rules; only `C1` may shorten later stages under listed conditions.
+
+---
 
 ## 📦 Stage 0 Packet Invariants
 
@@ -156,7 +183,7 @@ Bounds: per-round revision limit ≤3, `stage_0_revision_count` ≤1, `no_new_an
 
 - **Claude Code CLI** (Desktop or CLI mode)
 - **MCP Servers** (recommended):
-  - [`sequential-thinking`](https://github.com/anthropics/mcp-server-sequential-thinking) — Reasoning DAG engine
+  - [`sequential-thinking`](https://github.com/anthropics/mcp-server-sequential-thinking) — Reasoning node logger
   - [`unified-fetch`](https://github.com/okokjai/unified-fetch) — Multi-engine search & scrape
 
 ### Installation
@@ -188,9 +215,27 @@ Add to your `~/.claude.json` (Windows: `C:/Users/<you>/.claude.json`) or `~/.cla
 }
 ```
 
-### Dependencies
+### Usage
 
-> **🧰 Recommended companion**: [**unified-fetch**](https://github.com/okokjai/unified-fetch) — multi-engine web search & scraping MCP server. 4 search engines, 6 scrape engines, adaptive fallback, zero API keys.
+```bash
+/skill claude-reasoning [your question or task description]
+```
+
+Examples:
+
+```bash
+# Decision: technology comparison
+/skill claude-reasoning recommend a cloud database for a startup with $500/month budget
+
+# Diagnostic: root cause analysis
+/skill claude-reasoning diagnostic API latency spikes every hour at :00
+
+# Daily: shopping decision
+/skill claude-reasoning recommend a clean hotel near downtown Austin under $120
+
+# Investment analysis
+/skill claude-reasoning analyze Bitcoin market conditions for H2 2026
+```
 
 ---
 
@@ -216,41 +261,17 @@ npx -y @modelcontextprotocol/server-sequential-thinking
 
 ## 🛡️ Execution Enforcement
 
-推理流程由環境強制執行，不依賴模型自律：
+The reasoning flow is enforced by the environment, not by model self-discipline:
 
-| Hook | 角色 | 機制 |
-|------|------|------|
-| `UserPromptSubmit` | 契約生成 | 偵測 `/claude-reasoning` → 生成 `~/.claude/reasoning-contracts/{session}.json`（必需工具序列）|
-| `PostToolUse` | 軌跡記錄 | 每次工具調用 → 環境追加 `~/.claude/reasoning-trail/{session}.jsonl`（模型不參與）|
-| `Stop` | 閘門 | 模型停止前對比 trail vs 契約 → 缺失則 block + 注入缺失清單 |
+| Hook | Role | Mechanism |
+|------|------|-----------|
+| `UserPromptSubmit` | Contract generation | Detects `/claude-reasoning` → generates `~/.claude/reasoning-contracts/{session}.json` (required tool sequence) |
+| `PostToolUse` | Trail recording | Every tool call → environment appends to `~/.claude/reasoning-trail/{session}.jsonl` (model does not participate) |
+| `Stop` | Gate | Before model stops, compares trail vs contract → missing items block + inject missing list |
 
-**硬性契約**：A2 執行規則 1 的 `mcp__unified-fetch__status` 必須實際調用（無例外）。
-**軟性契約**：Stage 3 搜索/爬取、sequential-thinking 調用，由 `sync-check.sh --runtime` 以 WARN 審計。
-**Kill switch**：無契約的 session 完全不受影響；對抗性篡改（模型用工具改 trail）為物理不可防，誠實聲明。
-
----
-
-## 🛠️ Usage
-
-```bash
-/skill claude-reasoning [your question or task description]
-```
-
-### Examples
-
-```bash
-# Decision: technology comparison
-/skill claude-reasoning recommend a cloud database for a startup with $500/month budget
-
-# Diagnostic: root cause analysis
-/skill claude-reasoning diagnostic API latency spikes every hour at :00
-
-# Daily: shopping decision
-/skill claude-reasoning recommend a clean hotel near downtown Austin under $120
-
-# Investment analysis
-/skill claude-reasoning analyze Bitcoin market conditions for H2 2026
-```
+**Hard contract**: A2 execution rule 1's `mcp__unified-fetch__status` must be actually called (no exceptions).
+**Soft contract**: Stage 3 search/scrape and sequential-thinking calls are audited by `sync-check.sh --runtime` as WARN.
+**Kill switch**: Sessions without a contract are completely unaffected; adversarial tampering (model using tools to modify trail) is physically unpreventable — honest declaration.
 
 ---
 

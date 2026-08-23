@@ -5,7 +5,8 @@
 set -u
 
 print_allow() {
-  printf '{"decision":"allow"}'
+  # decision must be "approve"|"block" per current hook schema (not "allow")
+  printf '{"decision":"approve"}'
 }
 
 stdin_payload=$(cat)

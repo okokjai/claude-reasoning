@@ -76,8 +76,8 @@ def main():
     with open(path, "w", encoding="utf-8") as f:
         json.dump(contract, f, ensure_ascii=False, indent=2)
 
-    # Always allow the prompt
-    print(json.dumps({"decision": "allow"}))
+    # Always allow the prompt — decision must be "approve"|"block" per current hook schema
+    print(json.dumps({"decision": "approve"}))
 
 
 if __name__ == "__main__":

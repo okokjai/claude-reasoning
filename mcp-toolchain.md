@@ -36,14 +36,14 @@
 
 ## Execution Enforcement (Hooks)
 
-推理流程由環境強制執行，不依賴模型自律：
+The reasoning flow is enforced by the environment, not by model self-discipline:
 
-| Hook | 角色 | 機制 |
-|------|------|------|
-| `UserPromptSubmit` | 契約生成 | 偵測 `/claude-reasoning` → 生成 `~/.claude/reasoning-contracts/{session}.json`（必需工具序列）|
-| `PostToolUse` | 軌跡記錄 | 每次工具調用 → 環境追加 `~/.claude/reasoning-trail/{session}.jsonl`（模型不參與）|
-| `Stop` | 閘門 | 模型停止前對比 trail vs 契約 → 缺失則 block + 注入缺失清單 |
+| Hook | Role | Mechanism |
+|------|------|-----------|
+| `UserPromptSubmit` | Contract generation | Detects `/claude-reasoning` → generates `~/.claude/reasoning-contracts/{session}.json` (required tool sequence) |
+| `PostToolUse` | Trail recording | Every tool call → environment appends to `~/.claude/reasoning-trail/{session}.jsonl` (model does not participate) |
+| `Stop` | Gate | Before model stops, compares trail vs contract → missing items block + inject missing list |
 
-**硬性契約**：A2 執行規則 1 的 `mcp__unified-fetch__status` 必須實際調用（無例外）。
-**軟性契約**：Stage 3 搜索/爬取、sequential-thinking 調用，由 `sync-check.sh --runtime` 以 WARN 審計。
-**Kill switch**：無契約的 session 完全不受影響；對抗性篡改（模型用工具改 trail）為物理不可防，誠實聲明。
+**Hard contract**: A2 execution rule 1's `mcp__unified-fetch__status` must be actually called (no exceptions).
+**Soft contract**: Stage 3 search/scrape and sequential-thinking calls are audited by `sync-check.sh --runtime` as WARN.
+**Kill switch**: Sessions without a contract are completely unaffected; adversarial tampering (model using tools to modify trail) is physically unpreventable — honest declaration.
