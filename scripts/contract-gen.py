@@ -14,14 +14,20 @@ import time
 
 CONTRACTS_DIR = os.path.expanduser("~/.claude/reasoning-contracts")
 
-# Hard contract: A2 execution rule 1 "Must actually call mcp__unified-fetch__status"
+# Hard contract: A2 execution rule 1 + sequential-thinking (when available)
 HARD_REQUIRED = [
     {
         "stage": "A2",
         "tool": "mcp__unified-fetch__status",
         "min_count": 1,
         "why": "A2 contract execution rule 1: Must actually call unified-fetch status to detect platform mode",
-    }
+    },
+    {
+        "stage": "stage-0/1/2/5",
+        "tool": "mcp__sequential-thinking__sequentialthinking",
+        "min_count": 1,
+        "why": "Stage 0 mini brainstorm, Stage 1 decomposition, Stage 2 hypothesis, Stage 5 critique all require sequential-thinking DAG branching; if unavailable, model must call it once (will fail) and document the fallback",
+    },
 ]
 
 # Soft contract: checked at --runtime as WARN, not blocking
@@ -31,12 +37,6 @@ SOFT_REQUIRED = [
         "tool_group": ["mcp__unified-fetch__search", "mcp__unified-fetch__scrape", "mcp__unified-fetch__smart_browse"],
         "min_count": 1,
         "why": "Stage 3 verification requires actual search/browse/scrape unless C1 skip applies",
-    },
-    {
-        "stage": "stage-0/1/2/5",
-        "tool": "mcp__sequential-thinking__sequentialthinking",
-        "min_count": 0,  # 0 = advisory; actual requirement depends on can_branch
-        "why": "DAG branching when sequential-thinking available",
     },
 ]
 
