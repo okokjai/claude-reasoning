@@ -32,7 +32,7 @@ try:
     ti = d.get('tool_input', {}) or {}
     # keep only small scalar fields (query/url), drop bulky nested data
     slim = {}
-    for k in ('query','url','focus','prompt'):
+    for k in ('query','url','focus','prompt','command'):
         if k in ti and isinstance(ti[k], str) and len(ti[k]) < 200:
             slim[k] = ti[k]
     print(json.dumps(slim, ensure_ascii=False))

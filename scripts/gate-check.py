@@ -40,6 +40,7 @@ def main():
 
     # Load trail tool occurrences
     tool_counts = {}
+    st_fallback_count = 0
     if os.path.exists(trail_path):
         with open(trail_path, encoding="utf-8") as f:
             for line in f:
@@ -49,7 +50,13 @@ def main():
                 try:
                     entry = json.loads(line)
                     tool = entry.get("tool", "")
+                    inp = entry.get("input", {}) or {}
                     tool_counts[tool] = tool_counts.get(tool, 0) + 1
+                    # Detect Bash fallback via wrapper script (sequential-thinking.py/.sh)
+                    if tool == "Bash":
+                        cmd = str(inp.get("command", "") or "")
+                        if "sequential-thinking" in cmd:
+                            st_fallback_count += 1
                 except Exception:
                     continue
 
@@ -60,20 +67,17 @@ def main():
         minc = req.get("min_count", 1)
         got = tool_counts.get(tool, 0)
         if got < minc:
-            # Special case: sequential-thinking unavailable
-            # If model tried but failed (no trail entry), loop guard handles it
-            # If model truly can't call it, skip the check
-            if tool == "mcp__sequential-thinking__sequentialthinking" and got == 0:
-                # Check if unified-fetch-status was called (proving platform detection happened)
-                status_count = tool_counts.get("mcp__unified-fetch__status", 0)
-                if status_count > 0:
-                    # Platform detection happened; sequential-thinking may be unavailable
-                    # Soft block: warn but don't hard-block
-                    soft_warnings.append(
-                        f"- {req.get('stage')}: 建議調用 `{tool}` 至少 {minc} 次，trail 記錄為 {got} 次。"
-                        f" 若 sequential-thinking 不可用，請在推理日誌中記錄 `can_branch=false` 並繼續。"
-                    )
+            # sequential-thinking: accept either native MCP call OR Bash wrapper fallback
+            if tool == "mcp__sequential-thinking__sequentialthinking":
+                if st_fallback_count >= minc:
+                    # Satisfied via Bash wrapper fallback
                     continue
+                missing.append(
+                    f"- {req.get('stage')}: 需要調用 `{tool}` 至少 {minc} 次，"
+                    f"trail 記錄為 {got} 次（Bash wrapper fallback 記錄為 {st_fallback_count} 次）。"
+                    f"請使用 `python3 scripts/sequential-thinking.py --thought '...'` 呼叫 wrapper。"
+                )
+                continue
             missing.append(f"- {req.get('stage')}: 需要調用 `{tool}` 至少 {minc} 次，trail 記錄為 {got} 次（{req.get('why','')}）")
 
     if missing:
