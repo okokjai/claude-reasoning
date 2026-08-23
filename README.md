@@ -64,43 +64,6 @@ Claude Reasoning treats reasoning as a **structured pipeline of contract-driven 
 
 ---
 
-## Architecture: Forward DAG-shaped Pipeline
-
-```mermaid
----
-title: Claude Reasoning Pipeline
----
-flowchart TD
-    A1["A1: Problem<br/>Characteristics"]
-    A0["A0: Mode<br/>Routing"]
-    A2["A2: Reasoning<br/>Strategy"]
-    C0["C0: User<br/>Context"]
-    S0["Stage 0: Mini<br/>Brainstorm"]
-    S1["Stage 1:<br/>Decomposition"]
-    S2["Stage 2:<br/>Hypothesis"]
-    S3["Stage 3:<br/>Verification"]
-    S4["Stage 4:<br/>Synthesis"]
-    S5["Stage 5:<br/>Critique"]
-    S55["Stage 5.5:<br/>Anti-Hallucination"]
-    S6["Stage 6:<br/>Conclusion"]
-    Q["Quality<br/>Self-Assessment"]
-
-    A1 --> A0 --> A2 --> C0 --> S0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S55 --> S6 --> Q
-
-    S5 -.->|framing defect<br/>≤1 return| S0
-    S5 -.->|hypothesis defect| S2
-    S5 -.->|evidence defect| S3
-    S55 -.->|entity/source fail| S3
-    S55 -.->|wording/precision fail| S5
-    S6 -.->|decomposition fix<br/>≤1 return| S1
-```
-
-**Stage path**: `A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6 → Quality`
-
-**Topology note**: Forward DAG-shaped pipeline with bounded conditional control-flow: the single `B9 → B5 → B6 → B7 → B8 → B9` loop in Stage 0 and the Stage 5/5.6/6 bounded reroutes are conditional edges with `revision_count`/`stage_0_revision_count` bounds, not a free DAG.
-
----
-
 ## 🧩 5 Reasoning Modes
 
 | Mode | Mechanism | Use For |
