@@ -10,7 +10,12 @@ fi
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_FILE="$SKILL_DIR/SKILL.md"
-MEMORY_DIR="${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}"
+# Read CLAUDE_MEMORY_DIR from settings.json first (survives across shell envs),
+# then fall back to env var, then to default.
+MEMORY_DIR="$(python3 "$(dirname "$0")/resolve-memory-dir.py" 2>/dev/null)"
+if [ -z "$MEMORY_DIR" ]; then
+  MEMORY_DIR="${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}"
+fi
 MCP_CONFIG="$HOME/.claude/mcp_servers.json"
 CLAUDE_JSON="$HOME/.claude.json"
 TODAY="$(date +%Y-%m-%d)"
@@ -159,24 +164,24 @@ if [ -f "$SKILL_FILE" ]; then
     FAIL=1
   fi
 
-  # Check can_branch=false downgrade rule exists (in stages/ or SKILL.md)
-  if grep -q "can_branch=false" "$SKILL_FILE" 2>/dev/null || grep -qr "can_branch=false" "$SKILL_DIR/stages" 2>/dev/null; then
+  # Check can_branch=false downgrade rule exists (in stages/, SKILL.md, or architecture.md)
+  if grep -q "can_branch=false" "$SKILL_FILE" 2>/dev/null || grep -qr "can_branch=false" "$SKILL_DIR/stages" "$SKILL_DIR/architecture.md" 2>/dev/null; then
     echo "  [OK] can_branch=false downgrade rule present"
   else
     echo "  [FAIL] Missing can_branch=false downgrade rule"
     FAIL=1
   fi
 
-  # Check Verifier Separation principle exists (in stages/ or SKILL.md)
-  if grep -q "Verifier Separation" "$SKILL_FILE" 2>/dev/null || grep -qr "Verifier Separation" "$SKILL_DIR/stages" 2>/dev/null; then
+  # Check Verifier Separation principle exists (in stages/, SKILL.md, or architecture.md)
+  if grep -q "Verifier Separation" "$SKILL_FILE" 2>/dev/null || grep -qr "Verifier Separation" "$SKILL_DIR/stages" "$SKILL_DIR/architecture.md" 2>/dev/null; then
     echo "  [OK] Verifier Separation principle present"
   else
     echo "  [FAIL] Missing Verifier Separation principle"
     FAIL=1
   fi
 
-  # Check revision limit exists (in stages/ or SKILL.md)
-  if grep -q "revision limit" "$SKILL_FILE" 2>/dev/null || grep -qr "revision limit" "$SKILL_DIR/stages" 2>/dev/null; then
+  # Check revision limit exists (in stages/, SKILL.md, or architecture.md)
+  if grep -q "revision limit" "$SKILL_FILE" 2>/dev/null || grep -qr "revision limit" "$SKILL_DIR/stages" "$SKILL_DIR/architecture.md" 2>/dev/null; then
     echo "  [OK] Revision limit (max 3) present"
   else
     echo "  [FAIL] Missing revision limit"
@@ -332,10 +337,10 @@ if [ -f "$README" ]; then
   else
     echo "  [FAIL] README missing Stage 0 packet invariants"; README_FAIL=1
   fi
-  if grep -q "docs/" "$README" 2>/dev/null && grep -q "plans" "$README" 2>/dev/null && grep -q "memory-cleanup.sh" "$README" 2>/dev/null; then
-    echo "  [OK] README project tree complete"
+  if grep -q "memory-cleanup.sh" "$README" 2>/dev/null; then
+    echo "  [OK] README project tree includes memory-cleanup.sh"
   else
-    echo "  [FAIL] README project tree missing docs/plans or memory-cleanup.sh"; README_FAIL=1
+    echo "  [FAIL] README project tree missing memory-cleanup.sh"; README_FAIL=1
   fi
   if grep -q "claim_registry" "$README" 2>/dev/null && grep -q "failure_route" "$README" 2>/dev/null; then
     echo "  [OK] README claim lifecycle / failure routes documented"
@@ -424,24 +429,39 @@ if [ "$RUNTIME_MODE" = true ]; then
         echo "    [FAIL] trail missing (stopped before any tool call)"
         continue
       fi
-      python3 - "$contract_file" "$trail_file" <<'PYEOF'
+      TMPFILE=$(mktemp /tmp/sync-check.XXXXXX 2>/dev/null || echo "/tmp/sync-check-$$.tmp")
+      python3 - "$contract_file" "$trail_file" <<'PYEOF' > "$TMPFILE"
 import json, sys
 contract_path, trail_path = sys.argv[1], sys.argv[2]
 with open(contract_path, encoding="utf-8") as f:
     contract = json.load(f)
 counts = {}
+st_fallback = 0
 with open(trail_path, encoding="utf-8") as f:
     for line in f:
         line = line.strip()
         if not line: continue
         try:
-            t = json.loads(line).get("tool", "")
+            entry = json.loads(line)
+            t = entry.get("tool", "")
+            inp = entry.get("input", {}) or {}
             counts[t] = counts.get(t, 0) + 1
+            if t == "Bash":
+                cmd = str(inp.get("command", "") or inp.get("cmd", "") or "")
+                if "sequential-thinking" in cmd:
+                    st_fallback += 1
         except Exception: pass
+any_fail = False
 for req in contract.get("hard_required", []):
-    tool = req.get("tool"); got = counts.get(tool, 0)
-    status = "[OK] " if got >= req.get("min_count", 1) else "[FAIL] "
-    print(f"    {status}hard: {tool} x{got} (need {req.get('min_count',1)})")
+    tool = req.get("tool"); minc = req.get("min_count", 1); got = counts.get(tool, 0)
+    if tool == "mcp__sequential-thinking__sequentialthinking" and got < minc and st_fallback >= minc:
+        got = st_fallback
+        status = "[OK] "
+    else:
+        status = "[OK] " if got >= minc else "[FAIL] "
+    if status == "[FAIL] ":
+        any_fail = True
+    print(f"    {status}hard: {tool} x{got} (need {minc})")
 for req in contract.get("soft_required", []):
     if "tool_group" in req:
         g = req["tool_group"]; got = sum(counts.get(t, 0) for t in g)
@@ -450,7 +470,13 @@ for req in contract.get("soft_required", []):
     else:
         tool = req.get("tool"); got = counts.get(tool, 0)
         print(f"    [INFO] soft: {tool} x{got} (advisory)")
+sys.exit(1 if any_fail else 0)
 PYEOF
+      PY_EXIT=$?
+      cat "$TMPFILE"
+      if [ $PY_EXIT -ne 0 ]; then FAIL=1; fi
+      rm -f "$TMPFILE"
+
     done
   fi
 fi

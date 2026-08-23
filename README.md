@@ -279,8 +279,10 @@ claude-reasoning/
 │
 ├── modes/                      # 5 reasoning mode templates
 ├── quality/                    # Quality self-assessment
-├── docs/
-│   └── plans/                  # Stage 0 mini-brainstorm plan & audit notes
+├── architecture.md             # DAG diagram + topology (progressive disclosure)
+├── mcp-toolchain.md            # Tool mapping + enforcement hooks
+├── output-spec.md              # Conclusion Card + evidence calibration
+├── memory-integration.md       # Memory write paths + cache table
 └── scripts/                    # Validation & maintenance
     ├── sync-check.sh           # Structure + semantic + release checks
     └── memory-cleanup.sh       # Reasoning log rotation (dry-run supported)

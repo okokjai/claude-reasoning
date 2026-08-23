@@ -54,7 +54,7 @@ def main():
                     tool_counts[tool] = tool_counts.get(tool, 0) + 1
                     # Detect Bash fallback via wrapper script (sequential-thinking.py/.sh)
                     if tool == "Bash":
-                        cmd = str(inp.get("command", "") or "")
+                        cmd = str(inp.get("command", "") or inp.get("cmd", "") or "")
                         if "sequential-thinking" in cmd:
                             st_fallback_count += 1
                 except Exception:

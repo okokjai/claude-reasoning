@@ -8,7 +8,8 @@ print_allow() {
   printf '{"decision":"allow"}'
 }
 
-read -r stdin_payload || exit 0
+stdin_payload=$(cat)
+[ -z "$stdin_payload" ] && { printf '{"decision":"allow"}'; exit 0; }
 
 # Only record when a contract exists for this session (kill switch)
 session_id=$(printf '%s' "$stdin_payload" | python3 -c "import sys,json;print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || echo "")
@@ -32,7 +33,7 @@ try:
     ti = d.get('tool_input', {}) or {}
     # keep only small scalar fields (query/url), drop bulky nested data
     slim = {}
-    for k in ('query','url','focus','prompt','command'):
+    for k in ('query','url','focus','prompt','command','cmd'):
         if k in ti and isinstance(ti[k], str) and len(ti[k]) < 200:
             slim[k] = ti[k]
     print(json.dumps(slim, ensure_ascii=False))

@@ -1,7 +1,7 @@
 ---
 name: claude-reasoning
-version: 1.1.1
-description: Comprehensive reasoning engine — reasoning chains x structured contract templates. Graph architecture: contracts, stages, modes in separate files with a forward DAG-shaped pipeline + bounded conditional control-flow. Native Markdown contract templates with explicit input/output fields + validation rules + sequential-thinking DAG branching/backtracking/visualization. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
+version: 1.1.2
+description: Graph-based reasoning pipeline — contracts, stages, modes in separate files with a forward DAG-shaped pipeline + bounded conditional control-flow. Progressive disclosure: SKILL.md is a router; full instructions load per stage from contracts/, stages/, modes/, quality/ + reference docs. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
 triggers:
   - "reasoning"
   - "structured reasoning"
@@ -18,23 +18,21 @@ depends_on:
   - evolution@* — system evolution requiring design decisions
 ---
 
-# Claude Reasoning v1.1.1 — Graph-Based Reasoning Pipeline
+# Claude Reasoning v1.1.2 — Graph-Based Reasoning Pipeline
 
 ## Usage
 
 ```
 /skill claude-reasoning [question description]
 
-Modes (optional, auto-routed by the system):
+Modes (optional, auto-routed by the system; see contracts/A0.md):
   diagnostic   Diagnostic reasoning — system failures, bugs, root cause
   design       Design reasoning — architecture, API, system design
   decision     Decision reasoning — technology selection, option comparison
   optimization Optimization reasoning — performance tuning, parameter search
   innovation   Innovation reasoning — breaking bottlenecks, new approaches
 
-Mode auto-routing: supports manual mode specification, or omit to let the system infer from the question (see contracts/A0.md).
-
-Domains (auto-detected, can also be specified manually):
+Domains (auto-detected; see contracts/A1.md):
   investment   Investment analysis — stocks, crypto, funds, real estate
   finance      Personal finance — budgeting, tax, insurance, retirement
   career       Career development — planning, negotiation, learning paths
@@ -43,8 +41,10 @@ Domains (auto-detected, can also be specified manually):
   tech         Technology — technical solutions, automation, tool selection
   daily        Daily life — shopping, dining, travel, weather
   general      General reasoning — retains all 5 reasoning modes
+```
 
 Examples:
+```
   /skill claude-reasoning analyze Bitcoin market conditions for H2 2026
   /skill claude-reasoning recommend a clean hotel near downtown Austin under $120
   /skill claude-reasoning plan a career transition into AI engineering
@@ -54,367 +54,72 @@ Examples:
 
 ---
 
-## Design Philosophy
-
-This skill uses **native Markdown structured prompt templates** (explicit input/output fields + validation rules) with the **sequential-thinking MCP Server** forward DAG-shaped pipeline + bounded conditional control-flow engine (branching/backtracking/visualization). This is a "contract template"-driven reasoning chain architecture with zero Python dependency — usable directly in any environment.
-
-**Graph structure**: Contracts (node types) → Stages (execution nodes) → Quality Self-Assessment (terminal nodes), with C2 contract defining edges (required/optional transfer fields).
-
----
-
-## Core Architecture: Reasoning Chain (Forward DAG-shaped Pipeline + Bounded Control-Flow)
+## Pipeline Quick Reference
 
 ```
-+-------------------------------------------------------------------+
-|                     Contract Framework Layer (Skeleton)             |
-|   Responsibilities: problem classification, reasoning strategy,     |
-|   P0 gates, quality self-assessment, memory writes                  |
-|   Contracts: contracts/A1.md + contracts/A0.md + contracts/A2.md   |
-|   + contracts/C0.md + contracts/A3.md + contracts/A4.md            |
-+-------------------------------------------------------------------+
-|                                                                     |
-|  contracts/A1.md: Problem characteristics (data_type / domain)     |
-|  contracts/A0.md: Mode routing (inferred from A1 output)           |
-|  contracts/A2.md: Reasoning strategy (mode / scale / platform /    |
-|                   quality_cap / verification_paths)                 |
-|  contracts/C0.md: User context (user_constraints /                 |
-|                   implicit_assumptions / success_criteria)          |
-|  contracts/A3.md: Claim types (A/B/C/D/E + verification thresholds)|
-|  contracts/A4.md: Source quality (T1-T5 + marketing detection)     |
-|       |                                                             |
-|       v                                                             |
-|  A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 →     |
-|  Stage 4 → Stage 5 → Stage 5.5 → Stage 6                              |
-|                                                                     |
-|  stages/stage-0-mini-brainstorming.md -> bounded mini brainstorm   |
-|       |  +-- DIVERGE: at most four distinct frames                |
-|       |  +-- ATTEND: compare constraints and conflicts             |
-|       |  +-- CONVERGE: one primary, at most one backup             |
-|       |  +-- FALSIFIER / one bounded ITERATE or no_new_angle       |
-|       |                                                             |
-|       v                                                             |
-|  stages/stage-1-decomposition.md -> sequential-thinking decomposit. |
-|       |  +-- Sub-problem A (independent branch)                    |
-|       |  +-- Sub-problem B (independent branch)                    |
-|       |  +-- Sub-problem C (independent branch)                    |
-|       |                                                             |
-|       v                                                             |
-|  stages/stage-2-hypothesis.md -> sequential-thinking hypotheses    |
-|       |  +-- Hypothesis A (branch)                                  |
-|       |  +-- Hypothesis B (branch)                                  |
-|       |  +-- Hypothesis C (branch)                                  |
-|       |  +-- null hypothesis (branch)                               |
-|       |                                                             |
-|       v                                                             |
-|  stages/stage-3-verification.md -> unified-fetch verification      |
-|       |  <- each hypothesis verified independently, results written |
-|       |     back to sequential-thinking nodes                       |
-|       |                                                             |
-|       v                                                             |
-|  stages/stage-4-synthesis.md -> pure reasoning, evidence merge     |
-|       |                                                             |
-|       v                                                             |
-|  stages/stage-5-critique.md -> sequential-thinking critique        |
-|       |  +-- Correctness perspective (branch)                       |
-|       |  +-- Risk perspective (branch)                              |
-|       |  +-- Problem Reframing Check (one lightweight harder frame)  |
-|       |  +-- framing defect -> Stage 0 at most once                 |
-|       |  +-- hypothesis defect -> Stage 2; evidence defect -> Stage 3 |
-|       |                                                             |
-|       v                                                             |
-|  stages/stage-5.5-hallucination-harness.md -> independent          |
-|       |  anti-hallucination gate                                    |
-|       |  +-- Check 1: Entity existence                              |
-|       |  +-- Check 2: Source verification                           |
-|       |  +-- Check 3: Cross-reference                               |
-|       |                                                             |
-|       v                                                             |
-|  stages/stage-6-conclusion.md -> P0 gate + Conclusion Card         |
-|       |                                                             |
-|       v                                                             |
-|  quality/self-assessment.md -> Quality self-assessment -> memory   |
-|                                                                     |
-+-------------------------------------------------------------------+
-
-> **Stage path**: `A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6`.
->
-> **Topology note**: Forward DAG-shaped pipeline with bounded conditional control-flow: the single `B9 → B5 → B6 → B7 → B8 → B9` loop and the `Stage 5/5.5/6` bounded reroutes are conditional edges with `revision_count`/`stage_0_revision_count` bounds, not a free DAG.
->
-> **Fallback path**: If `can_branch=false` (sequential-thinking unavailable at runtime), Stage 0, Stages 1/2/5 degrade to linear reasoning. The same phases, node labels, and bounded decisions are recorded as text in place of sequential-thinking calls; no stage is skipped.
+A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6
 ```
 
-### Stage Rules
-
-| Stage | Tool Used | Reason |
-|-------|-----------|--------|
-| Contracts A1 + A2 | Contract templates (problem characteristics + reasoning strategy) | Classification and strategy only |
-| Contract C0 | Contract template (user context capture) | Structured user constraints |
-| Stage 0: Mini Brainstorming | `sequentialthinking` with linear fallback | Mandatory bounded framing before decomposition: at most 4 divergent frames, at most 2 selected, at most 1 iteration; no_new_angle is valid |
-| Stage 1: Decomposition | `sequentialthinking` | Sub-problems need independent branch development |
-| Stage 2: Hypothesis | `sequentialthinking` | Each hypothesis needs independent branch; Stage 5 can backtrack to revise here |
-| Stage 3: Verification | `unified-fetch` | Requires actual search/browse/scrape (built-in 4-engine search + 6-engine scrape fallback) |
-| Stage 4: Synthesis | None (pure reasoning) | Merging evidence does not need tools |
-| Stage 5: Critique | `sequentialthinking` | Multi-perspective branching + backtracking revision; includes one lightweight Problem Reframing Check, not the full Stage 0 brainstorm |
-| Stage 5.5: Anti-Hallucination Harness | None (pure reasoning) | Independent P0 gate, three checks: entity/source/cross-reference |
-| Stage 6: Conclusion | None (P0 gate check) | Final judgment does not need tools |
-
-### Contract C2 (Edge Definition)
-
-**Edge definition file**: `contracts/C2.md` — defines required/optional transfer fields between each node, ensuring data integrity across stages.
-
----
-
-## Backtracking Revision Mechanism (sequential-thinking exclusive)
-
-Stage 0 is mandatory for every reasoning task after C0 and before Stage 1. Its full mini brainstorm is distinct from Stage 5's lightweight Problem Reframing Check: Stage 0 runs the bounded DIVERGE → ATTEND → EVALUATE → CONVERGE → FALSIFIER path, with at most one explicit B9 → B5 → B6 → B7 → B8 → B9 loop, while Stage 5 creates one harder frame on exactly one stress axis and does not rerun those phases. A Stage 5 framing defect may return to Stage 0 at most once; hypothesis and evidence defects retain their Stage 2/3 routes.
-
-Stage 0 uses a fixed budget: no more than four divergent frames, no more than two selected frames (one primary and at most one backup), and no more than one iteration. `no_new_angle` is a valid terminal result when no material framing defect, changed hard constraint, or changed falsifier warrants iteration. Do not ask a user question when a conservative assumption is safe; ask at most one question only when unresolved ambiguity materially changes the solution space, and otherwise record the assumption and uncertainty. When `can_branch=false`, retain all Stage 0 phases and node labels as linear text and do not call sequential-thinking.
-
-```
-When a blind spot is found during the critique stage:
-  sequentialthinking({
-    thought: "L4: Blind spot found — Hypothesis A ignores inflation factor",
-    thoughtNumber: 8,
-    totalThoughts: 12,
-    branchFromThought: 2,   // branch from Hypothesis stage, Hypothesis A
-    branchId: "revision-A",
-    nextThoughtNeeded: true
-  })
-
-  // Revise on the Hypothesis stage branch
-  sequentialthinking({
-    thought: "L1 (revision): Hypothesis A with inflation adjustment...",
-    thoughtNumber: 9,
-    totalThoughts: 12,
-    branchFromThought: 2,
-    branchId: "revision-A",
-    isRevision: true,
-    revisesThought: 2,
-    nextThoughtNeeded: true
-  })
-
-  // Re-verify the revised hypothesis
-  // -> call unified-fetch to verify new data
-  // -> write results back to the same branchId
-```
-
-**Backtracking termination condition**: each reasoning round has a revision limit of 3; beyond that, force entry into the conclusion stage, accept residual uncertainty, and explicitly mark unresolved blind spots in `residual_uncertainty`.
-
----
-
-## MCP Toolchain
-
-### Primary Toolchain Mapping
-
-| Tool | Purpose | When Used |
-|------|---------|-----------|
-| `sequentialthinking` | Reasoning nodes (branching/backtracking/visualization) | Stage 0 bounded brainstorm, Decomposition, Hypothesis, Critique stages; Stage 0 uses a linear fallback when unavailable |
-| `mcp__unified-fetch__search` | Multi-engine search (Hound -> DDG -> Google -> Direct) | Verification stage (preferred) |
-| `mcp__unified-fetch__scrape` | Multi-engine web scraping (Hound -> newspaper3k -> Trafilatura -> readability -> jusText -> Direct) | Verification stage, known URL needs full text |
-| `mcp__unified-fetch__status` | Check engine health | Platform detection |
-
-### Platform Mode Toolchain Mapping
-
-| Platform Mode | Search Tool | Browse/Scrape Tool | Reasoning Engine |
-|---------------|-------------|-------------------|------------------|
-| CLI Full Mode | `unified-fetch search` | `unified-fetch scrape` | `sequentialthinking` |
-| Desktop Mode | `WebSearch` | `WebFetch` | None |
-
-### Common Task Tool Mapping
-
-| Task Type | Call Sequence |
-|-----------|--------------|
-| Stock analysis | `unified-fetch search("ticker price financials")` then `unified-fetch scrape(url)` |
-| Cryptocurrency | `unified-fetch search("coin name price market cap")` |
-| Hotel comparison | `unified-fetch search("city hotel price rating")` then `unified-fetch scrape(url1)` + `unified-fetch scrape(url2)` |
-| Restaurant recommendation | `unified-fetch search("city cuisine cuisine type price rating")` |
-| Multi-page comparison | `unified-fetch scrape(url1)` + `unified-fetch scrape(url2)` + `unified-fetch scrape(url3)` |
-| Shopping comparison | `unified-fetch search("product name price")` |
-| Weather query | `unified-fetch search("city weather forecast")` |
-| Job search | `unified-fetch search("position salary city")` |
-| Course recommendation | `unified-fetch search("skill name online course rating price")` |
-| Live browsing | `unified-fetch scrape(url)` |
-| Precise extraction | `unified-fetch scrape(url)` (built-in 6-engine fallback, no manual specification needed) |
-
----
-
-## Execution Enforcement (Hooks)
-
-推理流程由環境強制執行，不依賴模型自律：
-
-| Hook | 角色 | 機制 |
+| Node | File | Tool |
 |------|------|------|
-| `UserPromptSubmit` | 契約生成 | 偵測 `/claude-reasoning` → 生成 `~/.claude/reasoning-contracts/{session}.json`（必需工具序列）|
-| `PostToolUse` | 軌跡記錄 | 每次工具調用 → 環境追加 `~/.claude/reasoning-trail/{session}.jsonl`（模型不參與）|
-| `Stop` | 閘門 | 模型停止前對比 trail vs 契約 → 缺失則 block + 注入缺失清單 |
-
-**硬性契約**：A2 執行規則 1 的 `mcp__unified-fetch__status` 必須實際調用（無例外）。
-**軟性契約**：Stage 3 搜索/爬取、sequential-thinking 調用，由 `sync-check.sh --runtime` 以 WARN 審計。
-**Kill switch**：無契約的 session 完全不受影響；對抗性篡改（模型用工具改 trail）為物理不可防，誠實聲明。
+| Contracts A1/A0/A2/A3/A4 | `contracts/*.md` | Contract templates (no tools) |
+| Contract C0 | `contracts/C0.md` | User context capture |
+| Contract C1 | `contracts/C1.md` | Skip strategy (mandatory Stage 0 preserved) |
+| Contract C2 | `contracts/C2.md` | Inter-stage transfer edge definitions |
+| Stage 0: Mini Brainstorming | `stages/stage-0-mini-brainstorming.md` | `sequentialthinking` + linear fallback |
+| Stage 1: Decomposition | `stages/stage-1-decomposition.md` | `sequentialthinking` |
+| Stage 2: Hypothesis | `stages/stage-2-hypothesis.md` | `sequentialthinking` |
+| Stage 3: Verification | `stages/stage-3-verification.md` | `unified-fetch` |
+| Stage 4: Synthesis | `stages/stage-4-synthesis.md` | None (pure reasoning) |
+| Stage 5: Critique | `stages/stage-5-critique.md` | `sequentialthinking`; includes Problem Reframing Check |
+| Stage 5.5: Anti-Hallucination | `stages/stage-5.5-hallucination-harness.md` | None (P0 gate, 3 checks) |
+| Stage 6: Conclusion | `stages/stage-6-conclusion.md` | None (P0 gate + Conclusion Card) |
+| Quality Self-Assessment | `quality/self-assessment.md` | Scoring → Memory |
 
 ---
 
-## Node Definition Files
+## Execution Flow (Read → Do)
 
-### Contract Layer (Node Types)
+**Read each file before executing its stage. Files are the source of truth; this page is only the router.**
 
-| Contract | File | Purpose |
-|----------|------|---------|
-| A0 | `contracts/A0.md` | Mode routing (inferred from A1 output) |
-| A1 | `contracts/A1.md` | Problem characteristics |
-| A2 | `contracts/A2.md` | Reasoning strategy + platform detection + domain-aware verification paths |
-| A3 | `contracts/A3.md` | Claim type definitions (A/B/C/D/E) + verification thresholds |
-| A4 | `contracts/A4.md` | Source quality tiers (T1-T5) + marketing content detection |
-| C0 | `contracts/C0.md` | User context capture |
-| C1 | `contracts/C1.md` | Skip strategy unified management |
-| C2 | `contracts/C2.md` | Inter-stage transfer edge definitions |
+1. **Read `contracts/A1.md`** — classify `data_type` / `primary_domain`. Non-trigger conditions → answer directly, do not enter the flow.
+2. **Read `contracts/A0.md`** — route `primary_mode` (or use a user-specified mode).
+3. **Read `contracts/A2.md`** — fill reasoning strategy; **must actually call** `mcp__unified-fetch__status` for platform detection (CLI Full / Desktop), set `evidence_cap` / `quality_cap` / `can_branch`.
+4. **Read `contracts/C0.md`** — capture user context (auto-trigger for decision/daily/career; otherwise explicit defaults).
+5. **Read `stages/stage-0-mini-brainstorming.md`** — mandatory bounded framing → emit `brainstorm_packet` (candidate only, never evidence).
+6. **Read `stages/stage-1-decomposition.md`** — decompose into sub-problems; open sequential-thinking branches.
+7. **Read `stages/stage-2-hypothesis.md`** — generate hypotheses + complete `claim_registry` (P0, before any search).
+8. **Read `stages/stage-3-verification.md`** — verify each hypothesis via unified-fetch; negative search; T1-T5 source annotation; entity existence check.
+9. **Read `stages/stage-4-synthesis.md`** — merge evidence, emit `preliminary_conclusion` (pure reasoning).
+10. **Read `stages/stage-5-critique.md`** — critique perspectives + one Problem Reframing Check + precision audit; backtrack/revise on blind spots.
+11. **Read `stages/stage-5.5-hallucination-harness.md`** — independent P0 gate (entity/source/cross-reference). Must pass before Stage 6.
+12. **Read `stages/stage-6-conclusion.md`** — P0 gates + Conclusion Card with evidence language calibration.
+13. **Read `quality/self-assessment.md`** — score (full /50 or simplified /36), write Pattern Asset to Memory.
 
-### Stage Layer (Execution Nodes)
+Skip strategy per **`contracts/C1.md`**; only C1 may shorten later stages, and no rule removes mandatory Stage 0. Fallback paths (`can_branch=false`, Desktop Mode) degrade execution, never skip stages.
 
-| Stage | File | Tool |
-|-------|------|------|
-| Stage 0: Mini Brainstorming | `stages/stage-0-mini-brainstorming.md` | sequential-thinking with linear fallback |
-| Stage 1: Decomposition | `stages/stage-1-decomposition.md` | sequential-thinking |
-| Stage 2: Hypothesis | `stages/stage-2-hypothesis.md` | sequential-thinking |
-| Stage 3: Verification | `stages/stage-3-verification.md` | unified-fetch |
-| Stage 4: Synthesis | `stages/stage-4-synthesis.md` | None (pure reasoning) |
-| Stage 5: Critique | `stages/stage-5-critique.md` | sequential-thinking; includes lightweight Problem Reframing Check |
-| Stage 5.5: Anti-Hallucination Harness | `stages/stage-5.5-hallucination-harness.md` | None (pure reasoning P0 gate) |
-| Stage 6: Conclusion | `stages/stage-6-conclusion.md` | None (P0 gate check) |
+---
 
-### Mode Layer (Reasoning Templates)
+## Reference Files (load on demand)
 
-| Mode | File | Core Mechanism |
-|------|------|----------------|
-| Diagnostic | `modes/diagnostic.md` | Symptoms -> candidate causes -> elimination verification -> minimal intervention |
-| Design | `modes/design.md` | Requirements -> constraints -> solution space -> Pareto frontier |
-| Decision | `modes/decision.md` | Options x criteria -> weighted scoring -> sensitivity analysis |
-| Optimization | `modes/optimization.md` | Current state -> gradient direction -> step size -> convergence check |
-| Innovation | `modes/innovation.md` | Break assumptions -> recombine elements -> new combinations |
-
-### Quality Layer
-
-| File | Purpose |
-|------|---------|
-| `quality/self-assessment.md` | Full scale (/50) + simplified scale (/30) + domain fitness + pre-assessment checklist |
+| File | Content | Load Before |
+|------|---------|-------------|
+| `architecture.md` | Full DAG diagram, topology note, stage rules, backtracking mechanism, principles | First execution |
+| `mcp-toolchain.md` | Tool mapping tables + execution enforcement hooks | Stage 3 |
+| `output-spec.md` | Required outputs, Conclusion Card format, evidence language calibration | Stage 6 |
+| `memory-integration.md` | Memory write paths + cross-topic cache table | Stage 6 → Memory |
 
 ---
 
 ## 5 Reasoning Modes
 
-### 1. Diagnostic: Differential Diagnosis
-Core mechanism: Symptoms -> candidate causes -> elimination verification -> minimal intervention
-Applies to: Bug fixes, system failures, performance issues, data anomalies
-See: `modes/diagnostic.md`
-
-### 2. Design: Design Space Exploration
-Core mechanism: Requirements -> constraints -> solution space -> Pareto frontier
-Applies to: Architecture design, API design, system refactoring, technical proposals
-See: `modes/design.md`
-
-### 3. Decision: Decision Matrix
-Core mechanism: Options x criteria -> weighted scoring -> sensitivity analysis
-Applies to: Technology selection, vendor selection, priority ranking, option decisions
-See: `modes/decision.md`
-
-### 4. Optimization: Gradient Descent Thinking
-Core mechanism: Current state -> gradient direction -> step size -> convergence check
-Applies to: Performance optimization, cost optimization, process optimization, parameter tuning
-See: `modes/optimization.md`
-
-### 5. Innovation: Lateral Thinking
-Core mechanism: Break assumptions -> recombine elements -> new combinations
-Applies to: Breaking bottlenecks, new feature ideation, non-traditional solutions
-See: `modes/innovation.md`
-
----
-
-## Output Specification
-
-### Required Outputs Per Invocation
-
-```
-## Reasoning Log
-- Mode used: [mode name]
-- Domain: [domain name]
-- Stage execution summary: [one sentence per stage]
-- Key turning points: [where reasoning path changed, including backtracking records]
-- sequential-thinking tree: [branch count, backtracking revision count, revision attempts]
-- Residual uncertainty: [unresolved questions]
-
-## Conclusion Card
-- Conclusion:
-- Core evidence:
-- Key evidence sources: [URL list]
-- Confidence: [high/medium/low]
-- Recommended actions:
-
-## Pattern Asset (saved to Memory)
-- Domain:
-- Mode type:
-- Core mechanism:
-- Key lessons from this case:
-- Reusable abstraction:
-- Backtracking experience: [reason and method of this revision]
-```
-
----
-
-## Memory Integration
-
-### Write Structure
-
-```
-# Pattern Assets (success patterns)
-${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-patterns/{type}/{pattern-name}.md
-
-# Reasoning Logs
-${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-logs/YYYY-MM-DD_task-name.md
-
-# Anti-Patterns (failure experiences)
-${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-anti-patterns/{category}.md
-
-# Experience Cache (cross-topic transfer learning)
-${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-patterns/cache/{topic-category}.md
-```
-
-### Cross-Topic Experience Cache Mechanism
-
-| New Topic Category | Cache File |
-|--------------------|------------|
-| Macroeconomics | cache/macro-economy.md |
-| Budget accommodation | cache/budget-accommodation.md |
-| Precious metals/jewelry | cache/precious-metals.md |
-| Tech industry | cache/tech-industry.md |
-| Policy/regulation | cache/policy-regulation.md |
-| Career transition | cache/career-switch.md |
-| Interpersonal conflict | cache/conflict-resolution.md |
-| Financial planning | cache/financial-planning.md |
-
-### Pattern Index Format
-
-```markdown
-# Pattern: {pattern-name}
-**Domain**: {domain}
-**Mode**: {mode}
-**Problem**: {brief description}
-**Core mechanism**: {3-5 key steps}
-**Success**: {yes/no}
-**Key lessons**: {learnings from this case}
-**Tools used**: {unified-fetch search / unified-fetch scrape / sequentialthinking}
-**Reusable for**: {list of similar scenarios}
-```
-
-### Anti-Pattern Format
-
-```markdown
-# Anti-Pattern: {pattern-name}
-**Problem type**: {hallucination/over-reasoning/tool-not-used/insufficient-evidence}
-**Scenario**: {specific scenario description}
-**Failure mode**: {specific error manifestation}
-**Root cause**: {why it happened}
-**Prevention**: {how to avoid}
-```
+| Mode | File | Core Mechanism | Use For |
+|------|------|----------------|---------|
+| Diagnostic | `modes/diagnostic.md` | Symptoms → candidate causes → elimination → minimal intervention | Bug fixes, system failures, data anomalies |
+| Design | `modes/design.md` | Requirements → constraints → solution space → Pareto frontier | Architecture, API design, refactoring |
+| Decision | `modes/decision.md` | Options × criteria → weighted scoring → sensitivity analysis | Tech selection, vendor selection, ranking |
+| Optimization | `modes/optimization.md` | Current state → gradient direction → step size → convergence | Performance/cost optimization, tuning |
+| Innovation | `modes/innovation.md` | Break assumptions → recombine → new combinations | Breaking bottlenecks, new features |
 
 ---
 
@@ -428,52 +133,6 @@ ${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}/reasoning-patterns/cache/{topic-categ
 
 ---
 
-## Principles
+## Post-Edit Sync (Mandatory)
 
-- **Decompose first, then hypothesize** — do not skip steps; mandatory Stage 0 first clarifies the framing before decomposition
-- **Stage 0 is bounded control-flow** — at most 4 divergent frames, 2 selected frames, and 1 explicit B9 → B5 → B6 → B7 → B8 → B9 iteration; `no_new_angle` is valid, and ask at most one clarification only for a material ambiguity
-- **Stage 5 reframing is lightweight** — its Problem Reframing Check tests one harder frame and does not replace or rerun Stage 0's full brainstorm
-- **At least 2 competing hypotheses per sub-problem** — avoid confirmation bias
-- **Critique layer is mandatory** — at least 3 perspectives for high-risk problems
-- **Branches can be backtracked and revised** — when a blind spot is found during critique, backtrack to the hypothesis stage rather than starting over
-- **Forward propagation** — decomposition -> hypothesis -> verification -> synthesis -> critique -> conclusion, each stage's judgment passes to the next
-- **Record the full reasoning chain** — including the sequential-thinking node tree
-- **Deposit success patterns to Memory** — call them directly next time
-- **Post-edit, always reconcile related files** — after modifying any node, reconcile MEMORY.md index and check related file references
-- **Verifier Separation** — gates/scores/hallucination judgments are produced by independent perspectives to avoid self-assessment bias
-
-### Post-Edit Sync Checklist (Mandatory)
-
-```
-[ ] Step 1: Modify node file (contracts/ stages/ modes/ quality/)
-    +-- After modification, check whether C2 edge definitions are still correct
-
-[ ] Step 2: Reconcile SKILL.md references
-    +-- All files referenced in SKILL.md exist
-
-[ ] Step 3: Reconcile Memory index
-    +-- MEMORY.md entries vs actual files all exist
-
-[ ] Step 4: Reconcile related file references
-    +-- Files referenced in each node file exist
-
-[ ] Step 5: MCP toolchain reconciliation
-    +-- requires declarations vs actual ~/.claude.json / mcp_servers.json consistent
-    +-- MCP tools mentioned in SKILL.md vs actually available tools consistent
-
-[ ] Step 6: Dead code check
-    +-- grep -rn "research-router\|freeweb\|smart_search\|smart_fetch" SKILL.md -> 0 results
-    +-- (Hound is part of unified-fetch engine description, not dead code, excluded from check)
-
-[ ] Step 7: Date check
-    +-- All dates in SKILL.md == today's date
-
-[ ] Step 8: Memory volume check (optional)
-    +-- bash scripts/memory-cleanup.sh --dry-run -> confirm reasoning log count and pending cleanup list
-```
-
-### One-Shot Comprehensive Check Command
-
-```bash
-bash scripts/sync-check.sh
-```
+任何修改後，`bash scripts/sync-check.sh` 必須 All checks passed 才算完成。完整 post-edit checklist（MCP toolchain reconciliation、dead code check、date check、memory volume check）逐項規則見 sync-check.sh 各 Step 與 Step 8 的 memory-cleanup.sh。

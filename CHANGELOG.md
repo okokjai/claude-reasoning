@@ -1,12 +1,25 @@
 # Changelog
 
+## v1.1.2 (2026-08-23)
+**SKILL.md Slim — progressive disclosure（漸進式揭露）**
+
+1. **SKILL.md 25.8KB → 8.2KB（-68%）** — 改為路由層：Frontmatter + Usage + Pipeline Quick Reference + Execution Flow（Read → Do）+ Reference Files 索引。
+2. **新增 4 個 reference 檔案**（按需載入）：
+   - `architecture.md` — 完整 DAG 圖 + 拓撲說明 + Stage Rules（首次執行讀）
+   - `mcp-toolchain.md` — 工具對照表 + Execution Enforcement Hooks（Stage 3 讀）
+   - `output-spec.md` — 結論卡格式 + evidence language calibration（Stage 6 讀）
+   - `memory-integration.md` — Memory 寫入路徑 + cache 對照表（收尾讀）
+3. **刪除冗餘** — `docs/plans/`（2 個歷史設計文件）、`scripts/*.bak`（2 個）、`scripts/.sync-check.step10.old.py`、空殼 `scripts/sequential-thinking.sh`、`scripts/contract-gen.sh`（後兩者的 .py 保留）。
+4. **sync-check.sh 更新** — can_branch/Verifier Separation/revision limit 檢查範圍擴至 architecture.md；README project tree 檢查不再要求 docs/plans。
+5. **README 更新** — project tree 反映新結構。
+
 ## v1.1.1 (2026-08-23)
 **Execution Trail Enforcement — 環境強制推理流程**
 1. **Contract 層** — `UserPromptSubmit` hook 生成 session 執行契約（硬/軟必需工具序列）
 2. **Trail 層** — `PostToolUse` hook 環境追加工具調用軌跡，模型不可偽造
 3. **Gate 層** — `Stop` hook 對比 trail vs 契約，缺失則 block，阻止當次跳步驟
 4. **審計** — `sync-check.sh --runtime` 對比全域 session trail，暴露偽造執行記錄
-5. **腳本** — `contract-gen.py/.sh`、`trail-log.sh`、`gate-check.py/.sh`
+5. **腳本** — `contract-gen.py`、`trail-log.sh`、`gate-check.py/.sh`
 
 ## v1.1.0 (2026-08-22)
 **P0/P1 alignment release — docs, contracts, scripts, and release closure**
@@ -17,7 +30,7 @@
 3. **README MCP config** — `@anthropic-ai/mcp-server-sequential-thinking` -> `@modelcontextprotocol/server-sequential-thinking`; `~/.claude/mcp_servers.json` -> `~/.claude.json` + `mcp_servers.json` (Windows: `C:/Users/<you>/.claude.json`).
 4. **README can_branch** — new section: `can_branch:true|false`, `false` = linear degradation, no stage skipped.
 5. **README Stage 0 packet invariants** — `candidate_frame_count 0..4`, `selected_frame_count 0..2`, `no_new_angle=true=>iteration_count=0`, framing_status canon.
-6. **README project tree** — added `docs/plans/`, `scripts/memory-cleanup.sh` + details.
+6. **README project tree** — added `docs/plans/` (removed in v1.1.2 slim), `scripts/memory-cleanup.sh` + details.
 7. **SKILL.md alignment** — same DAG + MCP fixes, topology note, requires updated.
 
 ### P1: Contract Closure
