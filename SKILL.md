@@ -1,6 +1,6 @@
 ---
 name: claude-reasoning
-version: 1.1.0
+version: 1.1.1
 description: Comprehensive reasoning engine — reasoning chains x structured contract templates. Graph architecture: contracts, stages, modes in separate files with a forward DAG-shaped pipeline + bounded conditional control-flow. Native Markdown contract templates with explicit input/output fields + validation rules + sequential-thinking DAG branching/backtracking/visualization. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
 triggers:
   - "reasoning"
@@ -18,7 +18,7 @@ depends_on:
   - evolution@* — system evolution requiring design decisions
 ---
 
-# Claude Reasoning v1.1.0 — Graph-Based Reasoning Pipeline
+# Claude Reasoning v1.1.1 — Graph-Based Reasoning Pipeline
 
 ## Usage
 
