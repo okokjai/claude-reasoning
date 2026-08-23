@@ -134,7 +134,7 @@ Bounds: per-round revision limit ≤3, `stage_0_revision_count` ≤1, `no_new_an
 | `can_branch` | Engine | Behavior |
 |--------------|--------|----------|
 | `true` | `sequential-thinking` available | Full branching/backtracking via MCP |
-| `false` | unavailable (Desktop / session-injected missing) | **Linear degradation**: same stages, same `B0-B9` labels and `brainstorm_packet` schema, recorded as text; **no stage is skipped** (Stage 0 stays mandatory) |
+| `false` | unavailable (Desktop / session-injected missing) | **Linear mode**: same stages, same `B0-B9` labels and `brainstorm_packet` schema, recorded as text; **no stage is skipped** (Stage 0 stays mandatory) |
 
 `can_branch=false` changes execution, not presence. `contracts/C1.md` owns skip rules; only `C1` may shorten later stages under listed conditions.
 
@@ -196,7 +196,7 @@ Add to your `~/.claude.json` (Windows: `C:/Users/<you>/.claude.json`) or `~/.cla
 
 ## ⚠️ MCP Fallback
 
-The skill auto-detects available tools and degrades gracefully:
+The skill auto-detects available tools and adapts:
 
 | Feature | With MCP (CLI Full Mode) | Without MCP (Desktop Mode) | Hook Enforcement |
 |---------|--------------------------|----------------------------|------------------|

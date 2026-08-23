@@ -166,7 +166,7 @@ if [ -f "$SKILL_FILE" ]; then
 
   # Check can_branch=false downgrade rule exists (in stages/, SKILL.md, or architecture.md)
   if grep -q "can_branch=false" "$SKILL_FILE" 2>/dev/null || grep -qr "can_branch=false" "$SKILL_DIR/stages" "$SKILL_DIR/architecture.md" 2>/dev/null; then
-    echo "  [OK] can_branch=false downgrade rule present"
+    echo "  [OK] can_branch=false linear mode rule present"
   else
     echo "  [FAIL] Missing can_branch=false downgrade rule"
     FAIL=1

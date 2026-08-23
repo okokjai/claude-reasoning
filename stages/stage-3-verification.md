@@ -95,7 +95,7 @@ Self-checkpoint during Stage 3 execution, after research calls complete, before 
 | Coverage insufficient | All hypotheses have `confidence_bucket` = `low` | Rewrite query and re-search (max 1 attempt) |
 | Empty results | A hypothesis search returns 0 relevant results | unified-fetch built-in 4-engine fallback, no manual switch needed |
 | Single-source bias | A fact has only 1 source | Re-search with different query to find a 2nd source |
-| Engine unavailable | All unified-fetch calls fail | Degrade to Desktop Mode (WebSearch/WebFetch), do not interrupt flow |
+| Engine unavailable | All unified-fetch calls fail | Switch to Desktop Mode (WebSearch/WebFetch), do not interrupt flow |
 | Entity path incomplete | An entity (brand/store/target) has only run partial paths in `verification_paths` before concluding | Force-complete the missing paths; ensure the "exists/does not exist/channel available" determination for that entity rests on all paths |
 
 **Execution Rules**:

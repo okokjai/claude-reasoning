@@ -122,9 +122,9 @@ brainstorm_packet:
 
 This packet contains candidate framings only. It cannot register claims, supply evidence, or bypass Stage 3 verification, Stage 5.5 hallucination checks, or Stage 6 conclusion controls. Stage 1 must treat every framing, constraint discovery, and falsifier as context for investigation rather than as a verified claim.
 
-## Linear degradation when `can_branch=false`
+## Linear mode when `can_branch=false`
 
-When `can_branch=false`, do not call sequential-thinking. Execute the same fixed phases and node labels as linear text, preserving the B node IDs, phase labels, decisions, limits, and uncertainty in `sequential_branches`. The output schema and all safety boundaries remain unchanged. Linear degradation is not permission to add branches, exceed the four-frame limit, select more than two frames, or iterate more than once.
+When `can_branch=false`, do not call sequential-thinking. Execute the same fixed phases and node labels as linear text, preserving the B node IDs, phase labels, decisions, limits, and uncertainty in `sequential_branches`. The output schema and all safety boundaries remain unchanged. Linear mode is not permission to add branches, exceed the four-frame limit, select more than two frames, or iterate more than once.
 
 ## Termination behavior
 

@@ -3,7 +3,7 @@
 **Execution**: Pure reasoning. Execute P0 gate checks, output the conclusion card, write to Memory.
 
 **Input**
-- `fallback_mode` — Degradation mode from C1
+- `fallback_mode` — Fallback mode from C1
 - `skip_compensation` — Compensation records from C1
 - `skippable_stages` — (optional) Skipped-stage records from C1
 - `preliminary_conclusion` — Preliminary conclusion from Synthesis stage output

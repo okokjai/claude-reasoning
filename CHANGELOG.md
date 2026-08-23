@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.3 (2026-08-23)
+**L1 Honest Naming — 「降級」→「線性模式」**
+
+1. **Terminology correction** — `degrade`/`degradation`/`Linear degradation` replaced with `linear mode`/`revert to linear`/`Linear Mode` across all 10 files: architecture.md, CHANGELOG.md, README.md (3 occurrences), contracts/A2.md, contracts/C1.md, stages/stage-0-mini-brainstorming.md (2), stages/stage-5-critique.md, SKILL.md, scripts/sync-check.sh.
+2. **Rationale** — sequential-thinking is a node logger, not a DAG engine. `can_branch=false` removes branch visualization, not core reasoning capability. "Degradation" implied a functional loss that does not exist; all stages, contracts, and output schemas are identical in both modes.
+3. **Triggered by** — [[honest-naming-preference]] memory: user values honest naming over framework-borrowed terminology.
+
 ## v1.1.2 (2026-08-23)
 **SKILL.md Slim — progressive disclosure（漸進式揭露）**
 
@@ -28,7 +35,7 @@
 1. **README DAG terminology** — `DAG orchestration` -> `forward DAG-shaped pipeline + bounded conditional control-flow` with B9->B5->B6->B7->B8->B9 and Stage 5/5.5/6 bounded reroutes.
 2. **README claim lifecycle & failure routes** — added `claim_registry: Stage 2->Stage 3->Stage 4/5->Stage 5.5` and `Stage 5.5->Stage 3/5`, `Stage 6->Stage 1` with `failure_context` + bounds (<=3 / Stage0 <=1, `no_new_angle=>iteration_count=0`).
 3. **README MCP config** — `@anthropic-ai/mcp-server-sequential-thinking` -> `@modelcontextprotocol/server-sequential-thinking`; `~/.claude/mcp_servers.json` -> `~/.claude.json` + `mcp_servers.json` (Windows: `C:/Users/<you>/.claude.json`).
-4. **README can_branch** — new section: `can_branch:true|false`, `false` = linear degradation, no stage skipped.
+4. **README can_branch** — new section: `can_branch:true|false`, `false` = linear mode (no branch visualization), no stage skipped.
 5. **README Stage 0 packet invariants** — `candidate_frame_count 0..4`, `selected_frame_count 0..2`, `no_new_angle=true=>iteration_count=0`, framing_status canon.
 6. **README project tree** — added `docs/plans/` (removed in v1.1.2 slim), `scripts/memory-cleanup.sh` + details.
 7. **SKILL.md alignment** — same DAG + MCP fixes, topology note, requires updated.

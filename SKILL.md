@@ -1,6 +1,6 @@
 ---
 name: claude-reasoning
-version: 1.1.2
+version: 1.1.3
 description: Graph-based reasoning pipeline — contracts, stages, modes in separate files with a forward DAG-shaped pipeline + bounded conditional control-flow. Progressive disclosure: SKILL.md is a router; full instructions load per stage from contracts/, stages/, modes/, quality/ + reference docs. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
 triggers:
   - "reasoning"
@@ -18,7 +18,7 @@ depends_on:
   - evolution@* — system evolution requiring design decisions
 ---
 
-# Claude Reasoning v1.1.2 — Graph-Based Reasoning Pipeline
+# Claude Reasoning v1.1.3 — Graph-Based Reasoning Pipeline
 
 ## Usage
 
@@ -96,7 +96,7 @@ A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stag
 12. **Read `stages/stage-6-conclusion.md`** — P0 gates + Conclusion Card with evidence language calibration.
 13. **Read `quality/self-assessment.md`** — score (full /50 or simplified /36), write Pattern Asset to Memory.
 
-Skip strategy per **`contracts/C1.md`**; only C1 may shorten later stages, and no rule removes mandatory Stage 0. Fallback paths (`can_branch=false`, Desktop Mode) degrade execution, never skip stages.
+Skip strategy per **`contracts/C1.md`**; only C1 may shorten later stages, and no rule removes mandatory Stage 0. Fallback paths (`can_branch=false`, Desktop Mode) use linear execution, never skip stages.
 
 ---
 

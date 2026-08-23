@@ -76,7 +76,7 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 >
 > **Topology note**: Forward DAG-shaped pipeline with bounded conditional control-flow: the single `B9 → B5 → B6 → B7 → B8 → B9` loop and the `Stage 5/5.5/6` bounded reroutes are conditional edges with `revision_count`/`stage_0_revision_count` bounds, not a free DAG.
 >
-> **Fallback path**: If `can_branch=false` (sequential-thinking unavailable at runtime), Stage 0, Stages 1/2/5 degrade to linear reasoning. The same phases, node labels, and bounded decisions are recorded as text in place of sequential-thinking calls; no stage is skipped.
+> **Fallback path**: If `can_branch=false` (sequential-thinking unavailable at runtime), Stage 0, Stages 1/2/5 revert to linear mode. The same phases, node labels, and bounded decisions are recorded as text in place of sequential-thinking calls; no stage is skipped.
 
 ---
 
