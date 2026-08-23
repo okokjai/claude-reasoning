@@ -2,6 +2,12 @@
 # Comprehensive sync check: validates Memory index integrity, runtime tool availability, content consistency
 set -u
 
+RUNTIME_MODE=false
+if [ "${1:-}" = "--runtime" ]; then
+  RUNTIME_MODE=true
+  shift
+fi
+
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_FILE="$SKILL_DIR/SKILL.md"
 MEMORY_DIR="${CLAUDE_MEMORY_DIR:-$HOME/.claude/memory}"
@@ -401,6 +407,52 @@ if [ -x "$(command -v gh 2>/dev/null)" ] || command -v gh >/dev/null 2>&1; then
   fi
 else
   echo "  [WARN] gh CLI not available, skip GitHub release check"
+fi
+
+if [ "$RUNTIME_MODE" = true ]; then
+  echo "== Step 10: Runtime trail audit (execution enforcement) =="
+  CONTRACTS_DIR="$HOME/.claude/reasoning-contracts"
+  TRAIL_DIR="$HOME/.claude/reasoning-trail"
+  if [ ! -d "$CONTRACTS_DIR" ] || [ -z "$(ls -A "$CONTRACTS_DIR" 2>/dev/null)" ]; then
+    echo "  [WARN] No reasoning contracts found (no /claude-reasoning sessions run)"
+  else
+    for contract_file in "$CONTRACTS_DIR"/*.json; do
+      session_id=$(basename "$contract_file" .json)
+      trail_file="$TRAIL_DIR/$session_id.jsonl"
+      echo "  -- Session: $session_id"
+      if [ ! -f "$trail_file" ]; then
+        echo "    [FAIL] trail missing (stopped before any tool call)"
+        continue
+      fi
+      python3 - "$contract_file" "$trail_file" <<'PYEOF'
+import json, sys
+contract_path, trail_path = sys.argv[1], sys.argv[2]
+with open(contract_path, encoding="utf-8") as f:
+    contract = json.load(f)
+counts = {}
+with open(trail_path, encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line: continue
+        try:
+            t = json.loads(line).get("tool", "")
+            counts[t] = counts.get(t, 0) + 1
+        except Exception: pass
+for req in contract.get("hard_required", []):
+    tool = req.get("tool"); got = counts.get(tool, 0)
+    status = "[OK] " if got >= req.get("min_count", 1) else "[FAIL] "
+    print(f"    {status}hard: {tool} x{got} (need {req.get('min_count',1)})")
+for req in contract.get("soft_required", []):
+    if "tool_group" in req:
+        g = req["tool_group"]; got = sum(counts.get(t, 0) for t in g)
+        status = "[OK] " if got >= req.get("min_count", 1) else "[WARN] "
+        print(f"    {status}soft: {g[0]}... x{got} (need {req.get('min_count',1)})")
+    else:
+        tool = req.get("tool"); got = counts.get(tool, 0)
+        print(f"    [INFO] soft: {tool} x{got} (advisory)")
+PYEOF
+    done
+  fi
 fi
 
 if [ "$FAIL" -eq 0 ]; then
