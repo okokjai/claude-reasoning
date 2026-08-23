@@ -62,13 +62,38 @@ def main():
             missing.append(f"- {req.get('stage')}: 需要調用 `{tool}` 至少 {minc} 次，trail 記錄為 {got} 次（{req.get('why','')}）")
 
     if missing:
-        reason = (
-            "**Execution Gate Intercepted: 推理流程未完成契約要求**\n\n"
+        # Check stop_hook_active to prevent infinite loop:
+        # if stop_hook_active is true, we already blocked once this turn.
+        # Blocking again would trap the model in an endless loop.
+        if payload.get("stop_hook_active", False):
+            # Allow the stop but warn via reason
+            print(json.dumps({
+                "decision": "continue",
+                "reason": "Previous block already served; allowing stop with residual unmet requirements.",
+                "hookSpecificOutput": {
+                    "additionalContext": (
+                        "⚠️ **注意：以下強制工具調用仍未滿足，但已 block 過一次，不再重複攔截。**\n\n"
+                        + "\n".join(missing)
+                        + "\n\n請在下一輪補做。"
+                    )
+                }
+            }, ensure_ascii=False))
+            return
+
+        reason = "Execution Gate Intercepted: 推理流程未完成契約要求"
+        context = (
+            "🚧 **Execution Gate 攔截：推理流程未完成契約要求**\n\n"
             "以下強制工具調用缺失，無法停止。請補做後再輸出結論：\n\n"
             + "\n".join(missing)
             + "\n\n（此判定由 Stop hook 依 trail 生成，模型不可更改。）"
         )
-        print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
+        print(json.dumps({
+            "decision": "block",
+            "reason": reason,
+            "hookSpecificOutput": {
+                "additionalContext": context
+            }
+        }, ensure_ascii=False))
         return
 
     print(json.dumps({"decision": "continue"}))
