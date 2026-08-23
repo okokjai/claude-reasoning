@@ -11,6 +11,10 @@ import json
 import os
 import sys
 
+# Force UTF-8 for stdout so the Stop hook JSON reason is not mangled by locale encoding (Windows cp950)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 CONTRACTS_DIR = os.path.expanduser("~/.claude/reasoning-contracts")
 TRAIL_DIR = os.path.expanduser("~/.claude/reasoning-trail")
 
