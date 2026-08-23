@@ -198,19 +198,35 @@ Add to your `~/.claude.json` (Windows: `C:/Users/<you>/.claude.json`) or `~/.cla
 
 The skill auto-detects available tools and degrades gracefully:
 
-| Feature | With MCP (CLI Full Mode) | Without MCP (Desktop Mode) |
-|---------|--------------------------|----------------------------|
-| Reasoning branching | ✅ Branching + backtracking | ❌ Linear reasoning (text-only) |
-| Search | ✅ unified-fetch (4 engines) | ⚠️ Built-in WebSearch (1 engine) |
-| Scraping | ✅ unified-fetch (6 engines) | ⚠️ Built-in WebFetch |
-| Evidence cap | 5/5 | 3/5 |
-| Quality assessment cap | 45/45 | 24/30 |
+| Feature | With MCP (CLI Full Mode) | Without MCP (Desktop Mode) | Hook Enforcement |
+|---------|--------------------------|----------------------------|------------------|
+| Reasoning branching | ✅ Branching + backtracking | ❌ Linear reasoning (text-only) | ✅ Contract + Trail + Gate |
+| Search | ✅ unified-fetch (4 engines) | ⚠️ Built-in WebSearch (1 engine) | ✅ Contract + Trail + Gate |
+| Scraping | ✅ unified-fetch (6 engines) | ⚠️ Built-in WebFetch | ✅ Contract + Trail + Gate |
+| Evidence cap | 5/5 | 3/5 | ✅ Contract + Trail + Gate |
+| Quality assessment cap | 45/45 | 24/30 | ✅ Contract + Trail + Gate |
 
 **Tip**: Even without `unified-fetch`, you can still run the full reasoning pipeline. Install just `sequential-thinking` for the best experience:
 
 ```bash
 npx -y @modelcontextprotocol/server-sequential-thinking
 ```
+
+---
+
+## 🛡️ Execution Enforcement
+
+推理流程由環境強制執行，不依賴模型自律：
+
+| Hook | 角色 | 機制 |
+|------|------|------|
+| `UserPromptSubmit` | 契約生成 | 偵測 `/claude-reasoning` → 生成 `~/.claude/reasoning-contracts/{session}.json`（必需工具序列）|
+| `PostToolUse` | 軌跡記錄 | 每次工具調用 → 環境追加 `~/.claude/reasoning-trail/{session}.jsonl`（模型不參與）|
+| `Stop` | 閘門 | 模型停止前對比 trail vs 契約 → 缺失則 block + 注入缺失清單 |
+
+**硬性契約**：A2 執行規則 1 的 `mcp__unified-fetch__status` 必須實際調用（無例外）。
+**軟性契約**：Stage 3 搜索/爬取、sequential-thinking 調用，由 `sync-check.sh --runtime` 以 WARN 審計。
+**Kill switch**：無契約的 session 完全不受影響；對抗性篡改（模型用工具改 trail）為物理不可防，誠實聲明。
 
 ---
 

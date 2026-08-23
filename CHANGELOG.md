@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.1 (2026-08-23)
+**Execution Trail Enforcement — 環境強制推理流程**
+1. **Contract 層** — `UserPromptSubmit` hook 生成 session 執行契約（硬/軟必需工具序列）
+2. **Trail 層** — `PostToolUse` hook 環境追加工具調用軌跡，模型不可偽造
+3. **Gate 層** — `Stop` hook 對比 trail vs 契約，缺失則 block，阻止當次跳步驟
+4. **審計** — `sync-check.sh --runtime` 對比全域 session trail，暴露偽造執行記錄
+5. **腳本** — `contract-gen.py/.sh`、`trail-log.sh`、`gate-check.py/.sh`
+
 ## v1.1.0 (2026-08-22)
 **P0/P1 alignment release — docs, contracts, scripts, and release closure**
 
