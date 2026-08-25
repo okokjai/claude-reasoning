@@ -18,6 +18,42 @@ A contract-driven reasoning pipeline built from Markdown templates and MCP tools
 
 ---
 
+## 🎯 Why Claude Reasoning?
+
+Most long prompts and flat expert panels produce a plausible answer in one pass. Claude Reasoning turns that pass into a **bounded, inspectable reasoning process**: define the problem, challenge competing explanations, verify claims, critique the result, and gate the conclusion before presenting it.
+
+### What the Update Adds
+
+| Capability | What it changes for the user |
+|------------|------------------------------|
+| **Problem framing before analysis** | Mandatory Stage 0 tests the problem definition before decomposition, with up to 4 candidate frames, 2 selected frames, and 1 bounded iteration. |
+| **Competing explanations** | Stage 2 registers multiple hypotheses, including a null hypothesis, before any search begins. |
+| **Evidence before conclusions** | Stage 3 verifies claims with multi-engine search/scraping, negative searches, entity checks, and T1–T5 source annotation. |
+| **Independent hallucination gate** | Stage 5.5 separately checks entity existence, source support, and cross-reference integrity; it is not self-reported by the main critique. |
+| **Targeted correction instead of blind retry** | Failure routes send a defect back to the responsible stage with `failure_context`, while revision limits prevent unbounded loops. |
+| **Same reasoning without branching MCP** | `can_branch=false` switches to linear mode but keeps the same stages, contracts, schemas, and mandatory Stage 0. |
+| **Environment-backed enforcement** | Contract → Trail → Gate hooks record the expected flow and flag missing required steps. |
+
+### The Practical Result
+
+You get a conclusion that is easier to inspect and challenge: the framing is explicit, claims are registered before research, evidence and counter-evidence are recorded, uncertainty is carried forward, and the final answer is labeled by evidence strength. This is a process improvement, not an unverified claim that it always outperforms a single long prompt.
+
+---
+
+## 🔍 What Makes It Different
+
+| Dimension | Typical long prompt or flat panel | Claude Reasoning |
+|-----------|----------------------------------|------------------|
+| **Starting point** | Jumps directly to solution generation | Stage 0 frames the problem before decomposition |
+| **Hypotheses** | One-pass answer or implicit assumptions | Competing hypotheses + null hypothesis + `claim_registry` |
+| **Research** | Evidence gathered opportunistically | Required search paths, negative search, and source-tier annotation |
+| **Quality control** | Same perspective writes and judges the answer | Independent Stage 5.5 entity/source/cross-reference gate |
+| **Corrections** | Retry the whole prompt or patch the final wording | Bounded `failure_route` to the affected stage |
+| **Fallback** | Tool failure changes the prompt ad hoc | Linear mode preserves stages, contracts, and output schemas |
+| **Runtime claim** | Often implies a hidden orchestration engine | Honest Markdown contract pipeline; MCP tools record nodes and fetch evidence |
+
+---
+
 ## ✨ Features
 
 | Category | Capabilities |
