@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.0.0 (2026-08-26)
+**Plugin-based parallel reasoning harness — algorithm and MCP capability hot-swapping**
+
+- **Algorithm plugins** — select CoT, ToT, ReAct, or DAC through `config.yaml`; each plugin changes execution topology without changing the prompt contracts.
+- **Tool plugins** — bind `reasoning-logger`, `search`, and `scrape` capabilities to MCP adapters or local fallbacks.
+- **Smart Router** — choose algorithms using user overrides, hard/soft rules, budget, and configurable cost/quality/time weights.
+- **Fixed quality kernel** — Stage 5.5 anti-hallucination checks, Stage 6 conclusion gates, C2 route bounds, and Stage 3 precision rules remain non-bypassable.
+- **Parallel Stage 3** — fan out hypothesis verification, multi-engine searches, scraping, and negative searches before evidence merge.
+- **Prompt specification preserved** — the original contracts, stages, modes, quality rules, and output specifications remain under `prompts/`.
+- **Release status** — 96 tests pass; Node.js 20+ and pnpm are required.
+
+> This is a major release. The repository runtime changes from a Markdown-only skill to a TypeScript plugin-based harness; the Markdown files remain the prompt specification layer.
+
 ## v1.2.0 (2026-08-23)
 **README restyle (open-deepthink style) + full English localization**
 
