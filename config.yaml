@@ -1,0 +1,56 @@
+# ============================================================
+# cr-reasoning-v2 config.yaml
+# 所有熱插拔開關都在這裡。
+# ============================================================
+version: "2.0"
+
+# 演算法熱插拔
+#   auto    → Router 智能路由（依成本/規模/風險自動選）
+#   cot     → Chain of Thought（最省）
+#   tot     → Tree of Thought（樹狀探索+回溯）
+#   react   → ReAct（推理↔行動交替）
+#   dac     → DIVERGE-ATTEND-CONVERGE（claude-reasoning 預設，質量最高）
+paradigm: auto
+
+# 工具熱插拔（能力 → 工具綁定）
+tools:
+  reasoning-logger: sequential-thinking   # 或 dsh-log（內建，免 MCP server）
+  search: unified-fetch                   # 或 websearch / 自訂 MCP
+  scrape: unified-fetch                   # 或 自訂 MCP
+
+# Router 配置（paradigm=auto 時生效）
+router:
+  weights:
+    cost: 0.4            # 成本權重（「經濟 > 演算法」= 調高這個）
+    quality: 0.3         # 質量權重
+    time: 0.3            # 時間權重
+  hard_rules:
+    - condition: "scale=small"
+      paradigm: cot                       # 小問題 → 最省
+    - condition: "risk=high AND domain=investment"
+      paradigm: dac                       # 高風險投資 → 最嚴
+  soft_rules:
+    - task: tool-intensive
+      paradigm: react
+    - task: exploration
+      paradigm: tot
+    - task: decision
+      paradigm: dac
+    - task: diagnosis
+      paradigm: dac
+    - task: analysis
+      paradigm: cot
+
+# Token 預算上限（選擇性）
+budget:
+  max_tokens: 50000
+  downgrade_to: cot
+
+# MCP server 配置
+mcp_servers:
+  sequential-thinking:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+  unified-fetch:
+    command: python3
+    args: ["C:/Users/PaulPaul/Projects/unified-fetch-v2/unified-fetch-server.py"]
