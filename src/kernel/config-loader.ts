@@ -25,7 +25,10 @@ export interface AppConfig {
   };
   mcp_servers: Record<string, {
     command: string;
-    args: string[];
+    args?: string[];
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    timeout?: number;
   }>;
 }
 

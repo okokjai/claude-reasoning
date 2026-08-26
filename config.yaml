@@ -53,4 +53,4 @@ mcp_servers:
     args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
   unified-fetch:
     command: python3
-    args: ["C:/Users/PaulPaul/Projects/unified-fetch-v2/unified-fetch-server.py"]
+    args: ["C:/Users/PaulPaul/Projects/unified-fetch/unified-fetch-server.py"]

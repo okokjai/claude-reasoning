@@ -1,30 +1,32 @@
-// ============================================================
-// Tool Plugins — Registry
-// 所有工具都在這裡註冊，config.yaml 選 id。
-// 新增工具：export 一個 class implements ToolPlugin → 加入 registry
-// ============================================================
 import { ToolPlugin } from '../../src/kernel/types';
+import type { AppConfig } from '../../src/kernel/config-loader';
 import { SeqThinkingTool } from './seq-thinking';
 import { UnifiedFetchTool } from './unified-fetch';
 import { DshLogTool } from './dsh-log';
 
-const registry: Record<string, ToolPlugin> = {
-  'sequential-thinking': new SeqThinkingTool(),
-  'unified-fetch': new UnifiedFetchTool(),
-  'dsh-log': new DshLogTool(),
-};
-
-/** 依 id 取得工具 plugin */
-export function getTool(id: string): ToolPlugin | undefined {
-  return registry[id];
+export interface ToolRegistry {
+  getTool(id: string): ToolPlugin | undefined;
+  listTools(): ToolPlugin[];
+  getToolsByCapability(capability: string): ToolPlugin[];
+  close(): Promise<void>;
 }
 
-/** 列出所有已註冊工具 */
-export function listTools(): ToolPlugin[] {
-  return Object.values(registry);
+export function createToolRegistry(config?: Pick<AppConfig, 'mcp_servers'>): ToolRegistry {
+  const servers = config?.mcp_servers ?? {};
+  const tools: ToolPlugin[] = [
+    new SeqThinkingTool(servers['sequential-thinking']),
+    new UnifiedFetchTool(servers['unified-fetch']),
+    new DshLogTool(),
+  ];
+  return {
+    getTool: (id) => tools.find((tool) => tool.id === id),
+    listTools: () => tools,
+    getToolsByCapability: (capability) => tools.filter((tool) => tool.capabilities.includes(capability)),
+    close: async () => { await Promise.all(tools.map((tool) => (tool as ToolPlugin & { close?: () => Promise<void> }).close?.())); },
+  };
 }
 
-/** 依能力過濾工具 */
-export function getToolsByCapability(capability: string): ToolPlugin[] {
-  return Object.values(registry).filter(t => t.capabilities.includes(capability));
-}
+const defaultRegistry = createToolRegistry();
+export function getTool(id: string): ToolPlugin | undefined { return defaultRegistry.getTool(id); }
+export function listTools(): ToolPlugin[] { return defaultRegistry.listTools(); }
+export function getToolsByCapability(capability: string): ToolPlugin[] { return defaultRegistry.getToolsByCapability(capability); }

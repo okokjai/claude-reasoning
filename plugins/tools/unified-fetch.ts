@@ -1,16 +1,12 @@
-// ============================================================
-// unified-fetch MCP Tool Plugin
-// 透過 MCP 呼叫 unified-fetch 進行搜尋和爬取。
-// ============================================================
 import { ToolPlugin, SearchResult, PageContent } from '../../src/kernel/types';
+import { MCPStdioClient, MCPStdioClientOptions } from '../../src/kernel/mcp-stdio-client';
 
-/**
- * unified-fetch MCP adapter。
- * 包裝 mcp__unified-fetch__search / scrape / status。
- */
 export class UnifiedFetchTool implements ToolPlugin {
   id = 'unified-fetch';
   capabilities = ['search', 'scrape'];
+  private readonly client?: MCPStdioClient;
+
+  constructor(options?: MCPStdioClientOptions) { this.client = options ? new MCPStdioClient(options) : undefined; }
 
   async call(operation: string, params: any): Promise<any> {
     switch (operation) {
@@ -21,42 +17,37 @@ export class UnifiedFetchTool implements ToolPlugin {
     }
   }
 
-  async search(query: string, maxResults: number = 5): Promise<SearchResult[]> {
-    // 在實際執行中，這個方法會呼叫：
-    // mcp__unified-fetch__search({ query, max_results: maxResults })
-    //
-    // 這裡只做合約驗證
+  async search(query: string, maxResults = 5): Promise<SearchResult[]> {
     if (!query) throw new Error('Search query is required');
-
-    return [{
-      url: 'https://example.com/result',
-      title: `Search results for: ${query}`,
-      snippet: `Results from unified-fetch multi-engine search (Hound → DDG → Google → Direct)`,
-      source_engine: 'unified-fetch',
-    }];
+    if (this.client) {
+      await this.client.initialize();
+      return this.unwrap(await this.client.callTool('search', { query, max_results: maxResults })) as SearchResult[];
+    }
+    return [{ url: 'https://example.com/result', title: `Search results for: ${query}`, snippet: 'Results from unified-fetch multi-engine search (Hound → DDG → Google → Direct)', source_engine: 'unified-fetch' }];
   }
 
   async scrape(url: string, focus?: string): Promise<PageContent> {
-    // 在實際執行中，這個方法會呼叫：
-    // mcp__unified-fetch__scrape({ url, focus })
     if (!url) throw new Error('URL is required');
-
-    return {
-      url,
-      title: 'Scraped page',
-      content: `Content from unified-fetch multi-engine scrape (Hound → newspaper3k → Trafilatura → readability → jusText → DirectFetch)`,
-      content_ok: true,
-      engine_used: 'unified-fetch',
-    };
+    if (this.client) {
+      await this.client.initialize();
+      return this.unwrap(await this.client.callTool('scrape', { url, ...(focus === undefined ? {} : { focus }) })) as PageContent;
+    }
+    return { url, title: 'Scraped page', content: 'Content from unified-fetch multi-engine scrape (Hound → newspaper3k → Trafilatura → readability → jusText → DirectFetch)', content_ok: true, engine_used: 'unified-fetch' };
   }
 
   async status(): Promise<any> {
-    // 在實際執行中，這個方法會呼叫：
-    // mcp__unified-fetch__status()
-    return {
-      available: true,
-      engines: ['hound', 'duckduckgo', 'trafilatura', 'newspaper'],
-    };
+    if (this.client) { await this.client.initialize(); return this.unwrap(await this.client.callTool('status', {})); }
+    return { available: true, engines: ['hound', 'duckduckgo', 'trafilatura', 'newspaper'] };
+  }
+
+  async close(): Promise<void> { await this.client?.close(); }
+
+  private unwrap(result: any): any {
+    if (result && Array.isArray(result.content)) {
+      const text = result.content.find((item: any) => item.type === 'text')?.text;
+      if (typeof text === 'string') { try { return JSON.parse(text); } catch { return text; } }
+    }
+    return result;
   }
 }
 
