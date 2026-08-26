@@ -1,6 +1,8 @@
 import { describe, test, expect } from 'vitest';
 import { getAlgorithm, listAlgorithms } from '../plugins/algorithms';
-import { AlgorithmPlugin, ExecutionGraph, StageName } from '../src/kernel/types';
+import { AlgorithmPlugin, ExecutionGraph, StageName, StageRegistry } from '../src/kernel/types';
+
+const permissiveStages: StageRegistry = { stages: {} };
 
 function assertP0GatesReachable(graph: ExecutionGraph) {
   // 驗證：從起點出發，S5.5 和 S6 都必須在最終路徑上
@@ -22,7 +24,7 @@ describe('Algorithm Plugins', () => {
   describe('CoT (Chain of Thought)', () => {
     test('builds linear graph with all stages', () => {
       const cot = getAlgorithm('cot') as AlgorithmPlugin;
-      const graph = cot.build_graph({ stages: {} });
+      const graph = cot.build_graph(permissiveStages);
 
       // 線性鏈：A1→A0→A2→C0→S0→S1→S2→S3→S4→S5→S5.5→S6
       expect(graph.nodes).toEqual([
@@ -44,7 +46,7 @@ describe('Algorithm Plugins', () => {
   describe('ToT (Tree of Thought)', () => {
     test('builds tree graph with multi-path expansion in S2->S3', () => {
       const tot = getAlgorithm('tot') as AlgorithmPlugin;
-      const graph = tot.build_graph({ stages: {} });
+      const graph = tot.build_graph(permissiveStages);
 
       // S1 → S2 有多路徑展開
       const s1ToS2 = graph.edges.find(e => e.from === 'S1' && e.to === 'S2');
@@ -63,7 +65,7 @@ describe('Algorithm Plugins', () => {
 
     test('has parallel groups for tree expansion', () => {
       const tot = getAlgorithm('tot') as AlgorithmPlugin;
-      const graph = tot.build_graph({ stages: {} });
+      const graph = tot.build_graph(permissiveStages);
       expect(graph.parallel_groups).toBeDefined();
       expect(graph.parallel_groups!.some(g => g.includes('S2') && g.includes('S3'))).toBe(true);
     });
@@ -72,7 +74,7 @@ describe('Algorithm Plugins', () => {
   describe('ReAct (Reasoning + Acting)', () => {
     test('builds alternating reasoning-action loop between S2 and S3', () => {
       const react = getAlgorithm('react') as AlgorithmPlugin;
-      const graph = react.build_graph({ stages: {} });
+      const graph = react.build_graph(permissiveStages);
 
       // 有 S2→S3 和 S3→S2 的循環（推理↔行動交替）
       const s2ToS3 = graph.edges.find(e => e.from === 'S2' && e.to === 'S3');
@@ -91,7 +93,7 @@ describe('Algorithm Plugins', () => {
   describe('DAC (DIVERGE-ATTEND-CONVERGE)', () => {
     test('builds default graph with DIVERGE-ATTEND-CONVERGE phases', () => {
       const dac = getAlgorithm('dac') as AlgorithmPlugin;
-      const graph = dac.build_graph({ stages: {} });
+      const graph = dac.build_graph(permissiveStages);
 
       // DAC 是 claude-reasoning 預設：完整線性 + S0 bounded brainstorm
       expect(graph.nodes).toContain('S0');
@@ -114,7 +116,7 @@ describe('Graph invariants (all algorithms)', () => {
 
   for (const algo of all) {
     test(`${algo.id}: no stage appears twice in nodes`, () => {
-      const graph = algo.build_graph({ stages: {} });
+      const graph = algo.build_graph(permissiveStages);
       const seen = new Set<StageName>();
       for (const node of graph.nodes) {
         expect(seen.has(node)).toBe(false);
@@ -123,7 +125,7 @@ describe('Graph invariants (all algorithms)', () => {
     });
 
     test(`${algo.id}: every edge endpoint exists in nodes`, () => {
-      const graph = algo.build_graph({ stages: {} });
+      const graph = algo.build_graph(permissiveStages);
       for (const edge of graph.edges) {
         expect(graph.nodes).toContain(edge.from);
         expect(graph.nodes).toContain(edge.to);

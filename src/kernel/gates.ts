@@ -15,6 +15,8 @@ export interface EntityCheckInput {
   has_business_registry: boolean;   // 是否已查工商登記
   has_review_platform: boolean;     // 是否已查評論平台
   recommended_entities: string[];   // 推薦給使用者的實體
+  sourced_count: number;
+  unsourced_count: number;
 }
 
 export interface EntityCheckResult {

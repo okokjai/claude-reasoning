@@ -57,7 +57,7 @@ export interface AlgorithmPlugin {
 
 // ---------- Stage 註冊表（kernel 提供，plugin 查詢） ----------
 export interface StageRegistry {
-  stages: Record<StageName, StageDefinition>;
+  stages: Partial<Record<StageName, StageDefinition>>;
 }
 
 export interface StageDefinition {
