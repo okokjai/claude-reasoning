@@ -169,6 +169,15 @@ export interface ClaimRegistry {
   entries: ClaimRegistryEntry[];
 }
 
+export interface Stage3ToolCall {
+  tool: string;
+  operation: 'search' | 'scrape';
+  params: Record<string, unknown>;
+  status: 'succeeded' | 'failed';
+  result?: unknown;
+  error?: string;
+}
+
 // ---------- Stage 3 P0 子規則 checklist ----------
 export interface Stage3Checklist {
   entity_triple_check: boolean;     // 地圖+工商+評論
