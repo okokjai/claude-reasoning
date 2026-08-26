@@ -24,7 +24,7 @@ Claude-Reasoning v2.0 is a **structured reasoning pipeline** with plugin-based a
 | Dimension | v1.2.0 (Markdown) | v2.0 (TypeScript) |
 |-----------|-------------------|-------------------|
 | **Algorithm** | Fixed DAC | **Hotswap**: CoT / ToT / ReAct / DAC |
-| **Tools** | Hardcoded MCP | **Hotswap**: swap MCP servers in config |
+| **Tools** | Fixed tool integration | **Configurable MCP**: swap server commands in config |
 | **Router** | Manual | **Smart Router**: cost-weighted auto-selection |
 | **P0 Gates** | Model self-discipline | **TS-enforced**: S5.5 + S6, cannot bypass |
 | **Stage 3** | Serial | **Parallel**: subagent fan-out |
@@ -61,9 +61,14 @@ L5: Prompts (original .md, zero migration cost)
 ## Quick Start
 
 ```bash
-# Install dependencies
 pnpm install
+pnpm build
+pnpm cli --question "Compare two options" --mode full --json
+```
 
+The CLI accepts `--config <path>` to load an explicit YAML configuration. Full mode exits with status 1 when a P0 gate fails; skeleton mode only validates graph reachability. MCP server commands are launched as configured child processes. The checked-in default `unified-fetch` command points to `C:/Users/PaulPaul/Projects/unified-fetch/unified-fetch-server.py`, which is machine-specific; override `mcp_servers.unified-fetch` in an external config on other machines.
+
+```bash
 # Run tests
 pnpm test
 

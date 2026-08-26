@@ -2,7 +2,7 @@
 
 ## Design Philosophy
 
-This skill uses **native Markdown structured prompt templates** (explicit input/output fields + validation rules) with the **sequential-thinking MCP Server** forward DAG-shaped pipeline + bounded conditional control-flow engine (branching/backtracking/visualization). This is a "contract template"-driven reasoning chain architecture with zero Python dependency — usable directly in any environment.
+This skill uses native Markdown structured prompt templates executed by a TypeScript graph walker. The runtime traverses each algorithm plugin's graph, dispatches stage handlers, enforces bounded conditional edges and P0 reachability, and delegates configured capabilities to MCP stdio child processes. When a configured MCP service is unavailable, Stage 3 records insufficient evidence; the runtime does not fabricate citations. Local tool fallbacks are explicit and apply only when no server definition is configured.
 
 **Graph structure**: Contracts (node types) → Stages (execution nodes) → Quality Self-Assessment (terminal nodes), with C2 contract defining edges (required/optional transfer fields).
 

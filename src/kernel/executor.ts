@@ -241,6 +241,10 @@ export class PipelineExecutor {
     };
   }
 
+  async close(): Promise<void> {
+    await this.toolRegistry.close();
+  }
+
   // ---------- internal helpers ----------
 
   private buildStageRegistry(): StageRegistry {
