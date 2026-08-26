@@ -1,0 +1,96 @@
+import { describe, expect, test } from 'vitest';
+import {
+  executeGraph,
+  verifyP0Reachability,
+  type GraphStageHandler,
+} from '../src/kernel/executor';
+import type { ExecutionGraph, StageName } from '../src/kernel/types';
+
+const graph = (overrides: Partial<ExecutionGraph>): ExecutionGraph => ({
+  nodes: ['A1', 'A0', 'S5.5', 'S6'],
+  edges: [
+    { from: 'A1', to: 'A0' },
+    { from: 'A0', to: 'S5.5' },
+    { from: 'S5.5', to: 'S6' },
+  ],
+  description: 'test graph',
+  ...overrides,
+});
+
+const handlers = (order: string[], values: Record<string, any> = {}): Record<string, GraphStageHandler> =>
+  Object.fromEntries(['A1', 'A0', 'A2', 'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S5.5', 'S6', 'C0', 'C1', 'C2', 'QUALITY']
+    .map(name => [name, async () => { order.push(name); return values[name]; }]));
+
+describe('graph-driven execution', () => {
+  test('follows declared edge order instead of node order', async () => {
+    const order: string[] = [];
+    await executeGraph(graph({
+      nodes: ['A1', 'A0', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'S5.5' },
+        { from: 'A1', to: 'A0' },
+        { from: 'A0', to: 'S5.5' },
+        { from: 'S5.5', to: 'S6' },
+      ],
+    }), handlers(order));
+    expect(order).toEqual(['A1', 'S5.5', 'A0', 'S6']);
+  });
+
+  test('evaluates conditional edges from stage state', async () => {
+    const order: string[] = [];
+    await executeGraph(graph({
+      nodes: ['A1', 'A0', 'S1', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'A0' },
+        { from: 'A0', to: 'S1', condition: 'take_alternate' },
+        { from: 'A0', to: 'S5.5' },
+        { from: 'S1', to: 'S5.5' },
+        { from: 'S5.5', to: 'S6' },
+      ],
+    }), handlers(order, { A0: { take_alternate: true } }));
+    expect(order).toEqual(['A1', 'A0', 'S1', 'S5.5', 'S6']);
+  });
+
+  test('executes parallel groups and records deterministic group order', async () => {
+    const order: string[] = [];
+    await executeGraph(graph({
+      nodes: ['A1', 'A0', 'S1', 'S2', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'A0' },
+        { from: 'A0', to: 'S1' },
+        { from: 'S1', to: 'S2' },
+        { from: 'S1', to: 'S5.5' },
+        { from: 'S2', to: 'S5.5' },
+        { from: 'S5.5', to: 'S6' },
+      ],
+      parallel_groups: [['S2', 'S5.5']],
+    }), handlers(order));
+    expect(order).toEqual(['A1', 'A0', 'S1', 'S2', 'S5.5', 'S6']);
+  });
+
+  test('bounds loop iterations', async () => {
+    const order: string[] = [];
+    const result = await executeGraph(graph({
+      nodes: ['A1', 'A0', 'S1', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'A0' },
+        { from: 'A0', to: 'S1' },
+        { from: 'S1', to: 'S1', condition: 'retry' },
+        { from: 'S1', to: 'S5.5' },
+        { from: 'S5.5', to: 'S6' },
+      ],
+      loops: [{ from: 'S1', to: 'S1', condition: 'retry', max: 2 }],
+    }), handlers(order, { S1: { retry: true } }));
+    expect(order.filter(stage => stage === 'S1')).toHaveLength(3);
+    expect(result.loop_counts['S1->S1']).toBe(2);
+  });
+
+  test('rejects graphs that cannot reach mandatory P0 gates', () => {
+    const check = verifyP0Reachability(graph({
+      nodes: ['A1', 'A0', 'S5.5', 'S6'],
+      edges: [{ from: 'A1', to: 'A0' }],
+    }));
+    expect(check.ok).toBe(false);
+    expect(check.error).toContain('S5.5');
+  });
+});

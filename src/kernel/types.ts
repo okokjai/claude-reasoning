@@ -38,6 +38,17 @@ export interface ExecutionGraph {
   description: string;
 }
 
+export type GraphStageHandler = (
+  input: Record<string, any>,
+  state: Record<string, any>,
+) => any | Promise<any>;
+
+export interface GraphExecutionResult {
+  outputs: Record<string, any>;
+  execution: StageName[];
+  loop_counts: Record<string, number>;
+}
+
 // ---------- 成本模型（給 Router 用） ----------
 export interface CostModel {
   base_cost: number;               // 基礎 token 消耗

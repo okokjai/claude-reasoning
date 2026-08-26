@@ -15,6 +15,8 @@ import {
   SearchResult,
   PageContent,
   Stage3ToolCall,
+  GraphStageHandler,
+  GraphExecutionResult,
 } from './types';
 import { getAlgorithm } from '../../plugins/algorithms';
 import { getTool, createToolRegistry } from '../../plugins/tools';
@@ -32,6 +34,7 @@ export interface PipelineResult {
   execution_graph: ExecutionGraph;
   route_decision: RouteDecision;
   stage_outputs: Record<string, any>;
+  stage_execution: StageName[];
   hallucination_gate: any;
   conclusion_gates: any;
   precision_audit: any;
@@ -40,6 +43,86 @@ export interface PipelineResult {
 }
 
 const MANDATORY_STAGES: StageName[] = ['A1', 'A0', 'A2', 'C0', 'S0', 'S5.5', 'S6'];
+
+export type { GraphStageHandler } from './types';
+
+function conditionMatches(condition: string | undefined, state: Record<string, any>): boolean {
+  if (!condition) return true;
+  const trimmed = condition.trim();
+  if (trimmed.startsWith('!')) return !conditionMatches(trimmed.slice(1), state);
+  const direct = state[trimmed];
+  if (typeof direct === 'boolean') return direct;
+  if (direct !== undefined) return Boolean(direct);
+  if (trimmed === 'hallucination_pass') return state['S5.5']?.pass === true;
+  const equality = trimmed.match(/^([\\w.]+)\\s*===?\\s*(true|false)$/);
+  if (equality) return Boolean(state[equality[1]]) === (equality[2] === 'true');
+  return false;
+}
+
+export function verifyP0Reachability(graph: ExecutionGraph): { ok: boolean; error?: string } {
+  for (const gate of ['S5.5', 'S6'] as StageName[]) {
+    if (!graph.nodes.includes(gate)) return { ok: false, error: `P0 gate ${gate} missing from execution graph — cannot bypass` };
+  }
+  const incoming = new Map<StageName, number>();
+  for (const node of graph.nodes) incoming.set(node, 0);
+  for (const edge of graph.edges) incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1);
+  const roots = graph.nodes.length > 0 ? [graph.nodes[0]] : [];
+  const reachable = new Set<StageName>(roots);
+  const queue = [...roots];
+  while (queue.length) {
+    const current = queue.shift()!;
+    for (const edge of graph.edges.filter(edge => edge.from === current)) {
+      if (!reachable.has(edge.to)) { reachable.add(edge.to); queue.push(edge.to); }
+    }
+  }
+  const missing = (['S5.5', 'S6'] as StageName[]).find(gate => !reachable.has(gate));
+  return missing ? { ok: false, error: `P0 gate ${missing} is not reachable from execution graph` } : { ok: true };
+}
+
+export async function executeGraph(
+  graph: ExecutionGraph,
+  handlers: Partial<Record<StageName, GraphStageHandler>>,
+  initialState: Record<string, any> = {},
+): Promise<GraphExecutionResult> {
+  const outputs: Record<string, any> = {};
+  const state = { ...initialState };
+  const execution: StageName[] = [];
+  const loop_counts: Record<string, number> = {};
+  const incoming = new Set(graph.edges.map(edge => edge.to));
+  const queue: StageName[] = graph.nodes.filter(node => !incoming.has(node));
+  const completed = new Set<StageName>();
+  const pending = new Set<StageName>();
+
+  while (queue.length) {
+    const stage = queue.shift()!;
+    if (pending.has(stage)) continue;
+    const handler = handlers[stage];
+    if (!handler) continue;
+    pending.add(stage);
+      const input = { ...state, ...outputs };
+    const output = await handler(input, state);
+    outputs[stage] = output;
+    if (output && typeof output === 'object') Object.assign(state, output);
+    state[stage] = output;
+    pending.delete(stage);
+    completed.add(stage);
+
+    for (const edge of graph.edges.filter(candidate => candidate.from === stage)) {
+      if (!conditionMatches(edge.condition, { ...state, ...output })) continue;
+      const key = `${edge.from}->${edge.to}`;
+      const loop = graph.loops?.find(candidate => candidate.from === edge.from && candidate.to === edge.to && candidate.condition === edge.condition);
+      if (loop) {
+        const count = loop_counts[key] || 0;
+        if (count >= loop.max) continue;
+        loop_counts[key] = count + 1;
+        queue.unshift(edge.to);
+      } else if (!completed.has(edge.to) && !queue.includes(edge.to)) {
+        queue.push(edge.to);
+      }
+    }
+  }
+  return { outputs, execution, loop_counts };
+}
 
 /**
  * 管線執行器
@@ -101,7 +184,7 @@ export class PipelineExecutor {
     this.graph = this.algorithm.build_graph(stageRegistry);
 
     // 5. 驗證 P0 gates 可達（不可繞過）
-    const p0Check = this.verifyP0GatesReachable(this.graph);
+    const p0Check = verifyP0Reachability(this.graph);
     if (!p0Check.ok) {
       errors.push(p0Check.error!);
     }
@@ -113,66 +196,33 @@ export class PipelineExecutor {
     let precision_audit: any = null;
 
     if (mode === 'full') {
-      // 執行契約層（A1-A2, C0）
-      stage_outputs.A1 = this.executeContract('A1', context);
-      stage_outputs.A0 = this.executeContract('A0', { ...context, data_type: stage_outputs.A1?.data_type });
-      const a2Input = { ...context, data_type: stage_outputs.A1?.data_type, primary_mode: stage_outputs.A0?.primary_mode };
-      stage_outputs.A2 = this.executeContract('A2', a2Input);
-      stage_outputs.C0 = this.executeContract('C0', context);
-
-      // 驗證：A2 必須有 platform detection 軌跡
-      stage_outputs.S0 = { brainstorm_packet: { pain_statement: context.question, framing_status: 'assumed' } };
-      stage_outputs.S1 = { core_problem: context.question, sub_problems: [{ name: 'sub-1' }] };
-      stage_outputs.S2 = {
-        hypotheses: ['H1', 'H2', 'H3'],
-        claim_registry: { entries: [] },
+      const handlers: Partial<Record<StageName, GraphStageHandler>> = {
+        A1: () => this.executeContract('A1', context),
+        A0: (_input, state) => this.executeContract('A0', { ...context, data_type: state.data_type }),
+        A2: (_input, state) => this.executeContract('A2', { ...context, data_type: state.data_type, primary_mode: state.primary_mode }),
+        C0: () => this.executeContract('C0', context),
+        S0: () => ({ brainstorm_packet: { pain_statement: context.question, framing_status: 'assumed' } }),
+        S1: () => ({ core_problem: context.question, sub_problems: [{ name: 'sub-1' }] }),
+        S2: () => ({ hypotheses: ['H1', 'H2', 'H3'], claim_registry: { entries: [] } }),
+        S3: (input) => this.runStage3(input.S2, context),
+        S4: (input) => this.executeSynthesis(input.S3),
+        S5: (input) => this.executeCritique(input.S4, input.S2),
+        'S5.5': (input) => {
+          const s3 = input.S3 || {};
+          const s4 = input.S4 || {};
+          return antiHallucinationGate({
+            entity: { entities: s4.entities || [], has_map_lookup: s3.checklist?.entity_triple_check || false, has_business_registry: s3.checklist?.entity_triple_check || false, has_review_platform: s3.checklist?.entity_triple_check || false, unsourced_count: 0, sourced_count: (s4.entities || []).length, recommended_entities: s4.recommended_entities || [] },
+            source: { citations: (s4.citations || []).map((c: any) => ({ claim: c.claim, url: c.url, tier: c.tier })), citation_real: s3.citation_real || 0, citation_fabricated: s3.citation_fabricated || 0, citation_misused: s3.citation_misused || 0, source_tier_issues: s3.source_tier_issues || 0 },
+            cross_ref: { single_source_claims: s3.single_source_claims || 0, conflicting_claims: s3.conflicting_claims || 0, concealed_conflicts: s3.concealed_conflicts || 0, isolated_judgments: s3.isolated_judgments || 0 },
+          });
+        },
+        S6: (input) => conclusionGates({ evidence_quality: input.S3?.evidence_quality || 'Insufficient', hallucination_pass: input['S5.5']?.pass === true, platform_mode: 'CLI-Full', evidence_score: input.S3?.evidence_score || 1, confidence: 'medium' }),
       };
-
-      // Stage 3 驗證（skeleton 不用真實搜尋，full 用 mock 結果）
-      stage_outputs.S3 = await this.runStage3(stage_outputs.S2, context);
-      stage_outputs.S4 = this.executeSynthesis(stage_outputs.S3);
-      stage_outputs.S5 = this.executeCritique(stage_outputs.S4, stage_outputs.S2);
-
-      // 5.5 P0 gate
-      hallucination_gate = antiHallucinationGate({
-        entity: {
-          entities: stage_outputs.S4?.entities || [],
-          has_map_lookup: stage_outputs.S3?.checklist?.entity_triple_check || false,
-          has_business_registry: stage_outputs.S3?.checklist?.entity_triple_check || false,
-          has_review_platform: stage_outputs.S3?.checklist?.entity_triple_check || false,
-          unsourced_count: 0,
-          sourced_count: (stage_outputs.S4?.entities || []).length,
-          recommended_entities: stage_outputs.S4?.recommended_entities || [],
-        },
-        source: {
-          citations: (stage_outputs.S4?.citations || []).map((c: any) => ({ claim: c.claim, url: c.url, tier: c.tier })),
-          citation_real: stage_outputs.S3?.citation_real || 0,
-          citation_fabricated: stage_outputs.S3?.citation_fabricated || 0,
-          citation_misused: stage_outputs.S3?.citation_misused || 0,
-          source_tier_issues: stage_outputs.S3?.source_tier_issues || 0,
-        },
-        cross_ref: {
-          single_source_claims: stage_outputs.S3?.single_source_claims || 0,
-          conflicting_claims: stage_outputs.S3?.conflicting_claims || 0,
-          concealed_conflicts: stage_outputs.S3?.concealed_conflicts || 0,
-          isolated_judgments: stage_outputs.S3?.isolated_judgments || 0,
-        },
-      });
-
-      // Precision audit
-      precision_audit = runPrecisionAudit(
-        stage_outputs.S3?.checklist || {},
-        stage_outputs.S2?.claim_registry as ClaimRegistry,
-      );
-
-      // 6. P0 gate — conclusion gates
-      conclusion_gate_result = conclusionGates({
-        evidence_quality: stage_outputs.S3?.evidence_quality || 'Insufficient',
-        hallucination_pass: hallucination_gate.pass,
-        platform_mode: 'CLI-Full',
-        evidence_score: stage_outputs.S3?.evidence_score || 1,
-        confidence: 'medium',
-      });
+      const traversal = await executeGraph(this.graph, handlers);
+      Object.assign(stage_outputs, traversal.outputs);
+      hallucination_gate = traversal.outputs['S5.5'] || null;
+      conclusion_gate_result = traversal.outputs.S6 || null;
+      precision_audit = runPrecisionAudit(stage_outputs.S3?.checklist || {}, stage_outputs.S2?.claim_registry as ClaimRegistry);
     }
 
     const p0_passed = mode === 'skeleton' ? p0Check.ok : (hallucination_gate?.pass && conclusion_gate_result?.all_pass);
@@ -182,6 +232,7 @@ export class PipelineExecutor {
       execution_graph: this.graph,
       route_decision,
       stage_outputs,
+      stage_execution: mode === 'full' ? Object.keys(stage_outputs) as StageName[] : [],
       hallucination_gate,
       conclusion_gates: conclusion_gate_result,
       precision_audit,
