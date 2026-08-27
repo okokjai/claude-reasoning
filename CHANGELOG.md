@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.2 (2026-08-27)
+**Plugin extension documentation**
+
+- Added concise Algorithm, MCP Tool, and plugin safety-boundary guidance to the README.
+- Corrected the README version heading and test count badge.
+
 ## v2.0.1 (2026-08-27)
 **Safe prompt-layout deduplication and installation documentation**
 
