@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🧠 Claude-Reasoning v2.0
+# 🧠 Claude-Reasoning v2.0.1
 
 **Plugin-Based Parallel DAG — Algorithm Hotswap, Smart Router, MCP Unified Toolchain**
 
-[![Test Status](https://img.shields.io/badge/tests-133%2F133-passing-green)]()
+[![Test Status](https://img.shields.io/badge/tests-135%2F135-passing-green)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue)]()
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-brightgreen)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow)]()
@@ -137,6 +137,50 @@ router:
 | Add MCP tool | `plugins/tools/my-tool.ts` (~30 lines adapter) | `search: my-tool` |
 
 **Kernel never changes. P0 gates never change. Prompts never change.**
+
+## Add a Plugin
+
+V2 supports three plugin areas:
+
+```text
+plugins/algorithms/  # reasoning graph strategies: cot, tot, react, dac
+plugins/tools/       # MCP and local tool adapters
+plugins/routers/     # algorithm selection rules
+```
+
+### Algorithm plugin
+
+1. Create an `AlgorithmPlugin` implementation in `plugins/algorithms/`.
+2. Register its ID in `plugins/algorithms/index.ts`.
+3. Ensure its graph reaches both mandatory P0 gates: `S5.5` and `S6`.
+4. Select it in `config.yaml`:
+
+```yaml
+paradigm: my-algorithm
+```
+
+The graph remains subject to conditional-edge and loop bounds; a plugin cannot bypass the kernel gates.
+
+### MCP tool plugin
+
+1. Create a tool adapter in `plugins/tools/` implementing the required capability (`reasoning-logger`, `search`, or `scrape`).
+2. Register or bind its ID in `plugins/tools/index.ts`.
+3. Configure the capability and its MCP stdio server:
+
+```yaml
+tools:
+  search: my-fetch
+  scrape: my-fetch
+
+mcp_servers:
+  my-fetch:
+    command: node
+    args: ["/absolute/path/to/server.js"]
+```
+
+The server must support the MCP JSON-RPC lifecycle used by the runtime (`initialize`, `tools/list`, and `tools/call`). Stage 3 only promotes real, verifiable HTTP(S) sources to evidence; unavailable or synthetic results remain `Insufficient` and cannot bypass P0 validation.
+
+For the complete file-role and compatibility boundaries, see [`docs/release-manifest.md`](docs/release-manifest.md).
 
 ## Performance
 
