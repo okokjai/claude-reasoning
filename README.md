@@ -4,7 +4,7 @@
 
 **Plugin-Based Parallel DAG — Algorithm Hotswap, Smart Router, MCP Unified Toolchain**
 
-[![Test Status](https://img.shields.io/badge/tests-96%2F96-passing-green)]()
+[![Test Status](https://img.shields.io/badge/tests-133%2F133-passing-green)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue)]()
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-brightgreen)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow)]()
@@ -133,7 +133,7 @@ cr-reasoning-v2/
 │       └── default.ts                 # Smart router
 ├── prompts/                           # Original .md (zero migration)
 │   ├── contracts/ (8), stages/ (8), modes/ (5), quality/
-├── test/                              # 7 test files, 96 tests
+├── test/                              # 12 test files, 133 tests
 └── package.json
 ```
 

@@ -38,8 +38,8 @@ export function entityExistenceCheck(input: EntityCheckInput): EntityCheckResult
   const sourceMap = input.entity_sources;
   const unsourcedEntities = sourceMap
     ? input.entities.filter((entity) => (sourceMap[entity] || []).length === 0)
-    : [];
-  const effectiveUnsourced = Math.max(input.unsourced_count, unsourcedEntities.length);
+    : input.entities.filter(() => input.unsourced_count > 0);
+  const effectiveUnsourced = unsourcedEntities.length;
   if (effectiveUnsourced > 0) {
     for (const entity of unsourcedEntities.length ? unsourcedEntities : input.entities) {
       // 無法追蹤來源的實體 → 標記為幻覺

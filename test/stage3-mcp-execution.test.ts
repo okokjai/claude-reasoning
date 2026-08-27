@@ -56,12 +56,11 @@ afterEach(async () => {
 });
 
 describe('Stage 3 MCP execution', () => {
-  test('reports scrape failures while preserving search evidence', async () => {
+  test('does not merge search-only evidence when scrape fails', async () => {
     const failingServer = join(directory, 'failing-server.cjs');
     await writeFile(failingServer, serverSource.replace("result = { content: [{ type: 'text', text: JSON.stringify({ url: args.url, title: 'Fetched evidence', content: 'Evidence fetched from the temporary MCP server.', content_ok: true, engine_used: 'fake-mcp' }) }] };", "throw new Error('scrape unavailable');"), 'utf8');
     const result = await new PipelineExecutor(config({ 'unified-fetch': { command: process.execPath, args: [failingServer] } })).run({ question: 'scrape failure', task_type: 'analysis' });
-    expect(result.stage_outputs.S3.evidence_matrix[0]).toBeDefined();
-    expect(result.stage_outputs.S3.evidence_matrix[0].sources).toHaveLength(2);
+    expect(result.stage_outputs.S3.evidence_matrix).toHaveLength(0);
     expect(result.stage_outputs.S3.tool_calls.some((call: any) => call.operation === 'scrape' && call.status === 'failed')).toBe(true);
     expect(result.stage_outputs.S3.evidence_quality).toBe('Insufficient');
   });

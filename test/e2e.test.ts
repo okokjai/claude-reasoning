@@ -190,7 +190,33 @@ describe('Pipeline Executor — Full Mode', () => {
     expect(result.stage_outputs.S5).toBeDefined();
   });
 
-  test('p0_passed is true when all gates pass', async () => {
+  test('full ToT and ReAct traversals reach both P0 gates', async () => {
+    for (const paradigm of ['tot', 'react']) {
+      const result = await testExecutor().run({
+        question: `Trace ${paradigm} conditional execution`,
+        scale: 'large',
+        domain: 'tech',
+        user_specified: paradigm,
+      }, 'full');
+
+      expect(result.stage_execution).toContain('S5.5');
+      expect(result.stage_execution).toContain('S6');
+      expect(result.stage_execution.indexOf('S5.5')).toBeLessThan(result.stage_execution.indexOf('S6'));
+    }
+  });
+
+  test('stage_execution preserves graph traversal order', async () => {
+    const result = await testExecutor().run({
+      question: 'Traversal order',
+      user_specified: 'cot',
+    }, 'full');
+
+    expect(result.stage_execution).toEqual(result.stage_execution.filter((stage, index, stages) =>
+      index === 0 || stage !== stages[index - 1]));
+    expect(result.stage_execution).toContain('S5.5');
+    expect(result.stage_execution).toContain('S6');
+  });
+  test('p0_passed is false when fixture lacks entity triple evidence', async () => {
     const result = await testExecutor().run({
       question: 'Best laptop for programming',
       scale: 'small',
@@ -198,7 +224,9 @@ describe('Pipeline Executor — Full Mode', () => {
       user_specified: 'cot',
     }, 'full');
 
-    expect(result.p0_passed).toBe(true);
+    expect(result.precision_audit.entity_triple_check).toBe(false);
+    expect(result.precision_audit.passed).toBe(false);
+    expect(result.p0_passed).toBe(false);
   });
 });
 

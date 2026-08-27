@@ -76,7 +76,7 @@ export function mergeEvidence(results: VerificationResult[]): MergedEvidence[] {
 
   for (const [hypothesis, hypothesisResults] of byHypothesis) {
     const allSources = hypothesisResults.flatMap(r => r.search_results);
-    const allPages = hypothesisResults.flatMap(r => r.pages);
+    const allPages = hypothesisResults.flatMap(r => r.pages.filter(page => page.content_ok));
     const hasNegative = hypothesisResults.some(r =>
       r.query.includes('limitations') || r.query.includes('drawbacks')
     );

@@ -11,13 +11,22 @@ export interface ToolRegistry {
   close(): Promise<void>;
 }
 
-export function createToolRegistry(config?: Pick<AppConfig, 'mcp_servers'>): ToolRegistry {
+export function createToolRegistry(config?: Pick<AppConfig, 'mcp_servers' | 'tools'>): ToolRegistry {
   const servers = config?.mcp_servers ?? {};
   const tools: ToolPlugin[] = [
     new SeqThinkingTool(servers['sequential-thinking']),
     new UnifiedFetchTool(servers['unified-fetch']),
     new DshLogTool(),
   ];
+  const configuredIds = new Set<string>(Object.values(config?.tools ?? {}));
+  for (const id of configuredIds) {
+    if (tools.some((tool) => tool.id === id)) continue;
+    const server = servers[id];
+    if (!server) continue;
+    const capabilities = id === config?.tools['reasoning-logger'] ? ['reasoning-logger'] : ['search', 'scrape'];
+    const base = capabilities.includes('reasoning-logger') ? new SeqThinkingTool(server) : new UnifiedFetchTool(server);
+    tools.push(Object.assign(base, { id, capabilities }));
+  }
   return {
     getTool: (id) => tools.find((tool) => tool.id === id),
     listTools: () => tools,

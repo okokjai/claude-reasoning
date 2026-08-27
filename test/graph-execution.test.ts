@@ -155,4 +155,17 @@ describe('graph-driven execution', () => {
   test('reports missing handlers instead of silently skipping reachable stages', async () => {
     await expect(executeGraph(graph({}), { A1: async () => ({}) })).rejects.toThrow(/missing handler.*A0/i);
   });
+
+  test('rejects when conditional P0 path stops before S5.5', async () => {
+    await expect(executeGraph(graph({
+      nodes: ['A1', 'A0', 'S2', 'S3', 'S4', 'S5', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'A0' }, { from: 'A0', to: 'S2' },
+        { from: 'S2', to: 'S3', condition: 'action-needed' },
+        { from: 'S3', to: 'S4', condition: 'evidence-sufficient' },
+        { from: 'S4', to: 'S5' }, { from: 'S5', to: 'S5.5' },
+        { from: 'S5.5', to: 'S6', condition: 'hallucination_pass' },
+      ],
+    }), handlers([]))).rejects.toThrow(/P0 gate S5\.5 was not executed/i);
+  });
 });

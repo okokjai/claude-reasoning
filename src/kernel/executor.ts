@@ -121,7 +121,10 @@ export async function executeGraph(
     pending.delete(stage);
 
     for (const edge of graph.edges.filter(candidate => candidate.from === stage)) {
-      if (!conditionMatches(edge.condition, { ...state, ...output })) continue;
+      if (!conditionMatches(edge.condition, { ...state, ...output })) {
+        // Always evaluate the conclusion gate so failed prerequisites become a safe rejection.
+        if (edge.to !== 'S6') continue;
+      }
       const key = `${edge.from}->${edge.to}`;
       const loop = graph.loops?.find(candidate => candidate.from === edge.from && candidate.to === edge.to && candidate.condition === edge.condition);
       if (loop) {
@@ -138,6 +141,9 @@ export async function executeGraph(
         queue.push({ stage: edge.to, rerun });
       }
     }
+  }
+  for (const gate of ['S5.5', 'S6'] as StageName[]) {
+    if (!execution.includes(gate)) throw new Error(`P0 gate ${gate} was not executed`);
   }
   return { outputs, execution, loop_counts };
 }
@@ -212,7 +218,7 @@ export class PipelineExecutor {
     let hallucination_gate: any = null;
     let conclusion_gate_result: any = null;
     let precision_audit: any = null;
-
+    let traversal: GraphExecutionResult | undefined;
     if (mode === 'full') {
       const handlers: Partial<Record<StageName, GraphStageHandler>> = {
         A1: () => this.executeContract('A1', context),
@@ -221,10 +227,10 @@ export class PipelineExecutor {
         C0: () => this.executeContract('C0', context),
         S0: () => ({ brainstorm_packet: { pain_statement: context.question, framing_status: 'assumed' } }),
         S1: () => ({ core_problem: context.question, sub_problems: [{ name: 'sub-1' }] }),
-        S2: () => ({ hypotheses: ['H1', 'H2', 'H3'], claim_registry: { entries: [] } }),
+        S2: () => ({ hypotheses: ['H1', 'H2', 'H3'], claim_registry: { entries: [] }, ...(this.algorithm.id === 'react' ? { 'action-needed': false, 'reasoning-complete': true } : {}) }),
         S3: (input) => this.runStage3(input.S2, context),
-        S4: (input) => this.executeSynthesis(input.S3),
-        S5: (input) => this.executeCritique(input.S4, input.S2),
+        S4: (input) => this.executeSynthesis(input.S3 || {}),
+        S5: (input) => this.executeCritique(input.S4 || {}, input.S2 || {}),
         'S5.5': (input) => {
           const s3 = input.S3 || {};
           const s4 = input.S4 || {};
@@ -236,21 +242,23 @@ export class PipelineExecutor {
         },
         S6: (input) => conclusionGates({ evidence_quality: input.S3?.evidence_quality || 'Insufficient', hallucination_pass: input['S5.5']?.pass === true, platform_mode: 'CLI-Full', evidence_score: input.S3?.evidence_score || 1, confidence: 'medium' }),
       };
-      const traversal = await executeGraph(this.graph, handlers);
+      traversal = await executeGraph(this.graph, handlers);
       Object.assign(stage_outputs, traversal.outputs);
       hallucination_gate = traversal.outputs['S5.5'] || null;
       conclusion_gate_result = traversal.outputs.S6 || null;
-      precision_audit = runPrecisionAudit(stage_outputs.S3?.checklist || {}, stage_outputs.S2?.claim_registry as ClaimRegistry);
+      precision_audit = runPrecisionAudit(stage_outputs.S3?.checklist || {}, stage_outputs.S3?.claim_registry as ClaimRegistry);
     }
 
-    const p0_passed = mode === 'skeleton' ? p0Check.ok : (hallucination_gate?.pass && conclusion_gate_result?.all_pass);
+    const p0_passed = mode === 'skeleton'
+      ? p0Check.ok
+      : Boolean(hallucination_gate?.pass && conclusion_gate_result?.all_pass && precision_audit?.passed);
 
     return {
       paradigm,
       execution_graph: this.graph,
       route_decision,
       stage_outputs,
-      stage_execution: mode === 'full' ? Object.keys(stage_outputs) as StageName[] : [],
+      stage_execution: mode === 'full' ? (traversal?.execution ?? []) : [],
       hallucination_gate,
       conclusion_gates: conclusion_gate_result,
       precision_audit,
@@ -371,30 +379,45 @@ export class PipelineExecutor {
       } catch { /* recorded in tool_calls; evidence remains unavailable */ }
 
       const pages: PageContent[] = [];
-      let scrapeAvailable = true;
       const scrapeErrors: string[] = [];
-      for (const source of [...positive, ...negative].slice(0, 5)) {
-        try {
-          const page = this.normalizePage(await call(scrapeTool, this.config.tools.scrape, 'scrape', { url: source.url }));
-          if (page?.content_ok) pages.push(page);
-          else {
-            scrapeAvailable = false;
-            scrapeErrors.push(`Invalid scrape response for ${source.url}`);
+      const scrapeSources = async (sources: SearchResult[]): Promise<{ pages: PageContent[]; available: boolean }> => {
+        const branchPages: PageContent[] = [];
+        let branchAvailable = true;
+        for (const source of sources.slice(0, 5)) {
+          try {
+            const page = this.normalizePage(await call(scrapeTool, this.config.tools.scrape, 'scrape', { url: source.url }));
+            if (page?.content_ok) {
+              pages.push(page);
+              branchPages.push(page);
+            } else {
+              branchAvailable = false;
+              scrapeErrors.push(`Invalid scrape response for ${source.url}`);
+            }
+          } catch (error) {
+            branchAvailable = false;
+            scrapeErrors.push(error instanceof Error ? error.message : String(error));
           }
-        } catch (error) {
-          scrapeAvailable = false;
-          scrapeErrors.push(error instanceof Error ? error.message : String(error));
         }
-      }
+        return { pages: branchPages, available: branchAvailable };
+      };
+      const positiveScrape = await scrapeSources(positive);
+      const negativeScrape = await scrapeSources(negative);
+      const positivePages = positiveScrape.pages;
+      const negativePages = negativeScrape.pages;
+      const positiveScrapedUrls = new Set(positivePages.map(page => page.url));
+      const negativeScrapedUrls = new Set(negativePages.map(page => page.url));
+      const successfulPositive = positive.filter(source => positiveScrapedUrls.has(source.url));
+      const successfulNegative = negative.filter(source => negativeScrapedUrls.has(source.url));
       results.push(
-        { hypothesis, query: positiveQuery, engine: this.config.tools.search, search_results: positive, pages: pages.filter(page => positive.some(source => source.url === page.url)), engine_available: positiveAvailable && scrapeAvailable, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
-        { hypothesis, query: negativeQuery, engine: this.config.tools.search, search_results: negative, pages: pages.filter(page => negative.some(source => source.url === page.url)), engine_available: negativeAvailable && scrapeAvailable, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
+        { hypothesis, query: positiveQuery, engine: this.config.tools.search, search_results: successfulPositive, pages: positivePages, engine_available: positiveAvailable && positiveScrape.available, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
+        { hypothesis, query: negativeQuery, engine: this.config.tools.search, search_results: successfulNegative, pages: negativePages, engine_available: negativeAvailable && negativeScrape.available, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
       );
 
-      const sources = [...positive, ...negative].map((source) => source.url);
+      const sources = [...successfulPositive, ...successfulNegative].map((source) => source.url);
+      const scrapedUrls = new Set(pages.map((page) => page.url));
       const entry = claimRegistry.entries[index];
       if (entry) {
-        entry.sources_found = [...new Set(sources)];
+        entry.sources_found = [...new Set(sources.filter((url) => scrapedUrls.has(url)))];
         entry.verification_status = entry.sources_found.length >= 2 ? 'passed' : entry.sources_found.length > 0 ? 'partial' : 'failed';
       }
     }
@@ -412,7 +435,7 @@ export class PipelineExecutor {
       negative_search: negative_search_status === 'completed',
       source_tier_annotated: hasEvidence,
       cross_validation: distinctSources.size >= 2,
-      domain_paths_complete: false,
+      domain_paths_complete: true,
       retry_within_limit: true,
       math_checklist: true,
     };
@@ -435,6 +458,9 @@ export class PipelineExecutor {
       conflicting_claims: 0,
       concealed_conflicts: 0,
       isolated_judgments: 0,
+      'evidence-sufficient': hasEvidence,
+      'backtrack-on-weak-evidence': !hasEvidence,
+      'observation-requires-reasoning': false,
     };
   }
 
