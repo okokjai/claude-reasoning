@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import * as yaml from 'js-yaml';
 import { getAlgorithm } from '../../plugins/algorithms';
 import { getTool } from '../../plugins/tools';
+import type { ToolRegistry } from '../../plugins/tools';
 
 export interface AppConfig {
   version: string;
@@ -88,8 +89,9 @@ export function loadConfig(path?: string): AppConfig {
   }
 }
 
-export function validateConfig(config: AppConfig): ValidationError[] {
+export function validateConfig(config: AppConfig, registry?: Pick<ToolRegistry, 'getTool'>): ValidationError[] {
   const errors: ValidationError[] = [];
+  const toolLookup = registry?.getTool ?? getTool;
 
   // 驗證 version
   if (config.version !== '2.0') {
@@ -103,7 +105,7 @@ export function validateConfig(config: AppConfig): ValidationError[] {
 
   // 驗證 tools
   for (const [capability, toolId] of Object.entries(config.tools)) {
-    const tool = getTool(toolId);
+    const tool = toolLookup(toolId);
     if (!tool) {
       errors.push({ field: `tools.${capability}`, message: `Unknown tool: ${toolId}` });
     } else if (!tool.capabilities.includes(capability)) {

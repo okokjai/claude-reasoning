@@ -70,6 +70,23 @@ describe('Default Router', () => {
     expect(result.paradigm).toBe('tot');
   });
 
+  test('uses configured tools instead of hard-coded defaults', () => {
+    const configuredTools = {
+      'reasoning-logger': 'custom-logger',
+      search: 'custom-search',
+      scrape: 'custom-scraper',
+    };
+    const configuredRouter = new DefaultRouter({ tools: configuredTools });
+    const result = configuredRouter.route({
+      scale: 'large',
+      domain: 'tech',
+      risk: 'low',
+      task_type: 'analysis',
+      budget_remaining: 100_000,
+    });
+    expect(result.tools).toEqual(configuredTools);
+  });
+
   test('cost weight 0.6 favors cheaper algorithms', () => {
     const costRouter = new DefaultRouter({
       weights: { cost: 0.6, quality: 0.2, time: 0.2 },
@@ -121,6 +138,22 @@ describe('Config Validation', () => {
     });
     expect(errors.length).toBeGreaterThan(0);
     expect(errors.some(e => e.field === 'router.weights')).toBe(true);
+  });
+
+  test('validates configured tool IDs against supplied registry', () => {
+    const customTool = (id: string) => id === 'custom-logger'
+      ? { id, capabilities: ['reasoning-logger'] }
+      : id === 'custom-search'
+        ? { id, capabilities: ['search', 'scrape'] }
+        : undefined;
+    const errors = validateConfig({
+      version: '2.0',
+      paradigm: 'auto',
+      tools: { 'reasoning-logger': 'custom-logger', search: 'custom-search', scrape: 'custom-search' },
+      router: { weights: { cost: 0.4, quality: 0.3, time: 0.3 }, hard_rules: [], soft_rules: [] },
+      mcp_servers: {},
+    }, { getTool: customTool as any });
+    expect(errors).toHaveLength(0);
   });
 
   test('valid config passes', () => {

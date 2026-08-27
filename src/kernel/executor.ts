@@ -155,7 +155,7 @@ export class PipelineExecutor {
 
   constructor(config?: AppConfig) {
     this.config = config || loadConfig();
-    this.router = new DefaultRouter(this.config.router);
+    this.router = new DefaultRouter({ ...this.config.router, tools: this.config.tools });
     this.toolRegistry = createToolRegistry(this.config);
   }
 
@@ -174,7 +174,7 @@ export class PipelineExecutor {
     const errors: string[] = [];
 
     // 1. 驗證 config
-    const configErrors = validateConfig(this.config);
+    const configErrors = validateConfig(this.config, this.toolRegistry);
     if (configErrors.length > 0) {
       errors.push(...configErrors.map(e => `${e.field}: ${e.message}`));
     }

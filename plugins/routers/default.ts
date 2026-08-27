@@ -19,6 +19,7 @@ export interface RouterConfig {
   };
   hard_rules: HardRule[];
   soft_rules: SoftRule[];
+  tools?: Record<string, string>;
 }
 
 interface HardRule {
@@ -61,7 +62,7 @@ export class DefaultRouter implements RouterPlugin {
     if (context.user_specified) {
       return {
         paradigm: context.user_specified,
-        tools: { 'reasoning-logger': 'sequential-thinking', search: 'unified-fetch', scrape: 'unified-fetch' },
+        tools: this.defaultTools(),
         confidence: 'high',
         rationale: `User specified: ${context.user_specified}`,
       };
@@ -145,7 +146,7 @@ export class DefaultRouter implements RouterPlugin {
   }
 
   private defaultTools() {
-    return {
+    return this.config.tools ?? {
       'reasoning-logger': 'sequential-thinking',
       search: 'unified-fetch',
       scrape: 'unified-fetch',
