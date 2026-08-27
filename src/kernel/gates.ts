@@ -15,6 +15,8 @@ export interface EntityCheckInput {
   has_business_registry: boolean;   // 是否已查工商登記
   has_review_platform: boolean;     // 是否已查評論平台
   recommended_entities: string[];   // 推薦給使用者的實體
+  entity_sources?: Record<string, string[]>;
+  recommended_source_checks?: Record<string, { map: boolean; business_registry: boolean; review_platform: boolean }>;
   sourced_count: number;
   unsourced_count: number;
 }
@@ -33,8 +35,13 @@ export function entityExistenceCheck(input: EntityCheckInput): EntityCheckResult
   const hallucinated_entities: { name: string; reason: string }[] = [];
 
   // 規則：實體必須至少有一個獨立來源
-  if (input.unsourced_count > 0) {
-    for (const entity of input.entities) {
+  const sourceMap = input.entity_sources;
+  const unsourcedEntities = sourceMap
+    ? input.entities.filter((entity) => (sourceMap[entity] || []).length === 0)
+    : [];
+  const effectiveUnsourced = Math.max(input.unsourced_count, unsourcedEntities.length);
+  if (effectiveUnsourced > 0) {
+    for (const entity of unsourcedEntities.length ? unsourcedEntities : input.entities) {
       // 無法追蹤來源的實體 → 標記為幻覺
       hallucinated_entities.push({ name: entity, reason: 'No source found' });
     }
@@ -42,7 +49,10 @@ export function entityExistenceCheck(input: EntityCheckInput): EntityCheckResult
 
   // 規則：推薦的實體必須通過三查
   const recommended_verified = input.recommended_entities.filter(e => {
-    return input.has_map_lookup && input.has_business_registry && input.has_review_platform;
+    const checks = input.recommended_source_checks?.[e];
+    return checks
+      ? checks.map && checks.business_registry && checks.review_platform && (!sourceMap || (sourceMap[e] || []).length > 0)
+      : input.has_map_lookup && input.has_business_registry && input.has_review_platform && (!sourceMap || (sourceMap[e] || []).length > 0);
   }).length;
 
   const pass =
@@ -53,7 +63,7 @@ export function entityExistenceCheck(input: EntityCheckInput): EntityCheckResult
     pass,
     entity_count: input.entities.length,
     sourced_count: input.sourced_count,
-    unsourced_count: input.unsourced_count,
+    unsourced_count: effectiveUnsourced,
     hallucinated_entities,
     recommended_verified,
     recommended_total: input.recommended_entities.length,
@@ -92,12 +102,21 @@ export function sourceVerificationCheck(input: SourceCheckInput): SourceCheckRes
     pass_details.push(`FAIL: ${input.citation_misused} misused citations (zero tolerance)`);
   }
 
+  const validCitations = input.citations.every((citation) => {
+    if (!citation || typeof citation.claim !== 'string' || !citation.claim.trim()) return false;
+    if (typeof citation.url !== 'string' || !/^https?:\/\/[^\s]+$/i.test(citation.url)) return false;
+    return ['T1', 'T2', 'T3', 'T4', 'T5'].includes(citation.tier);
+  });
+  if (input.citations.length === 0 || !validCitations || input.citation_real < input.citations.length) {
+    pass_details.push('FAIL: empty or invalid citations');
+  }
+
   // 來源層級問題
   if (input.source_tier_issues > 0) {
     pass_details.push(`WARN: ${input.source_tier_issues} source tier issues (must be annotated)`);
   }
 
-  const pass = input.citation_fabricated === 0 && input.citation_misused === 0;
+  const pass = input.citations.length > 0 && validCitations && input.citation_real >= input.citations.length && input.citation_fabricated === 0 && input.citation_misused === 0;
 
   return {
     pass,

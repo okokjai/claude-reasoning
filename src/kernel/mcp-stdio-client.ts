@@ -32,6 +32,8 @@ export class MCPStdioClient {
   private fatalError?: Error;
   private closePromise?: Promise<void>;
   private closed = false;
+  private unavailable = false;
+  private initializePromise?: Promise<unknown>;
 
   public constructor(options: MCPStdioClientOptions) {
     if (!options.command) throw new Error('MCP command is required');
@@ -44,6 +46,17 @@ export class MCPStdioClient {
   }
 
   public async initialize(): Promise<unknown> {
+    if (this.initializePromise) return this.initializePromise;
+    this.initializePromise = this.initializeOnce();
+    try {
+      return await this.initializePromise;
+    } catch (error) {
+      this.initializePromise = undefined;
+      throw error;
+    }
+  }
+
+  private async initializeOnce(): Promise<unknown> {
     const result = await this.request('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
@@ -62,7 +75,7 @@ export class MCPStdioClient {
   }
 
   public request<TResult = unknown>(method: string, params?: unknown, timeout = this.options.timeout): Promise<TResult> {
-    if (this.closed) return Promise.reject(new Error('MCP client is closed'));
+    if (this.closed || this.unavailable) return Promise.reject(new Error('MCP client is unavailable'));
     if (this.fatalError) return Promise.reject(this.fatalError);
     this.ensureProcess();
     const id = ++this.nextId;
@@ -70,7 +83,11 @@ export class MCPStdioClient {
     return new Promise<TResult>((resolve, reject) => {
       const timer = setTimeout(() => {
         if (!this.pending.delete(id)) return;
-        reject(new Error(`MCP request ${method} (${id}) timed out after ${timeout}ms`));
+        const error = new Error(`MCP request ${method} (${id}) timed out after ${timeout}ms`);
+        this.unavailable = true;
+        this.fail(error);
+        void this.close();
+        reject(error);
       }, timeout);
       this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer });
       try {
@@ -82,7 +99,7 @@ export class MCPStdioClient {
   }
 
   public async notify(method: string, params?: unknown): Promise<void> {
-    if (this.closed) throw new Error('MCP client is closed');
+    if (this.closed || this.unavailable) throw new Error('MCP client is unavailable');
     if (this.fatalError) throw this.fatalError;
     this.ensureProcess();
     const message = { jsonrpc: '2.0', method, ...(params === undefined ? {} : { params }) };
@@ -116,7 +133,7 @@ export class MCPStdioClient {
 
   private ensureProcess(): void {
     if (this.process) return;
-    if (this.closed) throw new Error('MCP client is closed');
+    if (this.closed || this.unavailable) throw new Error('MCP client is unavailable');
     const env = this.options.env ? { ...process.env, ...this.options.env } : process.env;
     const child = spawn(this.options.command, this.options.args, {
       cwd: this.options.cwd,

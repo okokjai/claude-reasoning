@@ -33,14 +33,17 @@ export async function runCli(args = process.argv.slice(2)): Promise<number> {
   try {
     const options = parseArgs(args);
     const executor = createExecutor(loadConfig(options.config));
-    const result = await executor.run(
-      { question: options.question! },
-      options.mode,
-    );
-    await executor.close();
-    const output = JSON.stringify(result, null, options.json ? 2 : 0);
-    process.stdout.write(`${output}\n`);
-    return result.p0_passed ? 0 : 1;
+    try {
+      const result = await executor.run(
+        { question: options.question! },
+        options.mode,
+      );
+      const output = JSON.stringify(result, null, options.json ? 2 : 0);
+      process.stdout.write(`${output}\n`);
+      return result.p0_passed ? 0 : 1;
+    } finally {
+      await executor.close();
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`${message}\n`);

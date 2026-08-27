@@ -56,6 +56,23 @@ afterEach(async () => {
 });
 
 describe('Stage 3 MCP execution', () => {
+  test('reports scrape failures while preserving search evidence', async () => {
+    const failingServer = join(directory, 'failing-server.cjs');
+    await writeFile(failingServer, serverSource.replace("result = { content: [{ type: 'text', text: JSON.stringify({ url: args.url, title: 'Fetched evidence', content: 'Evidence fetched from the temporary MCP server.', content_ok: true, engine_used: 'fake-mcp' }) }] };", "throw new Error('scrape unavailable');"), 'utf8');
+    const result = await new PipelineExecutor(config({ 'unified-fetch': { command: process.execPath, args: [failingServer] } })).run({ question: 'scrape failure', task_type: 'analysis' });
+    expect(result.stage_outputs.S3.evidence_matrix[0]).toBeDefined();
+    expect(result.stage_outputs.S3.evidence_matrix[0].sources).toHaveLength(2);
+    expect(result.stage_outputs.S3.tool_calls.some((call: any) => call.operation === 'scrape' && call.status === 'failed')).toBe(true);
+    expect(result.stage_outputs.S3.evidence_quality).toBe('Insufficient');
+  });
+
+  test('does not treat synthetic fallback as available evidence', async () => {
+    const result = await new PipelineExecutor(config({})).run({ question: 'fallback evidence', task_type: 'analysis' });
+    expect(result.stage_outputs.S3.evidence_quality).toBe('Insufficient');
+    expect(result.stage_outputs.S3.evidence_matrix).toHaveLength(0);
+    expect(result.p0_passed).toBe(false);
+  });
+
   test('calls search and scrape and records traceable real evidence', async () => {
     const result = await new PipelineExecutor(config({
       'unified-fetch': { command: process.execPath, args: [server] },
@@ -70,9 +87,16 @@ describe('Stage 3 MCP execution', () => {
     expect(stage3.citations).toEqual(expect.arrayContaining([
       expect.objectContaining({ url: expect.stringMatching(/^https:\/\/real\.test\//) }),
     ]));
+    const stage4 = result.stage_outputs.S4;
+    expect(stage4.citations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ url: expect.stringMatching(/^https:\/\/real\.test\//) }),
+    ]));
     expect(stage3.claim_registry.entries.length).toBeGreaterThan(0);
     expect(stage3.claim_registry.entries[0].sources_found.length).toBeGreaterThan(0);
     expect(stage3.negative_search_status).toBe('completed');
+    expect(stage3.evidence_matrix[0].has_negative_evidence).toBe(true);
+    expect(stage3.evidence_matrix[0].negative_evidence).toContain('Evidence fetched from the temporary MCP server.');
+    expect(stage3.citations.every((citation: any) => /^https:\/\/real\.test\//.test(citation.url))).toBe(true);
   });
 
   test('rejects P0 when MCP service is unavailable without fabricated evidence', async () => {

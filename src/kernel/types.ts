@@ -107,6 +107,8 @@ export interface SearchResult {
   title: string;
   snippet: string;
   source_engine: string;
+  synthetic?: boolean;
+  available?: boolean;
 }
 
 export interface PageContent {
@@ -115,6 +117,8 @@ export interface PageContent {
   content: string;
   content_ok: boolean;
   engine_used: string;
+  synthetic?: boolean;
+  available?: boolean;
 }
 
 // ---------- Tool Plugin 介面 ----------

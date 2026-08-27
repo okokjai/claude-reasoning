@@ -23,7 +23,7 @@ export class UnifiedFetchTool implements ToolPlugin {
       await this.client.initialize();
       return this.unwrap(await this.client.callTool('search', { query, max_results: maxResults })) as SearchResult[];
     }
-    return [{ url: 'https://example.com/result', title: `Search results for: ${query}`, snippet: 'Results from unified-fetch multi-engine search (Hound → DDG → Google → Direct)', source_engine: 'unified-fetch' }];
+    return [{ url: 'https://example.com/result', title: `Search results for: ${query}`, snippet: 'Synthetic fallback; MCP service unavailable', source_engine: 'unified-fetch', synthetic: true, available: false }];
   }
 
   async scrape(url: string, focus?: string): Promise<PageContent> {
@@ -32,12 +32,12 @@ export class UnifiedFetchTool implements ToolPlugin {
       await this.client.initialize();
       return this.unwrap(await this.client.callTool('scrape', { url, ...(focus === undefined ? {} : { focus }) })) as PageContent;
     }
-    return { url, title: 'Scraped page', content: 'Content from unified-fetch multi-engine scrape (Hound → newspaper3k → Trafilatura → readability → jusText → DirectFetch)', content_ok: true, engine_used: 'unified-fetch' };
+    return { url, title: 'Scraped page', content: 'Synthetic fallback; MCP service unavailable', content_ok: false, engine_used: 'unavailable', synthetic: true, available: false };
   }
 
   async status(): Promise<any> {
     if (this.client) { await this.client.initialize(); return this.unwrap(await this.client.callTool('status', {})); }
-    return { available: true, engines: ['hound', 'duckduckgo', 'trafilatura', 'newspaper'] };
+    return { available: false, synthetic: true, engines: [] };
   }
 
   async close(): Promise<void> { await this.client?.close(); }

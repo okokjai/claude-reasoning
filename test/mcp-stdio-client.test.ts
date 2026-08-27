@@ -59,6 +59,21 @@ function client(timeout = 1000) {
 }
 
 describe('MCPStdioClient', () => {
+  test('initializes only once when called repeatedly', async () => {
+    const mcp = client();
+    await mcp.initialize();
+    const nextId = mcp.nextRequestId;
+    await mcp.initialize();
+    expect(mcp.nextRequestId).toBe(nextId);
+  });
+
+  test('timeout marks client unavailable and closes transport', async () => {
+    const mcp = client();
+    await mcp.initialize();
+    await expect(mcp.request('slow', undefined, 30)).rejects.toThrow(/timed out/i);
+    await expect(mcp.request('tools/list')).rejects.toThrow(/closed|unavailable|timed out/i);
+  });
+
   test('initializes and sends initialized notification', async () => {
     const mcp = client();
     await expect(mcp.initialize()).resolves.toMatchObject({ protocolVersion: '2024-11-05' });

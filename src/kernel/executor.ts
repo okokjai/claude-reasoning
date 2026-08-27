@@ -54,58 +54,71 @@ function conditionMatches(condition: string | undefined, state: Record<string, a
   if (typeof direct === 'boolean') return direct;
   if (direct !== undefined) return Boolean(direct);
   if (trimmed === 'hallucination_pass') return state['S5.5']?.pass === true;
-  const equality = trimmed.match(/^([\\w.]+)\\s*===?\\s*(true|false)$/);
+  const equality = trimmed.match(/^([\w.]+)\s*={1,3}\s*(true|false)$/);
   if (equality) return Boolean(state[equality[1]]) === (equality[2] === 'true');
   return false;
 }
 
-export function verifyP0Reachability(graph: ExecutionGraph): { ok: boolean; error?: string } {
+export function verifyP0Reachability(
+  graph: ExecutionGraph,
+  handlers?: Partial<Record<StageName, GraphStageHandler>>,
+  initialState: Record<string, any> = {},
+): { ok: boolean; error?: string } {
   for (const gate of ['S5.5', 'S6'] as StageName[]) {
     if (!graph.nodes.includes(gate)) return { ok: false, error: `P0 gate ${gate} missing from execution graph — cannot bypass` };
   }
-  const incoming = new Map<StageName, number>();
-  for (const node of graph.nodes) incoming.set(node, 0);
-  for (const edge of graph.edges) incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1);
-  const roots = graph.nodes.length > 0 ? [graph.nodes[0]] : [];
+  const roots = graph.nodes.filter(node =>
+    !['S5.5', 'S6'].includes(node) && !graph.edges.some(edge => edge.to === node),
+  );
   const reachable = new Set<StageName>(roots);
   const queue = [...roots];
   while (queue.length) {
     const current = queue.shift()!;
-    for (const edge of graph.edges.filter(edge => edge.from === current)) {
+    for (const edge of graph.edges.filter(candidate => candidate.from === current)) {
+      // A known false condition is unreachable. Unknown conditions remain
+      // potentially reachable, so a graph cannot bypass a conditional gate.
+      if (conditionMatches(edge.condition, initialState) === false &&
+          (edge.condition === undefined || Object.prototype.hasOwnProperty.call(initialState, edge.condition?.trim()))) continue;
       if (!reachable.has(edge.to)) { reachable.add(edge.to); queue.push(edge.to); }
     }
   }
+  const missingHandler = handlers && [...reachable].find(stage => !handlers[stage]);
+  if (missingHandler) return { ok: false, error: `Missing handler for reachable stage ${missingHandler}` };
   const missing = (['S5.5', 'S6'] as StageName[]).find(gate => !reachable.has(gate));
   return missing ? { ok: false, error: `P0 gate ${missing} is not reachable from execution graph` } : { ok: true };
 }
+
+type QueueItem = { stage: StageName; rerun: boolean };
 
 export async function executeGraph(
   graph: ExecutionGraph,
   handlers: Partial<Record<StageName, GraphStageHandler>>,
   initialState: Record<string, any> = {},
 ): Promise<GraphExecutionResult> {
+  const preflight = verifyP0Reachability(graph, handlers, initialState);
+  if (!preflight.ok) throw new Error(preflight.error);
   const outputs: Record<string, any> = {};
   const state = { ...initialState };
   const execution: StageName[] = [];
   const loop_counts: Record<string, number> = {};
   const incoming = new Set(graph.edges.map(edge => edge.to));
-  const queue: StageName[] = graph.nodes.filter(node => !incoming.has(node));
-  const completed = new Set<StageName>();
+  const queue: QueueItem[] = graph.nodes.filter(node => !incoming.has(node)).map(stage => ({ stage, rerun: false }));
   const pending = new Set<StageName>();
 
   while (queue.length) {
-    const stage = queue.shift()!;
+    const item = queue.shift()!;
+    const stage = item.stage;
     if (pending.has(stage)) continue;
     const handler = handlers[stage];
-    if (!handler) continue;
+    if (!handler) throw new Error(`Missing handler for reachable stage ${stage}`);
     pending.add(stage);
-      const input = { ...state, ...outputs };
+    execution.push(stage);
+    const input = { ...state, ...outputs };
     const output = await handler(input, state);
     outputs[stage] = output;
     if (output && typeof output === 'object') Object.assign(state, output);
     state[stage] = output;
     pending.delete(stage);
-    completed.add(stage);
 
     for (const edge of graph.edges.filter(candidate => candidate.from === stage)) {
       if (!conditionMatches(edge.condition, { ...state, ...output })) continue;
@@ -115,9 +128,14 @@ export async function executeGraph(
         const count = loop_counts[key] || 0;
         if (count >= loop.max) continue;
         loop_counts[key] = count + 1;
-        queue.unshift(edge.to);
-      } else if (!completed.has(edge.to) && !queue.includes(edge.to)) {
-        queue.push(edge.to);
+        queue.unshift({ stage: edge.to, rerun: true });
+        continue;
+      }
+      const count = Math.max(1, Math.min(edge.expand?.count ?? 1, 100));
+      for (let branch = 0; branch < count; branch += 1) {
+        const rerun = item.rerun;
+        if (!rerun && branch === 0 && (queue.some(next => next.stage === edge.to) || execution.includes(edge.to))) continue;
+        queue.push({ stage: edge.to, rerun });
       }
     }
   }
@@ -211,7 +229,7 @@ export class PipelineExecutor {
           const s3 = input.S3 || {};
           const s4 = input.S4 || {};
           return antiHallucinationGate({
-            entity: { entities: s4.entities || [], has_map_lookup: s3.checklist?.entity_triple_check || false, has_business_registry: s3.checklist?.entity_triple_check || false, has_review_platform: s3.checklist?.entity_triple_check || false, unsourced_count: 0, sourced_count: (s4.entities || []).length, recommended_entities: s4.recommended_entities || [] },
+            entity: { entities: s4.entities || [], has_map_lookup: false, has_business_registry: false, has_review_platform: false, unsourced_count: Math.max(0, (s4.entities || []).length - (s3.evidence_matrix || []).filter((e: any) => e.sources?.length).length), sourced_count: (s3.evidence_matrix || []).filter((e: any) => e.sources?.length).length, recommended_entities: s4.recommended_entities || [], entity_sources: Object.fromEntries((s3.evidence_matrix || []).map((e: any) => [e.hypothesis, (e.sources || []).map((source: any) => source.url)])) },
             source: { citations: (s4.citations || []).map((c: any) => ({ claim: c.claim, url: c.url, tier: c.tier })), citation_real: s3.citation_real || 0, citation_fabricated: s3.citation_fabricated || 0, citation_misused: s3.citation_misused || 0, source_tier_issues: s3.source_tier_issues || 0 },
             cross_ref: { single_source_claims: s3.single_source_claims || 0, conflicting_claims: s3.conflicting_claims || 0, concealed_conflicts: s3.concealed_conflicts || 0, isolated_judgments: s3.isolated_judgments || 0 },
           });
@@ -353,15 +371,24 @@ export class PipelineExecutor {
       } catch { /* recorded in tool_calls; evidence remains unavailable */ }
 
       const pages: PageContent[] = [];
-      for (const source of positive.slice(0, 5)) {
+      let scrapeAvailable = true;
+      const scrapeErrors: string[] = [];
+      for (const source of [...positive, ...negative].slice(0, 5)) {
         try {
           const page = this.normalizePage(await call(scrapeTool, this.config.tools.scrape, 'scrape', { url: source.url }));
-          if (page) pages.push(page);
-        } catch { /* recorded in tool_calls */ }
+          if (page?.content_ok) pages.push(page);
+          else {
+            scrapeAvailable = false;
+            scrapeErrors.push(`Invalid scrape response for ${source.url}`);
+          }
+        } catch (error) {
+          scrapeAvailable = false;
+          scrapeErrors.push(error instanceof Error ? error.message : String(error));
+        }
       }
       results.push(
-        { hypothesis, query: positiveQuery, engine: this.config.tools.search, search_results: positive, pages, engine_available: positiveAvailable },
-        { hypothesis, query: negativeQuery, engine: this.config.tools.search, search_results: negative, pages: [], engine_available: negativeAvailable },
+        { hypothesis, query: positiveQuery, engine: this.config.tools.search, search_results: positive, pages: pages.filter(page => positive.some(source => source.url === page.url)), engine_available: positiveAvailable && scrapeAvailable, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
+        { hypothesis, query: negativeQuery, engine: this.config.tools.search, search_results: negative, pages: pages.filter(page => negative.some(source => source.url === page.url)), engine_available: negativeAvailable && scrapeAvailable, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
       );
 
       const sources = [...positive, ...negative].map((source) => source.url);
@@ -378,14 +405,14 @@ export class PipelineExecutor {
       ? 'not_required'
       : results.filter((r) => r.query.includes('limitations') || r.query.includes('drawbacks')).every((r) => r.engine_available) ? 'completed' : 'failed';
     const distinctSources = new Set(allSources.map((source) => source.url));
-    const hasEvidence = allSources.length > 0;
+    const hasEvidence = allSources.length > 0 && results.some((result) => result.engine_available);
     const configuredSearch = Boolean(this.config.mcp_servers?.[this.config.tools.search]);
     const checklist = {
-      entity_triple_check: !configuredSearch,
-      negative_search: configuredSearch ? negative_search_status === 'completed' : true,
+      entity_triple_check: false,
+      negative_search: negative_search_status === 'completed',
       source_tier_annotated: hasEvidence,
-      cross_validation: configuredSearch ? distinctSources.size >= 2 : true,
-      domain_paths_complete: !configuredSearch,
+      cross_validation: distinctSources.size >= 2,
+      domain_paths_complete: false,
       retry_within_limit: true,
       math_checklist: true,
     };
@@ -414,7 +441,7 @@ export class PipelineExecutor {
   private normalizeSearchResults(value: any): SearchResult[] {
     const result = Array.isArray(value) ? value : value?.results;
     if (!Array.isArray(result)) return [];
-    return result.filter((item: any) => typeof item?.url === 'string').map((item: any) => ({
+    return result.filter((item: any) => typeof item?.url === 'string' && item.synthetic !== true && item.available !== false).map((item: any) => ({
       url: item.url,
       title: String(item.title || item.url),
       snippet: String(item.snippet || ''),
@@ -423,7 +450,7 @@ export class PipelineExecutor {
   }
 
   private normalizePage(value: any): PageContent | undefined {
-    if (!value || typeof value.url !== 'string') return undefined;
+    if (!value || typeof value.url !== 'string' || value.synthetic === true || value.available === false) return undefined;
     return {
       url: value.url,
       title: String(value.title || value.url),
@@ -438,7 +465,7 @@ export class PipelineExecutor {
     return {
       entities,
       recommended_entities: [],
-      citations: entities.map((e: string) => ({ claim: `Claim about ${e}`, url: '', tier: 'T3' })),
+      citations: (stage3.citations || []).filter((citation: any) => typeof citation.url === 'string' && (citation.url.startsWith('http://') || citation.url.startsWith('https://'))),
       preliminary_conclusion: `Synthesis of ${entities.length} hypotheses`,
       residual_uncertainty: [],
     };

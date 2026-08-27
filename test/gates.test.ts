@@ -44,6 +44,31 @@ describe('S5.5 Anti-Hallucination Gate', () => {
   });
 
   describe('sourceVerificationCheck', () => {
+    test('rejects empty citation arrays even when counters claim real evidence', () => {
+      const result = sourceVerificationCheck({
+        citations: [],
+        citation_real: 2,
+        citation_fabricated: 0,
+        citation_misused: 0,
+        source_tier_issues: 0,
+      });
+      expect(result.pass).toBe(false);
+    });
+
+    test('rejects citations with empty or invalid URLs', () => {
+      const result = sourceVerificationCheck({
+        citations: [
+          { claim: 'empty', url: '', tier: 'T1' },
+          { claim: 'invalid', url: 'not-a-url', tier: 'T1' },
+        ],
+        citation_real: 2,
+        citation_fabricated: 0,
+        citation_misused: 0,
+        source_tier_issues: 0,
+      });
+      expect(result.pass).toBe(false);
+    });
+
     test('zero tolerance for fabricated citations', () => {
       const result = sourceVerificationCheck({
         citations: [],

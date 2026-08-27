@@ -67,11 +67,24 @@ describe('Tool Plugin Behavior', () => {
     await expect(tool.call('search', { query: '' })).rejects.toThrow('Search query is required');
   });
 
+  test('unconfigured unified-fetch is explicitly unavailable and synthetic', async () => {
+    const tool = getTool('unified-fetch')!;
+    const status = await tool.call('status', {});
+    expect(status.available).toBe(false);
+    expect(status.synthetic).toBe(true);
+    const results = await tool.call('search', { query: 'test' });
+    expect(results[0].synthetic).toBe(true);
+    const page = await tool.call('scrape', { url: 'https://example.com' });
+    expect(page.available).toBe(false);
+    expect(page.synthetic).toBe(true);
+    expect(page.content_ok).toBe(false);
+  });
+
   test('unified-fetch validates status operation', async () => {
     const tool = getTool('unified-fetch')!;
     const status = await tool.call('status', {});
-    expect(status.available).toBe(true);
-    expect(status.engines).toContain('hound');
+    expect(status.available).toBe(false);
+    expect(status.synthetic).toBe(true);
   });
 
   test('unknown operation throws', async () => {

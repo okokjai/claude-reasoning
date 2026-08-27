@@ -51,6 +51,26 @@ describe('graph-driven execution', () => {
     expect(order).toEqual(['A1', 'A0', 'S1', 'S5.5', 'S6']);
   });
 
+  test('evaluates equality conditions with one or two equals signs', async () => {
+    const order: string[] = [];
+    await executeGraph(graph({
+      nodes: ['A1', 'A0', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'A0' },
+        { from: 'A0', to: 'S5.5', condition: 'route === true' },
+        { from: 'A0', to: 'S5.5', condition: 'route = true' },
+        { from: 'S5.5', to: 'S6' },
+      ],
+    }), handlers(order, { A0: { route: true } }));
+    expect(order).toEqual(['A1', 'A0', 'S5.5', 'S6']);
+  });
+
+  test('returns the actual traversal in execution', async () => {
+    const order: string[] = [];
+    const result = await executeGraph(graph({}), handlers(order));
+    expect(result.execution).toEqual(order);
+  });
+
   test('executes parallel groups and records deterministic group order', async () => {
     const order: string[] = [];
     await executeGraph(graph({
@@ -85,6 +105,44 @@ describe('graph-driven execution', () => {
     expect(result.loop_counts['S1->S1']).toBe(2);
   });
 
+  test('reruns downstream stages when a loop returns to an already completed stage', async () => {
+    const order: string[] = [];
+    let retries = 0;
+    const result = await executeGraph(graph({
+      nodes: ['A1', 'A0', 'S1', 'S2', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'A0' },
+        { from: 'A0', to: 'S1' },
+        { from: 'S1', to: 'S2' },
+        { from: 'S2', to: 'S1', condition: 'retry' },
+        { from: 'S2', to: 'S5.5', condition: 'done' },
+        { from: 'S5.5', to: 'S6' },
+      ],
+      loops: [{ from: 'S2', to: 'S1', condition: 'retry', max: 1 }],
+    }), {
+      ...handlers(order),
+      S1: async () => { order.push('S1'); return { retry: retries++ === 0 }; },
+      S2: async () => { order.push('S2'); return { done: retries > 1, retry: retries === 1 }; },
+    });
+    expect(order).toEqual(['A1', 'A0', 'S1', 'S2', 'S1', 'S2', 'S5.5', 'S6']);
+    expect(result.loop_counts['S2->S1']).toBe(1);
+  });
+
+  test('expands an edge into its bounded branch count', async () => {
+    const order: string[] = [];
+    await executeGraph(graph({
+      nodes: ['A1', 'A0', 'S1', 'S5.5', 'S6'],
+      edges: [
+        { from: 'A1', to: 'A0' },
+        { from: 'A0', to: 'S1', expand: { mode: 'multi-path', count: 3, parallel: true } },
+        { from: 'S1', to: 'S5.5' },
+        { from: 'S5.5', to: 'S6' },
+      ],
+    }), handlers(order));
+    expect(order.filter(stage => stage === 'S1')).toHaveLength(3);
+    expect(order).toEqual(['A1', 'A0', 'S1', 'S1', 'S1', 'S5.5', 'S6']);
+  });
+
   test('rejects graphs that cannot reach mandatory P0 gates', () => {
     const check = verifyP0Reachability(graph({
       nodes: ['A1', 'A0', 'S5.5', 'S6'],
@@ -92,5 +150,9 @@ describe('graph-driven execution', () => {
     }));
     expect(check.ok).toBe(false);
     expect(check.error).toContain('S5.5');
+  });
+
+  test('reports missing handlers instead of silently skipping reachable stages', async () => {
+    await expect(executeGraph(graph({}), { A1: async () => ({}) })).rejects.toThrow(/missing handler.*A0/i);
   });
 });

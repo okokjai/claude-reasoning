@@ -2,6 +2,7 @@
 // Config Loader — 讀取 config.yaml，驗證 schema
 // ============================================================
 import { readFileSync } from 'fs';
+import { resolve } from 'node:path';
 import * as yaml from 'js-yaml';
 import { getAlgorithm } from '../../plugins/algorithms';
 import { getTool } from '../../plugins/tools';
@@ -61,11 +62,10 @@ export interface ValidationError {
 }
 
 export function loadConfig(path?: string): AppConfig {
-  // 使用預設 config（如果沒有 yaml 檔案）
-  if (!path) return { ...DEFAULT_CONFIG };
+  const configPath = path ?? resolve(process.cwd(), 'config.yaml');
 
   try {
-    const raw = readFileSync(path, 'utf-8');
+    const raw = readFileSync(configPath, 'utf-8');
     const parsed = yaml.load(raw) as any;
     if (!parsed) return { ...DEFAULT_CONFIG };
 
