@@ -230,6 +230,22 @@ describe('Pipeline Executor — Full Mode', () => {
   });
 });
 
+describe('Algorithm graph traversal', () => {
+  test('ToT reaches both P0 gates after bounded evidence exploration', async () => {
+    const result = await testExecutor().run({ question: 'ToT traversal', user_specified: 'tot' }, 'full');
+    expect(result.stage_execution).toContain('S5.5');
+    expect(result.stage_execution).toContain('S6');
+    expect(result.p0_passed).toBe(false);
+  });
+
+  test('ReAct reaches both P0 gates after reasoning/action convergence', async () => {
+    const result = await testExecutor().run({ question: 'ReAct traversal', user_specified: 'react' }, 'full');
+    expect(result.stage_execution).toContain('S5.5');
+    expect(result.stage_execution).toContain('S6');
+    expect(result.p0_passed).toBe(false);
+  });
+});
+
 describe('Config validation', () => {
   test('invalid algorithm is caught in errors array', async () => {
     const executor = createExecutor({
