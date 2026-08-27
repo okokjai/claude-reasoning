@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.0 (2026-08-27)
+**Runnable TypeScript release surface**
+
+- Added the `cr-reasoning` CLI with explicit config path, full/skeleton modes, JSON output, and P0-based exit status.
+- Added a real TypeScript build output and package `bin` entry.
+- Documented graph traversal, configured MCP stdio execution, conservative fallback behavior, and the machine-specific unified-fetch server override.
+
 ## v1.2.0 (2026-08-23)
 **README restyle (open-deepthink style) + full English localization**
 
