@@ -54,11 +54,32 @@ L4: Tool Plugins (MCP unified, hot-swappable, ~30 lines each)
   ├─ sequential-thinking MCP (or swap to dsh-log internal logger)
   └─ unified-fetch MCP (search + scrape, or swap to any MCP server)
 
-L5: Prompts (original .md, zero migration cost)
-  └─ 8 contracts + 8 stages + 5 modes + quality + output-spec
+L5: Prompt resources (canonical skill paths + compatibility bundle)
+  ├─ Root contracts/stages/modes/quality: current Claude Code skill paths
+  └─ prompts/: retained compatibility/prompt bundle; architecture and MCP references preserve runtime details
 ```
 
-## Quick Start
+## Install as a Claude Code Skill
+
+The Claude Code integration uses the repository's `SKILL.md` entry point and its root-level prompt resources. Install or link the repository according to your Claude Code skill workflow; `pnpm install` is not a substitute for installing the skill.
+
+The skill reads these paths relative to the skill root:
+
+```text
+SKILL.md
+contracts/
+stages/
+modes/
+quality/
+architecture.md
+mcp-toolchain.md
+output-spec.md
+memory-integration.md
+```
+
+The `prompts/` tree is retained as a compatibility/prompt bundle. It is not a replacement for the root paths currently referenced by `SKILL.md` and `scripts/sync-check.sh`. Do not edit only one mirrored copy without running the repository consistency checks.
+
+## Run the TypeScript Runtime / CLI
 
 ```bash
 pnpm install
@@ -66,7 +87,15 @@ pnpm build
 pnpm cli --question "Compare two options" --mode full --json
 ```
 
-The CLI accepts `--config <path>` to load an explicit YAML configuration. Full mode exits with status 1 when a P0 gate fails; skeleton mode only validates graph reachability. MCP server commands are launched as configured child processes. The checked-in default `unified-fetch` command points to `C:/Users/PaulPaul/Projects/unified-fetch/unified-fetch-server.py`, which is machine-specific; override `mcp_servers.unified-fetch` in an external config on other machines.
+The CLI accepts `--config <path>` to load an explicit YAML configuration. Full mode exits with status 1 when a P0 gate fails; skeleton mode only validates graph reachability. MCP server commands are launched as configured child processes. The checked-in default `unified-fetch` command points to `C:/Users/PaulPaul/Projects/unified-fetch/unified-fetch-server.py`, which is machine-specific; override `mcp_servers.unified-fetch` in an external config on other machines. The optional reasoning logger uses the `@modelcontextprotocol/server-sequential-thinking` package when configured.
+
+Runtime strategy records `can_branch=true|false`; `can_branch=false` uses linear mode without skipping mandatory stages. Stage 0 emits bounded packet invariants: `candidate_frame_count` is 0–4, `selected_frame_count` is 0–2, and `no_new_angle=true` implies `iteration_count=0`. The claim lifecycle runs from Stage 2 `claim_registry` through Stage 3 verification and Stage 5/5.5 gates; bounded `failure_route` values control evidence or critique reroutes.
+
+## Configure MCP
+
+The runtime reads the YAML file supplied with `--config`, or `config.yaml` from the current working directory when no path is supplied. Configure `mcp_servers` with the command and arguments for the MCP servers available on the host. The repository does not silently install or relocate those external servers.
+
+## Development and Tests
 
 ```bash
 # Run tests
@@ -75,6 +104,8 @@ pnpm test
 # Type check
 pnpm typecheck
 ```
+
+See [`docs/release-manifest.md`](docs/release-manifest.md) for the role of each source, skill, compatibility, test, and development path.
 
 ## Configuration
 
@@ -116,6 +147,8 @@ router:
 | **e2e total** | **2-4x** | Phase 1 delivery |
 | Future: pipeline + cache | Toward 10x | Phase 2+ |
 
+The maintenance helper `scripts/memory-cleanup.sh` is retained for memory hygiene and is not part of the runtime execution path.
+
 ## Project Structure
 
 ```
@@ -131,10 +164,13 @@ cr-reasoning-v2/
 │   │   ├── seq-thinking.ts, unified-fetch.ts, dsh-log.ts
 │   └── routers/
 │       └── default.ts                 # Smart router
-├── prompts/                           # Original .md (zero migration)
+├── prompts/                           # Compatibility/prompt bundle; do not edit one mirror alone
 │   ├── contracts/ (8), stages/ (8), modes/ (5), quality/
-├── test/                              # 12 test files, 133 tests
-└── package.json
+├── contracts/, stages/, modes/, quality/ # Current Claude Code skill paths
+├── scripts/                            # Claude Code integration and validation helpers
+├── docs/release-manifest.md             # Release file-role inventory
+├── test/                               # Runtime regression tests
+└── package.json                        # Runtime/CLI package metadata
 ```
 
 ## License

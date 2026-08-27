@@ -1,6 +1,6 @@
 ---
 name: claude-reasoning
-version: 1.2.0
+version: 2.0.1
 description: Graph-based reasoning pipeline — contracts, stages, modes in separate files with a forward DAG-shaped pipeline + bounded conditional control-flow. Progressive disclosure: SKILL.md is a router; full instructions load per stage from contracts/, stages/, modes/, quality/ + reference docs. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
 triggers:
   - "reasoning"
@@ -18,7 +18,7 @@ depends_on:
   - evolution@* — system evolution requiring design decisions
 ---
 
-# Claude Reasoning v1.2.0 — Graph-Based Reasoning Pipeline
+# Claude Reasoning v2.0.1 — Graph-Based Reasoning Pipeline
 
 ## Usage
 

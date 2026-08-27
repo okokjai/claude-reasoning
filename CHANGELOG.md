@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.1 (2026-08-27)
+**Safe prompt-layout deduplication and installation documentation**
+
+- Clarified separate Claude Code Skill and TypeScript CLI installation paths.
+- Added `docs/release-manifest.md` to document runtime, skill, compatibility, test, and development file roles.
+- Retained all functional prompt trees and documented their compatibility-sensitive paths; no runtime behavior was removed.
+
 ## v2.0.0 (2026-08-27)
 **Runnable TypeScript release surface**
 
