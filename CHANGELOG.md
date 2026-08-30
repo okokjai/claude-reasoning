@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased (2026-08-31)
+**C4 executor can_branch availability check (skeleton layer, v2.0.4 tag stays frozen)**
+
+- `src/kernel/executor.ts` A2 handler no longer hard-codes `can_branch: true` — it now resolves via `hasBranchingLogger()`: `true` only when `tools.reasoning-logger=sequential-thinking` **and** `mcp_servers['sequential-thinking']` is configured. `dsh-log` (in-process linear logger, no branching) resolves `false`. Aligns the skeleton path with A2 execution rule 3 ("Must check whether sequential-thinking is available") and closes the C4 contract drift from the 2026-08-30 audit.
+- `test/a2-can-branch.test.ts` — 3 RED→GREEN regression tests pinning the availability check (dsh-log → false; sequential-thinking+config → true; bound-but-unconfigured → false).
+- `config.yaml` tools comment updated to document that `dsh-log` is linear (no branching → `can_branch` always false).
+- `scripts/resolve-memory-dir.py` now prefers the canonical memory root (`~/.claude/projects/*/memory`) over the deprecated `~/.claude/memory`; sync-check Step 3.5 now validates the live index (all 29 parenthesized refs resolve).
+- Test count baseline moves 140 → 143. New test file, no public API / CLI / contract schema changes; `can_branch` output semantics unchanged for the real model path.
+
+## Unreleased
+**Plugin-surface honesty audit (docs only — not published; tag v2.0.4 stays frozen)**
+
 ## v2.0.4 (2026-08-30)
 **README full rewrite (unified-fetch style) + agents.md guide**
 

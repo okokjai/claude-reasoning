@@ -14,7 +14,7 @@ paradigm: auto
 
 # 工具熱插拔（能力 → 工具綁定）
 tools:
-  reasoning-logger: sequential-thinking   # 或 dsh-log（內建，免 MCP server）
+  reasoning-logger: sequential-thinking   # dsh-log（內建，免 MCP server）可用，但是線性 logger、無 branching，can_branch 恆 false
   search: unified-fetch                   # 或 websearch / 自訂 MCP
   scrape: unified-fetch                   # 或 自訂 MCP
 
@@ -42,6 +42,9 @@ router:
       paradigm: cot
 
 # Token 預算上限（選擇性）
+# 注意：此段僅為宣告/記錄，目前 v2.0.x 執行鏈未讀取它。
+# Router 的預算降級使用硬編碼門檻（budget_remaining < 10000 → CoT），
+# 與此處的 max_tokens / downgrade_to 無關。見 README Known Limits。
 budget:
   max_tokens: 50000
   downgrade_to: cot

@@ -324,7 +324,7 @@ export class PipelineExecutor {
           primary_mode: context.primary_mode || 'decision',
           scale: context.scale || 'medium',
           platform_mode: 'CLI-Full',
-          can_branch: true,
+          can_branch: this.hasBranchingLogger(),
           evidence_cap: 5,
           quality_cap: 45,
           verification_paths: [{ label: 'path-1', search_query: context.question, negative_query: `${context.question} limitations` }],
@@ -332,6 +332,15 @@ export class PipelineExecutor {
       case 'C0':
         return { user_constraints: [], implicit_assumptions: [{ assumption: 'None', source: 'question_text' }], success_criteria: [] };
     }
+  }
+
+  /** A2 execution rule 3 — sequential-thinking availability check.
+   *  Branching requires the sequential-thinking server actually bound to the
+   *  reasoning-logger capability AND configured under mcp_servers. dsh-log is
+   *  a linear in-process logger (no DAG/branching), so it always resolves false. */
+  private hasBranchingLogger(): boolean {
+    return this.config.tools['reasoning-logger'] === 'sequential-thinking'
+      && Boolean(this.config.mcp_servers?.['sequential-thinking']);
   }
 
   private async runStage3(stage2: any, context: any): Promise<any> {
