@@ -1,6 +1,6 @@
 {
   "name": "cr-reasoning-v2",
-  "version": "2.0.2",
+  "version": "2.0.4",
   "description": "Claude-Reasoning v2.0 — Plugin-Based Parallel DAG. Algorithm hotswap (CoT/ToT/ReAct/DAC), tool hotswap (MCP), smart routing, P0 gates.",
   "type": "commonjs",
   "main": "dist/src/kernel/executor.js",

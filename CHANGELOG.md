@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## v2.0.4 (2026-08-30)
 **README full rewrite (unified-fetch style) + agents.md guide**
 
 - Rewrote `README.md` as a complete human-facing document in the unified-fetch README style: hero + pipeline diagram, Features, Install (skill vs CLI vs MCP), Verified Results, Pipeline table, Plugins & Hotswap, P0 Gates, Contracts (A3/A4/A2 domain paths), Usage Patterns, Known Limits, Gotchas, Project Structure. All existing sync-check anchors preserved (Step 7 passes).
 - Added `agents.md` — a maintenance contract for AI agents/contributors: toolchain, non-negotiables (P0 gates never weaken, tests as evidence, no silent behavior removal), hotswap conventions, skill-file editing rules, and the 6-step release gate.
+- Version bump: skill (SKILL.md) and CLI package (package.json) aligned to 2.0.4.
 - No runtime code or behavior changed; 140/140 tests, `pnpm build`, `pnpm typecheck`, and `sync-check.sh` all pass.
 
 ## v2.0.3 (2026-08-30)

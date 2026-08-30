@@ -1,4 +1,4 @@
-# 🧠 Claude-Reasoning v2.0.3
+# 🧠 Claude-Reasoning v2.0.4
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat&logo=github)](https://github.com/okokjai/claude-reasoning)
