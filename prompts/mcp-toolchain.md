@@ -2,7 +2,7 @@
 
 ## Runtime Behavior
 
-The CLI and `PipelineExecutor` launch configured MCP servers through JSON-RPC stdio clients. `search` and `scrape` calls are recorded in Stage 3 tool traces and normalized into evidence and citations. If a configured server cannot initialize or call a capability, the result is `Insufficient` evidence and the P0 result fails; no placeholder citation is generated. If no server definition exists, the tool plugin uses its explicit local fallback. The default unified-fetch path in `config.yaml` is machine-specific (`C:/Users/PaulPaul/Projects/unified-fetch/unified-fetch-server.py`); provide an external config override on another machine.
+The CLI and `PipelineExecutor` launch configured MCP servers through JSON-RPC stdio clients. `search` and `scrape` calls are recorded in Stage 3 tool traces and normalized into evidence and citations. If a configured server cannot initialize or call a capability, the result is `Insufficient` evidence and the P0 result fails; no placeholder citation is generated. If no server definition exists, the tool plugin uses its explicit local fallback. The default unified-fetch path in `config.yaml` is machine-specific (`C:/Users/PaulPaul/.claude/unified-fetch/unified-fetch-server.py`); provide an external config override on another machine.
 
 
 | Tool | Purpose | When Used |

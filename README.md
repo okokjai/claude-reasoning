@@ -4,7 +4,7 @@
 
 **Plugin-Based Parallel DAG — Algorithm Hotswap, Smart Router, MCP Unified Toolchain**
 
-[![Test Status](https://img.shields.io/badge/tests-135%2F135-passing-green)]()
+[![Test Status](https://img.shields.io/badge/tests-140%2F140-passing-green)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue)]()
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-brightgreen)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow)]()
@@ -87,7 +87,7 @@ pnpm build
 pnpm cli --question "Compare two options" --mode full --json
 ```
 
-The CLI accepts `--config <path>` to load an explicit YAML configuration. Full mode exits with status 1 when a P0 gate fails; skeleton mode only validates graph reachability. MCP server commands are launched as configured child processes. The checked-in default `unified-fetch` command points to `C:/Users/PaulPaul/Projects/unified-fetch/unified-fetch-server.py`, which is machine-specific; override `mcp_servers.unified-fetch` in an external config on other machines. The optional reasoning logger uses the `@modelcontextprotocol/server-sequential-thinking` package when configured.
+The CLI accepts `--config <path>` to load an explicit YAML configuration. Full mode exits with status 1 when a P0 gate fails; skeleton mode validates the config and graph reachability only (an invalid `paradigm` or unreachable P0 gate is rejected loudly). MCP server commands are launched as configured child processes. The checked-in default `unified-fetch` command points to `C:/Users/PaulPaul/.claude/unified-fetch/unified-fetch-server.py`, which is machine-specific; override `mcp_servers.unified-fetch` in an external config on other machines. The optional reasoning logger uses the `@modelcontextprotocol/server-sequential-thinking` package when configured.
 
 Runtime strategy records `can_branch=true|false`; `can_branch=false` uses linear mode without skipping mandatory stages. Stage 0 emits bounded packet invariants: `candidate_frame_count` is 0–4, `selected_frame_count` is 0–2, and `no_new_angle=true` implies `iteration_count=0`. The claim lifecycle runs from Stage 2 `claim_registry` through Stage 3 verification and Stage 5/5.5 gates; bounded `failure_route` values control evidence or critique reroutes.
 
@@ -109,7 +109,7 @@ See [`docs/release-manifest.md`](docs/release-manifest.md) for the role of each 
 
 ## Configuration
 
-All hotswap switches in `config.yaml`:
+All hotswap switches in `config.yaml`. `paradigm` selects the algorithm directly; when it is `auto`, the Router picks one from the weighting and rules below.
 
 ```yaml
 # Switch algorithm

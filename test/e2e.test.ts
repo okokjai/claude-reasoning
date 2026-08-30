@@ -247,7 +247,7 @@ describe('Algorithm graph traversal', () => {
 });
 
 describe('Config validation', () => {
-  test('invalid algorithm is caught in errors array', async () => {
+  test('invalid config.paradigm is rejected loudly', async () => {
     const executor = createExecutor({
       version: '2.0',
       paradigm: 'nonexistent',
@@ -256,8 +256,62 @@ describe('Config validation', () => {
       mcp_servers: {},
     });
 
-    const result = await executor.run({ question: 'test' }, 'skeleton');
-    expect(result.errors.length).toBeGreaterThanOrEqual(1);
-    expect(result.errors.some(e => e.includes('Unknown algorithm'))).toBe(true);
+    // config.paradigm 是主要選擇器：無效值必須被明確拒絕，而非靜默回退到 router
+    await expect(executor.run({ question: 'test' }, 'skeleton')).rejects.toThrow('Unknown algorithm: nonexistent');
+  });
+});
+
+describe('Config paradigm selection (config.yaml:paradigm hotswap)', () => {
+  const withParadigm = (paradigm: string): AppConfig => ({ ...fixtureConfig, paradigm });
+
+  test('config.paradigm=tot selects the ToT graph when user_specified is absent', async () => {
+    const result = await createExecutor(withParadigm('tot')).run({
+      question: 'Config paradigm ToT',
+      scale: 'large', domain: 'tech', risk: 'low',
+    }, 'skeleton');
+
+    expect(result.paradigm).toBe('tot');
+    expect(result.execution_graph.loops).toBeDefined();
+    expect(result.execution_graph.parallel_groups).toBeDefined();
+  });
+
+  test('config.paradigm=dac selects the DAC graph', async () => {
+    const result = await createExecutor(withParadigm('dac')).run({
+      question: 'Config paradigm DAC',
+      scale: 'large', domain: 'tech', risk: 'low',
+    }, 'skeleton');
+
+    expect(result.paradigm).toBe('dac');
+    expect(result.execution_graph.loops).toHaveLength(3);
+  });
+
+  test('config.paradigm=auto defers to the Router', async () => {
+    const result = await createExecutor(withParadigm('auto')).run({
+      question: 'Config paradigm auto',
+      scale: 'small', domain: 'general', risk: 'low',
+    }, 'skeleton');
+
+    // scale=small → hard rule → CoT (cheapest)
+    expect(result.paradigm).toBe('cot');
+  });
+
+  test('user_specified overrides config.paradigm', async () => {
+    const result = await createExecutor(withParadigm('tot')).run({
+      question: 'User override',
+      user_specified: 'cot',
+    }, 'skeleton');
+
+    expect(result.paradigm).toBe('cot');
+  });
+
+  test('config.paradigm empty/undefined falls through to the Router instead of hard-failing', async () => {
+    const result = await createExecutor({ ...fixtureConfig, paradigm: '' as unknown as string }).run({
+      question: 'Empty config paradigm',
+      scale: 'small', domain: 'general', risk: 'low',
+    }, 'skeleton');
+
+    // 空值 = 未設定 → 必須回退到 Router（scale=small hard rule → CoT），不得 throw
+    expect(result.paradigm).toBe('cot');
+    expect(result.p0_passed).toBe(true);
   });
 });

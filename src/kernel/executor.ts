@@ -196,7 +196,9 @@ export class PipelineExecutor {
     });
 
     // 3. 載入演算法
-    const paradigm = context.user_specified || route_decision.paradigm;
+    // 優先序：user_specified > config.paradigm（非空且非 auto）> Router 決定
+    const paradigm = context.user_specified
+      || (this.config.paradigm && this.config.paradigm !== 'auto' ? this.config.paradigm : route_decision.paradigm);
     this.algorithm = getAlgorithm(paradigm) as AlgorithmPlugin;
     if (!this.algorithm) {
       errors.push(`Unknown algorithm: ${paradigm}`);

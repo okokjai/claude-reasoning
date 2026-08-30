@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.3 (2026-08-30)
+**Fix `config.yaml:paradigm` hotswap + unified-fetch path**
+
+- Fixed `PipelineExecutor` to honor `config.yaml:paradigm` as the algorithm selector (priority: `user_specified` > `config.paradigm` when not `auto` > Router). Previously the value was validated but never consumed, so only the Router path could select algorithms at runtime.
+- Corrected the default `unified-fetch` MCP path in `config.yaml` from the stale `C:/Users/PaulPaul/Projects/unified-fetch/unified-fetch-server.py` to the actual `C:/Users/PaulPaul/.claude/unified-fetch/unified-fetch-server.py`.
+- Added `test/e2e.test.ts` coverage: config-paradigm selection for ToT/DAC, empty-paradigm Router fallback, auto delegation to Router, and user override priority.
+
 ## v2.0.2 (2026-08-27)
 **Plugin extension documentation**
 
