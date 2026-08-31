@@ -1,6 +1,6 @@
 # Release Manifest
 
-This manifest explains the roles of the files shipped with Claude-Reasoning v2.0.4. It is a boundary guide, not a deletion list.
+This manifest explains the roles of the files shipped with Claude-Reasoning v2.0.5. It is a boundary guide, not a deletion list.
 
 ## File roles
 
