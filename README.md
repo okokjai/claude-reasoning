@@ -4,7 +4,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat&logo=github)](https://github.com/okokjai/claude-reasoning)
 [![GitHub Release](https://img.shields.io/github/v/release/okokjai/claude-reasoning?style=flat&logo=github)](https://github.com/okokjai/claude-reasoning/releases)
 [![Platform: Claude Code](https://img.shields.io/badge/Platform-Claude%20Code-8A2BE2?style=flat&logo=anthropic)](https://claude.ai/code)
-[![Tests: 143/143](https://img.shields.io/badge/tests-143%2F143-passing-green)]()
+[![Tests: 145/145](https://img.shields.io/badge/tests-145%2F145-passing-green)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue)]()
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-brightgreen)]()
 
@@ -29,7 +29,7 @@ classify · route · strategy · capture · brainstorm · decompose · hypothesi
 | 🧭 **Smart Router** | Cost-weighted auto-selection + hard rules + budget downgrade; `user_specified > config.paradigm > Router` |
 | 🛡️ **P0 gates enforced** | S5.5 + S6 are code-checked for presence and reachability — a plugin cannot bypass them |
 | 🚫 **Anti-hallucination** | Entity triple-check (map + registry + reviews), fabricated-citation zero tolerance, concealed-contradiction zero tolerance |
-| 🧪 **143/143 tests** | e2e, graph traversal, gates, router, tools, MCP stdio client, CLI, A2 can_branch availability |
+| 🧪 **145/145 tests** | e2e, graph traversal, gates, router, tools, MCP stdio client, CLI, A2 can_branch availability |
 | 📦 **Zero config run** | Default `config.yaml`; no API keys; graceful fallback when MCP servers are unavailable |
 
 ---
@@ -85,7 +85,7 @@ The runtime launches MCP servers as configured child processes (JSON-RPC 2.0 ove
 
 | Verification | Result | Evidence |
 |---|---|---|
-| Functional tests | **143/143 (12 files)** | e2e, graph traversal, gates, router, tools, MCP stdio, CLI, A2 can_branch availability |
+| Functional tests | **145/145 (14 files)** | e2e, graph traversal, gates, router, tools, MCP stdio, CLI, A2 can_branch availability |
 | `config.paradigm` hotswap (v2.0.3) | **5 e2e cases pass** | config selects ToT/DAC; `auto` defers to Router; `user_specified` overrides; empty value falls through to Router |
 | P0 gate enforcement | **S5.5 → S6 edge asserted** | e2e fails if graph bypasses or misses a gate; invalid paradigms rejected loudly |
 | Build + typecheck | `tsc` exit 0 | `pnpm build` / `pnpm typecheck` |
@@ -324,7 +324,7 @@ claude-reasoning/
 ├── prompts/                       # compatibility mirror of contracts/stages/modes/quality
 ├── scripts/                       # sync-check.sh · resolve-memory-dir.py · memory-cleanup.sh
 │                                 #   · contract-gen.py · gate-check.py/.sh · trail-log.sh
-├── test/                          # 143 tests across 12 files
+├── test/                          # 145 tests across 14 files
 ├── docs/                          # release-manifest.md · plans/
 ├── CHANGELOG.md
 └── package.json
