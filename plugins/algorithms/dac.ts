@@ -32,6 +32,10 @@ export class DACAlgorithm implements AlgorithmPlugin {
         { from: 'S4', to: 'S5' },
         { from: 'S5', to: 'S5.5' },
         { from: 'S5.5', to: 'S6', condition: 'hallucination_pass' },
+        // 回溯環路邊（對齊 loops 定義）
+        { from: 'S5', to: 'S0', condition: 'framing-defect' },
+        { from: 'S5', to: 'S2', condition: 'hypothesis-defect' },
+        { from: 'S5', to: 'S3', condition: 'evidence-defect' },
       ],
       parallel_groups: undefined,
       loops: [

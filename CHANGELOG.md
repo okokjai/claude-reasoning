@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.6 (2026-09-08)
+**DAC loop backtrack edges + precision contract alignment + Windows shell portability**
+
+- `plugins/algorithms/dac.ts`: Added missing backtrack loop edges (`S5 -> S0`, `S5 -> S2`, `S5 -> S3`) into `build_graph().edges` array so `executeGraph` can traverse loop conditions.
+- `src/kernel/precision.ts`: Aligned Type A verification threshold check in `runPrecisionAudit` to require $\ge 2$ independent sources per Contract A3 (`sources_found.length < 2`), treating single-source Type A claims as insufficient verification.
+- `.gitattributes`: Added repository `.gitattributes` to enforce LF endings for `*.sh`, `*.py`, and `*.md` files across Windows/POSIX environments.
+- `scripts/sync-check.sh`: Stripped trailing carriage returns (`\r`) in version parsing pipeline to ensure reliable multi-platform validation.
+- `src/mcp-server.ts`: Added robust `try-catch` wrapper around `loadConfig()` and `createExecutor()` to gracefully report configuration errors via MCP tool error responses and guarantee resource cleanup.
+- `test/v206-regression.test.ts`: Added regression tests pinning DAC loop edges and Type A single-source precision audit validation. Suite 143 → 145.
+
 ## v2.0.5 (2026-08-31)
 **C4 executor can_branch availability check + plugin-surface honesty audit (docs)**
 

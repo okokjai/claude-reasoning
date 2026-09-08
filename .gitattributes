@@ -1,0 +1,4 @@
+# Force LF for shell scripts to prevent carriage return issues on Windows
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf

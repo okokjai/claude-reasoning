@@ -154,9 +154,9 @@ if [ -f "$SKILL_FILE" ]; then
   fi
 
   # Check version consistency: CHANGELOG latest version == frontmatter == title
-  LATEST_VERSION=$(grep -m1 '^## v' "$SKILL_DIR/CHANGELOG.md" 2>/dev/null | sed 's/^## v//' | sed 's/ .*//')
-  FRONTMATTER_VERSION=$(grep '^version: ' "$SKILL_FILE" 2>/dev/null | sed 's/version: //')
-  TITLE_VERSION=$(grep '^# Claude Reasoning v' "$SKILL_FILE" 2>/dev/null | sed 's/.*v//' | sed 's/ —.*//')
+  LATEST_VERSION=$(grep -m1 '^## v' "$SKILL_DIR/CHANGELOG.md" 2>/dev/null | sed 's/^## v//' | sed 's/ .*//' | tr -d '\r')
+  FRONTMATTER_VERSION=$(grep '^version: ' "$SKILL_FILE" 2>/dev/null | sed 's/version: //' | tr -d '\r')
+  TITLE_VERSION=$(grep '^# Claude Reasoning v' "$SKILL_FILE" 2>/dev/null | sed 's/.*v//' | sed 's/ —.*//' | tr -d '\r')
   if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" = "$FRONTMATTER_VERSION" ] && [ "$LATEST_VERSION" = "$TITLE_VERSION" ]; then
     echo "  [OK] Version consistent: v${LATEST_VERSION}"
   else

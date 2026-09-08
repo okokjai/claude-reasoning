@@ -117,12 +117,14 @@ export function runPrecisionAudit(
   if (claimRegistry) {
     for (const entry of claimRegistry.entries) {
       if (entry.type === 'A' && entry.verification_status === 'passed') {
-        // 檢查 Type A 是否有足夠來源
-        if (entry.sources_found.length < 1) {
+        // 檢查 Type A 是否有足夠來源（至少 2 個獨立來源，單來源視為驗證失敗）
+        if (entry.sources_found.length < 2) {
           issues.push({
             rule: 'entity_triple_check',
             severity: 'critical',
-            description: `Type A claim "${entry.claim.slice(0, 50)}" marked passed but has no sources`,
+            description: entry.sources_found.length === 0
+              ? `Type A claim "${entry.claim.slice(0, 50)}" marked passed but has no sources`
+              : `Type A claim "${entry.claim.slice(0, 50)}" marked passed but has insufficient sources (${entry.sources_found.length} < 2)`,
             deduction: DEDUCTIONS.single_source_marked_verified,
           });
         }
