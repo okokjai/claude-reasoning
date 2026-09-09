@@ -101,6 +101,24 @@ describe('Default Router', () => {
     // 成本權重高 → CoT 最便宜，應勝出
     expect(result.paradigm).toBe('cot');
   });
+
+  test('costScore decoupled from timeScore (base_cost tiers)', () => {
+    // react: base_cost=10_000（≤12_000 → cost 0.6），time_multiplier=2.5（>2.0 → time 0.3）
+    const ctx: Parameters<DefaultRouter['route']>[0] = {
+      scale: 'large' as const,
+      domain: 'tech',
+      risk: 'medium' as const,
+      task_type: 'analysis',
+      budget_remaining: 100_000,
+    };
+    const costOnly = new DefaultRouter({ weights: { cost: 1.0, quality: 0, time: 0 } });
+    const timeOnly = new DefaultRouter({ weights: { cost: 0, quality: 0, time: 1.0 } });
+    const reactCost = Number(costOnly.route(ctx).rationale.match(/react=([\d.]+)/)![1]);
+    const reactTime = Number(timeOnly.route(ctx).rationale.match(/react=([\d.]+)/)![1]);
+    expect(reactCost).toBe(0.6);
+    expect(reactTime).toBe(0.3);
+    expect(reactCost).not.toBe(reactTime);
+  });
 });
 
 describe('Config Validation', () => {

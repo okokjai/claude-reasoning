@@ -121,9 +121,9 @@ export class DefaultRouter implements RouterPlugin {
       const algo = getAlgorithm(id) as AlgorithmPlugin;
       if (!algo) return { paradigm: id, score: 0 };
 
-      // 正規化成本：越低越好
-      const costScore = algo.cost_model.time_multiplier <= 1.2 ? 1.0
-        : algo.cost_model.time_multiplier <= 2.0 ? 0.6
+      // 正規化成本：越低越好（依 base_cost 分檔，與時間解耦）
+      const costScore = algo.cost_model.base_cost <= 6_000 ? 1.0
+        : algo.cost_model.base_cost <= 12_000 ? 0.6
         : 0.3;
 
       // 質量分數：越高越好

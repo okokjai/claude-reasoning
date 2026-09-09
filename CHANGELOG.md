@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.1.0 (2026-09-10)
+**Pipeline wall-clock optimization (S3 parallel waves + run-scoped cache + MCP prewarm) + router cost-score fix**
+
+- `src/kernel/executor.ts` `runStage3`: rewrote three nested serial loops as two parallel waves — all searches concurrently (via the existing `createVerificationTasks` planner, now actually wired into the executor), then all scrapes with global URL dedup (a URL shared by positive/negative searches is scraped once). Same task list, same evidence fields, same gate inputs — only the scheduling changed. Wall clock for typical 3-hypothesis runs drops from ~36 serial round-trips to 2 waves.
+- `src/kernel/executor.ts`: run-scoped search/page caches (`Map` keyed by query/url). Only successful calls are cached; lifetime = one `run()`, cleared on `close()` — no cross-request staleness, backtrack re-runs of S3 hit cache instead of re-fetching.
+- `src/kernel/executor.ts`: MCP prewarm at the top of `run()` — triggers `status`/`initialize()` on every registered tool without blocking; initialize is promise-cached and idempotent, so subprocess spawn overlaps router/contract stages.
+- `plugins/routers/default.ts`: `costScore` now tiers on the paradigm's `base_cost` (≤6k → 1.0, ≤12k → 0.6, else 0.3) instead of reusing the `time_multiplier` tiers — cost (0.4) and time (0.3) weights no longer double-count the same metric; small/medium exploration tasks no longer biased toward ToT. `timeScore`, `qualityScore`, soft bonus, and `rationale` format unchanged.
+- Tests: added `test/s3-concurrency.test.ts` (all tasks executed, wall clock < 50% of serial, failures fully recorded in `tool_calls`, shared-URL scraped once, run-scoped cache) and `test/prewarm.test.ts`; `test/router.test.ts` gains a cost/time decoupling test. Suite 145 → 152 across 16 files.
+- Docs sync: README badge/counts 145 → 152, Known Limits `parallel_groups` row updated (graph-level remains decorative; S3 internal parallelism is real), architecture.md Stage 3 rule row notes the two-wave parallel execution.
+
 ## v2.0.6 (2026-09-08)
 **DAC loop backtrack edges + precision contract alignment + Windows shell portability**
 

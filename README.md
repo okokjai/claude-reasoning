@@ -1,10 +1,10 @@
-# 🧠 Claude-Reasoning v2.0.6
+# 🧠 Claude-Reasoning v2.1.0
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat&logo=github)](https://github.com/okokjai/claude-reasoning)
 [![GitHub Release](https://img.shields.io/github/v/release/okokjai/claude-reasoning?style=flat&logo=github)](https://github.com/okokjai/claude-reasoning/releases)
 [![Platform: Claude Code](https://img.shields.io/badge/Platform-Claude%20Code-8A2BE2?style=flat&logo=anthropic)](https://claude.ai/code)
-[![Tests: 145/145](https://img.shields.io/badge/tests-145%2F145-passing-green)]()
+[![Tests: 152/152](https://img.shields.io/badge/tests-152%2F152-passing-green)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue)]()
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-brightgreen)]()
 
@@ -29,7 +29,7 @@ classify · route · strategy · capture · brainstorm · decompose · hypothesi
 | 🧭 **Smart Router** | Cost-weighted auto-selection + hard rules + budget downgrade; `user_specified > config.paradigm > Router` |
 | 🛡️ **P0 gates enforced** | S5.5 + S6 are code-checked for presence and reachability — a plugin cannot bypass them |
 | 🚫 **Anti-hallucination** | Entity triple-check (map + registry + reviews), fabricated-citation zero tolerance, concealed-contradiction zero tolerance |
-| 🧪 **145/145 tests** | e2e, graph traversal, gates, router, tools, MCP stdio client, CLI, A2 can_branch availability |
+| 🧪 **152/152 tests** | e2e, graph traversal, gates, router, tools, MCP stdio client, CLI, A2 can_branch availability, S3 並行/快取/prewarm |
 | 📦 **Zero config run** | Default `config.yaml`; no API keys; graceful fallback when MCP servers are unavailable |
 
 ---
@@ -85,7 +85,7 @@ The runtime launches MCP servers as configured child processes (JSON-RPC 2.0 ove
 
 | Verification | Result | Evidence |
 |---|---|---|
-| Functional tests | **145/145 (14 files)** | e2e, graph traversal, gates, router, tools, MCP stdio, CLI, A2 can_branch availability |
+| Functional tests | **152/152 (16 files)** | e2e, graph traversal, gates, router, tools, MCP stdio, CLI, A2 can_branch availability, S3 並行/快取/prewarm |
 | `config.paradigm` hotswap (v2.0.3) | **5 e2e cases pass** | config selects ToT/DAC; `auto` defers to Router; `user_specified` overrides; empty value falls through to Router |
 | P0 gate enforcement | **S5.5 → S6 edge asserted** | e2e fails if graph bypasses or misses a gate; invalid paradigms rejected loudly |
 | Build + typecheck | `tsc` exit 0 | `pnpm build` / `pnpm typecheck` |
@@ -283,7 +283,7 @@ router:
 | TS executor A2 `can_branch` | The skeleton path (executor.ts A2 handler) resolves `can_branch` from config: `true` only when `tools.reasoning-logger=sequential-thinking` **and** `mcp_servers['sequential-thinking']` is configured; `dsh-log` (built-in in-process logger, linear) resolves `false`. The real model path checks availability independently (A2 rule 3) |
 | `config.yaml: budget` | **Declared but not enforced (v2.0.x)** — the `budget` block (`max_tokens`/`downgrade_to`) is documentation only; the Router's budget downgrade uses a hard-coded `budget_remaining < 10k → CoT` threshold and never reads it. See `config.yaml` comment |
 | `plugins/routers/default.ts` hard_rules | **Declared but not configurable (v2.0.x)** — the router evaluates `scale=small` and `risk=high AND domain=investment` via hard-coded if/else, so `hard_rules` entries added in config are not applied at runtime (soft_rules are hot since they key off `task_type`) |
-| TS executor dead code | `PipelineExecutor.verifyP0GatesReachable` and the `resolveRoute` import are **never invoked** (the real gate preflight is module-level `verifyP0Reachability`); `parallel_groups` is decorative — `executeGraph` drives multi-path via `expand.count`, not parallel groups |
+| TS executor dead code | `PipelineExecutor.verifyP0GatesReachable` and the `resolveRoute` import are **never invoked** (the real gate preflight is module-level `verifyP0Reachability`); `parallel_groups` remains decorative at the **graph level** — `executeGraph` drives multi-path via `expand.count` — but Stage 3 now executes its verification tasks in parallel internally (two waves: search → dedup → scrape, v2.1) |
 | sync-check memory index | Validates the **canonical** memory root (`~/.claude/projects/<project>/memory`) via `resolve-memory-dir.py`; the deprecated `~/.claude/memory` legacy index is not authoritative |
 
 ---
@@ -324,7 +324,7 @@ claude-reasoning/
 ├── prompts/                       # compatibility mirror of contracts/stages/modes/quality
 ├── scripts/                       # sync-check.sh · resolve-memory-dir.py · memory-cleanup.sh
 │                                 #   · contract-gen.py · gate-check.py/.sh · trail-log.sh
-├── test/                          # 145 tests across 14 files
+├── test/                          # 152 tests across 16 files
 ├── docs/                          # release-manifest.md · plans/
 ├── CHANGELOG.md
 └── package.json

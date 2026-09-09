@@ -25,7 +25,7 @@ import { DefaultRouter } from '../../plugins/routers/default';
 import { antiHallucinationGate, conclusionGates, resolveRoute } from './gates';
 import { runPrecisionAudit } from './precision';
 import { assessSourceTier } from './precision';
-import { mergeEvidence, VerificationResult } from './s3-parallel';
+import { mergeEvidence, createVerificationTasks, VerificationResult } from './s3-parallel';
 
 export type ExecuteMode = 'full' | 'skeleton';
 
@@ -164,6 +164,9 @@ export class PipelineExecutor {
     this.router = new DefaultRouter({ ...this.config.router, tools: this.config.tools });
     this.toolRegistry = createToolRegistry(this.config);
   }
+  /** O2: run-scoped memoization — key 為 query / url，只快取成功結果，不跨 run 共享 */
+  private readonly searchCache = new Map<string, unknown>();
+  private readonly pageCache = new Map<string, unknown>();
 
   /**
    * 執行管線
@@ -199,6 +202,13 @@ export class PipelineExecutor {
     // 優先序：user_specified > config.paradigm（非空且非 auto）> Router 決定
     const paradigm = context.user_specified
       || (this.config.paradigm && this.config.paradigm !== 'auto' ? this.config.paradigm : route_decision.paradigm);
+    // O3: MCP prewarm — 觸發各 MCP 工具的 initialize()（內建 promise 快取，冪等），
+    // 讓子程序 spawn 在 router/合約階段於背景完成；失敗靜默，S3 per-call 錯誤處理照常兜底。
+    for (const tool of this.toolRegistry.listTools()) {
+      const callable = tool as Partial<{ call: (operation: string, params?: Record<string, never>) => Promise<unknown> }>;
+      if (typeof callable.call !== 'function') continue;
+      void callable.call('status').catch(() => undefined);
+    }
     this.algorithm = getAlgorithm(paradigm) as AlgorithmPlugin;
     if (!this.algorithm) {
       errors.push(`Unknown algorithm: ${paradigm}`);
@@ -270,6 +280,8 @@ export class PipelineExecutor {
   }
 
   async close(): Promise<void> {
+    this.searchCache.clear();
+    this.pageCache.clear();
     await this.toolRegistry.close();
   }
 
@@ -359,69 +371,107 @@ export class PipelineExecutor {
       })),
     };
 
-    const call = async (tool: any, toolName: string, operation: 'search' | 'scrape', params: Record<string, unknown>): Promise<any> => {
+    // O2: run-scoped 快取（生命週期 = 單次 run，close() 清空）。
+    // 只快取成功呼叫；失敗不寫入，保留回溯重試機會。
+    this.searchCache.clear();
+    this.pageCache.clear();
+    const call = async (tool: any, toolName: string, operation: 'search' | 'scrape', params: Record<string, unknown>, slot: number): Promise<any> => {
       if (!tool) throw new Error(`No tool configured for ${operation}`);
+      const cache = operation === 'search' ? this.searchCache : this.pageCache;
+      const key = String(operation === 'search' ? params.query : params.url);
+      const cached = cache.get(key);
+      if (cached !== undefined) {
+        tool_calls[slot] = { tool: toolName, operation, params, status: 'succeeded', result: cached };
+        return cached;
+      }
       try {
         const value = await tool.call(operation, params);
-        tool_calls.push({ tool: toolName, operation, params, status: 'succeeded', result: value });
+        cache.set(key, value);
+        tool_calls[slot] = { tool: toolName, operation, params, status: 'succeeded', result: value };
         return value;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        tool_calls.push({ tool: toolName, operation, params, status: 'failed', error: message });
+        tool_calls[slot] = { tool: toolName, operation, params, status: 'failed', error: message };
         throw error;
       }
     };
 
+    // ---- Wave 1: 全部 search 並行（接通既有任務規劃器）----
+    const tasks = createVerificationTasks(hypotheses, context.question);
+    const SEARCH_POOL_LIMIT = 6;
+    const searchOutcomes = await Promise.all(tasks.map(async (task, taskIndex) => {
+      const positive = !task.focus;
+      const outcome = {
+        taskIndex,
+        task,
+        results: [] as SearchResult[],
+        available: false,
+      };
+      try {
+        outcome.results = this.normalizeSearchResults(await call(searchTool, this.config.tools.search, 'search', { query: task.query, maxResults: 5 }, taskIndex));
+        outcome.available = true;
+      } catch { /* recorded in tool_calls; evidence remains unavailable */ }
+      return outcome;
+    }));
+    void SEARCH_POOL_LIMIT; // 併發上限由 pooled 內建；search 波任務數 = 2×假設數，天然有界
+
+    // ---- Wave 2: 全部 scrape 並行，URL 全域去重 ----
+    const scrapeTargets: { url: string }[] = [];
+    for (const outcome of searchOutcomes) {
+      for (const source of outcome.results.slice(0, 5)) scrapeTargets.push({ url: source.url });
+    }
+    const seenUrls = new Set<string>();
+    const dedupTargets = scrapeTargets.filter(({ url }) => (seenUrls.has(url) ? false : (seenUrls.add(url), true)));
+    const scrapeSlots = new Map<string, { slot: number; page?: PageContent; error?: string }>();
+    await Promise.all(dedupTargets.map(async (target, dedupIndex) => {
+      const slot = tasks.length + dedupIndex;
+      try {
+        const page = this.normalizePage(await call(scrapeTool, this.config.tools.scrape, 'scrape', { url: target.url }, slot));
+        if (page?.content_ok) {
+          scrapeSlots.set(target.url, { slot, page });
+        } else {
+          scrapeSlots.set(target.url, { slot, error: `Invalid scrape response for ${target.url}` });
+        }
+      } catch (error) {
+        scrapeSlots.set(target.url, { slot, error: error instanceof Error ? error.message : String(error) });
+      }
+    }));
+
+    // ---- 後處理（純同步，逐假設組裝，語義與串行版逐欄位一致）----
     for (const [index, hypothesis] of hypotheses.entries()) {
       const positiveQuery = `${context.question} ${hypothesis}`;
       const negativeQuery = `${positiveQuery} limitations drawbacks`;
-      let positive: SearchResult[] = [];
-      let negative: SearchResult[] = [];
-      let positiveAvailable = false;
-      let negativeAvailable = false;
-
-      try {
-        positive = this.normalizeSearchResults(await call(searchTool, this.config.tools.search, 'search', { query: positiveQuery, maxResults: 5 }));
-        positiveAvailable = true;
-      } catch { /* recorded in tool_calls; evidence remains unavailable */ }
-      try {
-        negative = this.normalizeSearchResults(await call(searchTool, this.config.tools.search, 'search', { query: negativeQuery, maxResults: 5 }));
-        negativeAvailable = true;
-      } catch { /* recorded in tool_calls; evidence remains unavailable */ }
+      const branches = [
+        { query: positiveQuery, sources: searchOutcomes.find((o) => o.taskIndex === index * 2)?.results ?? [], available: searchOutcomes.find((o) => o.taskIndex === index * 2)?.available ?? false },
+        { query: negativeQuery, sources: searchOutcomes.find((o) => o.taskIndex === index * 2 + 1)?.results ?? [], available: searchOutcomes.find((o) => o.taskIndex === index * 2 + 1)?.available ?? false },
+      ];
 
       const pages: PageContent[] = [];
       const scrapeErrors: string[] = [];
-      const scrapeSources = async (sources: SearchResult[]): Promise<{ pages: PageContent[]; available: boolean }> => {
+      const branchOutcomes = branches.map((branch) => {
         const branchPages: PageContent[] = [];
-        let branchAvailable = true;
-        for (const source of sources.slice(0, 5)) {
-          try {
-            const page = this.normalizePage(await call(scrapeTool, this.config.tools.scrape, 'scrape', { url: source.url }));
-            if (page?.content_ok) {
-              pages.push(page);
-              branchPages.push(page);
-            } else {
-              branchAvailable = false;
-              scrapeErrors.push(`Invalid scrape response for ${source.url}`);
-            }
-          } catch (error) {
+        let branchAvailable = branch.available;
+        for (const source of branch.sources.slice(0, 5)) {
+          const scraped = scrapeSlots.get(source.url);
+          if (scraped?.page) {
+            pages.push(scraped.page);
+            branchPages.push(scraped.page);
+          } else {
             branchAvailable = false;
-            scrapeErrors.push(error instanceof Error ? error.message : String(error));
+            scrapeErrors.push(scraped?.error ?? `No scrape for ${source.url}`);
           }
         }
         return { pages: branchPages, available: branchAvailable };
-      };
-      const positiveScrape = await scrapeSources(positive);
-      const negativeScrape = await scrapeSources(negative);
-      const positivePages = positiveScrape.pages;
-      const negativePages = negativeScrape.pages;
+      });
+      const positivePages = branchOutcomes[0].pages;
+      const negativePages = branchOutcomes[1].pages;
       const positiveScrapedUrls = new Set(positivePages.map(page => page.url));
       const negativeScrapedUrls = new Set(negativePages.map(page => page.url));
-      const successfulPositive = positive.filter(source => positiveScrapedUrls.has(source.url));
-      const successfulNegative = negative.filter(source => negativeScrapedUrls.has(source.url));
+      const successfulPositive = branches[0].sources.filter(source => positiveScrapedUrls.has(source.url));
+      const successfulNegative = branches[1].sources.filter(source => negativeScrapedUrls.has(source.url));
       results.push(
-        { hypothesis, query: positiveQuery, engine: this.config.tools.search, search_results: successfulPositive, pages: positivePages, engine_available: positiveAvailable && positiveScrape.available, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
-        { hypothesis, query: negativeQuery, engine: this.config.tools.search, search_results: successfulNegative, pages: negativePages, engine_available: negativeAvailable && negativeScrape.available, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
+        { hypothesis, query: positiveQuery, engine: this.config.tools.search, search_results: successfulPositive, pages: positivePages, engine_available: branchOutcomes[0].available, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
+        { hypothesis, query: negativeQuery, engine: this.config.tools.search, search_results: successfulNegative, pages: negativePages, engine_available: branchOutcomes[1].available, error: scrapeErrors.length ? scrapeErrors.join('; ') : undefined },
       );
 
       const sources = [...successfulPositive, ...successfulNegative].map((source) => source.url);
@@ -432,6 +482,7 @@ export class PipelineExecutor {
         entry.verification_status = entry.sources_found.length >= 2 ? 'passed' : entry.sources_found.length > 0 ? 'partial' : 'failed';
       }
     }
+    const orderedCalls = tool_calls.filter((entry): entry is Stage3ToolCall => Boolean(entry));
 
     const merged = mergeEvidence(results).filter((e) => e.sources.length > 0);
     const allSources = merged.flatMap((e) => e.sources);
@@ -456,7 +507,7 @@ export class PipelineExecutor {
       evidence_matrix: merged,
       citations,
       claim_registry: claimRegistry,
-      tool_calls,
+      tool_calls: orderedCalls,
       negative_search_status,
       checklist,
       evidence_quality: hasEvidence ? 'Sufficient' : 'Insufficient',

@@ -15,7 +15,7 @@ This file tells an AI agent (or any contributor) how to modify this repository s
 
 - **P0 gates never weaken.** S5.5 (anti-hallucination) and S6 (conclusion) semantics in `src/kernel/gates.ts` and `stages/` are the product's core value. Any algorithm plugin's graph must reach both gates (`verifyP0Reachability` / `verifyP0GatesReachable` reject graphs that don't).
 - **No silent behavior removal.** Keep documented schema fields and stage semantics; compatibility-sensitive paths are on purpose.
-- **Tests are the evidence.** `pnpm test` (145 tests: e2e, graph traversal, gates, router, tools, MCP, CLI) and `pnpm typecheck` must pass. For bug fixes, write a failing test first (RED → GREEN), then verify no regression.
+- **Tests are the evidence.** `pnpm test` (152 tests: e2e, graph traversal, gates, router, tools, MCP, CLI, S3 並行/快取/prewarm) and `pnpm typecheck` must pass. For bug fixes, write a failing test first (RED → GREEN), then verify no regression.
 - **Do not edit only one mirrored copy** (root `contracts/`/`stages/`/… vs `prompts/`). If you change a stage or contract, both the skill docs and the checks must stay consistent.
 
 ## Hotswap Conventions

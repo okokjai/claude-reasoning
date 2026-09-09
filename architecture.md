@@ -89,7 +89,7 @@ This skill uses **native Markdown structured prompt templates** (explicit input/
 | Stage 0: Mini Brainstorming | `sequentialthinking` with linear fallback | Mandatory bounded framing before decomposition |
 | Stage 1: Decomposition | `sequentialthinking` | Sub-problems need independent branch development |
 | Stage 2: Hypothesis | `sequentialthinking` | Each hypothesis needs independent branch; Stage 5 can backtrack to revise here |
-| Stage 3: Verification | `unified-fetch` | Requires actual search/browse/scrape |
+| Stage 3: Verification | `unified-fetch` | Requires actual search/browse/scrape; since v2.1 executes its tasks in two parallel waves (all searches → URL dedup → all scrapes) with run-scoped caching |
 | Stage 4: Synthesis | None (pure reasoning) | Merging evidence does not need tools |
 | Stage 5: Critique | `sequentialthinking` | Multi-perspective branching + backtracking revision; includes one lightweight Problem Reframing Check |
 | Stage 5.5: Anti-Hallucination Harness | None (pure reasoning) | Independent P0 gate, three checks: entity/source/cross-reference |
