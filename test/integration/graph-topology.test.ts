@@ -1,6 +1,7 @@
 // test/integration/graph-topology.test.ts
 import { describe, it, expect } from "vitest";
 import { MockLlmInvoker } from "../mocks/mock-invoker.js";
+import { tempDb } from "../mocks/temp-db.js";
 import { reason } from "../../src/kernel/executor.js";
 import { conclusionGates } from "../../src/kernel/gates.js";
 
@@ -30,19 +31,35 @@ const HAPPY_LOG = [
 
 describe("happy-path topology", () => {
   it("runs START to END through SqliteSaver with exact node sequence", async () => {
-    const { state, threadId } = await reason("Should we adopt AlphaWorks?", {
-      threadId: "t-topo-1",
-      invoker: new MockLlmInvoker(fixtures),
-    });
-    expect(threadId).toBe("t-topo-1");
-    expect(state.conclusion_card).toBeTruthy();
-    expect(state.hallucination_result?.pass).toBe(true);
-    expect(state.quality_score?.total).toBeGreaterThan(0);
-    expect(state.step_execution_log).toEqual(HAPPY_LOG);
+    const { dbPath, cleanup } = tempDb();
+    try {
+      const { state, threadId } = await reason("Should we adopt AlphaWorks?", {
+        threadId: "t-topo-1",
+        dbPath,
+        invoker: new MockLlmInvoker(fixtures),
+      });
+      expect(threadId).toBe("t-topo-1");
+      expect(state.conclusion_card).toBeTruthy();
+      expect(state.hallucination_result?.pass).toBe(true);
+      expect(state.quality_score?.total).toBeGreaterThan(0);
+      expect(state.step_execution_log).toEqual(HAPPY_LOG);
+    } finally {
+      cleanup();
+    }
   });
+
   it("all 4 S6 gates are yes on the happy path", async () => {
-    const { state } = await reason("q?", { threadId: "t-topo-2", invoker: new MockLlmInvoker(fixtures) });
-    const gates = conclusionGates(state);
-    expect(gates).toEqual({ gate_1: "yes", gate_2: "yes", gate_3: "yes", gate_4: "yes", all_passed: true });
+    const { dbPath, cleanup } = tempDb();
+    try {
+      const { state } = await reason("q?", {
+        threadId: "t-topo-2",
+        dbPath,
+        invoker: new MockLlmInvoker(fixtures),
+      });
+      const gates = conclusionGates(state);
+      expect(gates).toEqual({ gate_1: "yes", gate_2: "yes", gate_3: "yes", gate_4: "yes", all_passed: true });
+    } finally {
+      cleanup();
+    }
   });
 });

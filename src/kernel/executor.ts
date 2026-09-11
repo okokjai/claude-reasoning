@@ -2,7 +2,9 @@
 // Graph assembly: START -> node_init -> node_c0 -> s0 -> s1 -> s2 -> s3 -> s4
 // -> s5 -(conditional)-> node_stage_5_5 -(conditional)-> s6 -> node_quality -> END.
 // SQLite checkpointing via SqliteSaver enables HITL interrupt + crash resume.
-import { StateGraph, Annotation, START, END, Command } from "@langchain/langgraph";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { StateGraph, Annotation, START, END, Command, interrupt } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { z } from "zod";
 import type { LlmInvoker } from "./invoker.js";
@@ -22,6 +24,9 @@ const S6Out = z.object({
   conclusion_points: z.array(z.object({ point: z.string(), level: z.string() })),
   evidence_quality: z.string(),
 });
+
+/** Default durable checkpoint store — shared so `reason` and `resume` see the same thread. */
+const DEFAULT_DB_PATH = join(tmpdir(), "cr-reasoning-v2-checkpoints.sqlite");
 
 function log(state: GraphState, node: string): Pick<GraphState, "step_execution_log"> {
   return { step_execution_log: [node] };
@@ -57,6 +62,19 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
     });
     return c0(state);
   });
+
+  // HITL pause point. Deliberately NOT wrapped in `withLog`: it is not a pipeline
+  // stage, and on resume this body re-executes from its start, so logging here
+  // would append a duplicate entry. C0 has already committed its writes by the
+  // time the router selects this node, so `clarification_needed` survives the pause.
+  const nodeHitlClarify = async (state: GraphState): Promise<Partial<GraphState>> => {
+    const answer = interrupt<{ reason: string; question: string; assumptions: string[] }, string>({
+      reason: "clarification_needed",
+      question: state.raw_question,
+      assumptions: state.assumptions,
+    });
+    return { user_clarification: answer, clarification_needed: false };
+  };
 
   const nodeStage0 = withLog("node_stage_0", makeStageNode({
     stage: "stage-0",
@@ -169,6 +187,7 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
   const workflow = new StateGraph(GraphStateChannels)
     .addNode("node_init", nodeInit)
     .addNode("node_c0", nodeC0)
+    .addNode("node_hitl_clarify", nodeHitlClarify)
     .addNode("node_stage_0", nodeStage0)
     .addNode("node_stage_1", nodeStage1)
     .addNode("node_stage_2", nodeStage2)
@@ -180,7 +199,10 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
     .addNode("node_quality", nodeQuality)
     .addEdge(START, "node_init")
     .addEdge("node_init", "node_c0")
-    .addEdge("node_c0", "node_stage_0")
+    .addConditionalEdges("node_c0", (state: GraphState) =>
+      state.clarification_needed && !state.user_clarification ? "node_hitl_clarify" : "node_stage_0"
+    )
+    .addEdge("node_hitl_clarify", "node_stage_0")
     .addEdge("node_stage_0", "node_stage_1")
     .addEdge("node_stage_1", "node_stage_2")
     .addEdge("node_stage_2", "node_stage_3")
@@ -216,7 +238,7 @@ export async function reason(
   const threadId = opts?.threadId ?? `cr-${Date.now()}`;
   const invoker = opts?.invoker;
   if (!invoker) throw new Error("reason(): invoker is required");
-  const saver = SqliteSaver.fromConnString(opts?.dbPath ?? ":memory:");
+  const saver = SqliteSaver.fromConnString(opts?.dbPath ?? DEFAULT_DB_PATH);
   const graph = buildReasoningGraph({ invoker }).compile({ checkpointer: saver });
   const input = GraphStateSchema.parse({ session_id: threadId, raw_question: question });
   const result = await graph.invoke(input, { configurable: { thread_id: threadId } });
@@ -225,13 +247,19 @@ export async function reason(
 
 export async function resume(
   threadId: string,
-  input: string,
+  input?: string,
   opts?: { dbPath?: string; invoker?: LlmInvoker }
 ): Promise<{ threadId: string; state: GraphState }> {
   const invoker = opts?.invoker;
   if (!invoker) throw new Error("resume(): invoker is required");
-  const saver = SqliteSaver.fromConnString(opts?.dbPath ?? ":memory:");
+  const saver = SqliteSaver.fromConnString(opts?.dbPath ?? DEFAULT_DB_PATH);
   const graph = buildReasoningGraph({ invoker }).compile({ checkpointer: saver });
-  const result = await graph.invoke(new Command({ resume: input }), { configurable: { thread_id: threadId } });
+  // Post-crash continuation re-enters with a `null` payload so the checkpoint is
+  // the sole source of truth: an empty string would be falsy (the Command
+  // rejects it) and a fresh object would replay `node_init` and clobber state.
+  const result =
+    input === undefined
+      ? await graph.invoke(null, { configurable: { thread_id: threadId } })
+      : await graph.invoke(new Command({ resume: input }), { configurable: { thread_id: threadId } });
   return { threadId, state: GraphStateSchema.parse(result) };
 }
