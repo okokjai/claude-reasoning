@@ -24,7 +24,8 @@ export interface StageNodeOpts {
 export function makeStageNode(opts: StageNodeOpts): (state: GraphState) => Promise<Partial<GraphState>> {
   return async (state: GraphState): Promise<Partial<GraphState>> => {
     const system = opts.loader.renderStage(opts.promptPath, {});
-    const user = JSON.stringify(state, null, 2);
+    // Prepend deterministic stage marker so MockLlmInvoker can match fixtures
+    const user = `[STAGE:${opts.stage}]\n${JSON.stringify(state, null, 2)}`;
 
     const first = await opts.invoker.invoke([
       { system, user },
