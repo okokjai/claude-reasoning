@@ -93,5 +93,22 @@ export function routeCritique(state: GraphState): RouteDecision {
   }
   return { update, goto: `node_${target.replace(/-/g, "_")}` };
 }
+export function routeGateFailure(state: GraphState): RouteDecision {
+  if (state.backtrack_count >= BACKTRACK_MAX) {
+    return {
+      update: {
+        residual_uncertainty:
+          (state.residual_uncertainty ? state.residual_uncertainty + "; " : "") +
+          "BACKTRACK_LIMIT_EXCEEDED",
+        needs_revision: false,
+      },
+      goto: "node_quality",
+    };
+  }
+  const next = state.backtrack_count + 1;
+  const route = state.hallucination_result?.failure_route;
+  const target = route === "stage-5" ? "node_stage_5" : "node_stage_3";
+  return { update: { backtrack_count: next }, goto: target };
+}
 
 export type ZodInfer<T extends ZodTypeAny> = z.infer<T>;

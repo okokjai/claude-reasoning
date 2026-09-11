@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { LlmInvoker } from "./invoker.js";
 import { PromptLoader } from "./prompt-loader.js";
 import { GraphStateChannels, GraphStateSchema, type GraphState } from "./types.js";
-import { makeStageNode, routeCritique } from "./node-factory.js";
+import { makeStageNode, routeCritique, routeGateFailure } from "./node-factory.js";
 import { antiHallucinationGate } from "./gates.js";
 import { runPrecisionAudit } from "./precision.js";
 
@@ -141,6 +141,9 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
     loader,
   }));
 
+  // Stage 5 runs the critique through routeCritique — the sole counter writer —
+  // and the conditional edge consumes the same decision's `goto`, so a permitted
+  // backtrack re-enters the target stage instead of silently falling through.
   const nodeStage5 = withLog("node_stage_5", async (state) => {
     const critique = makeStageNode({
       stage: "stage-5",
@@ -157,9 +160,15 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
     const decision = routeCritique({ ...state, ...critiqueOut } as GraphState);
     return { ...critiqueOut, ...decision.update };
   });
-
+  // Stage 5.5 gate: on failure the conditional edge routes to the gate's
+  // failure_route (stage-3 source fixes / stage-5 wording fixes) while the
+  // backtrack budget allows; at the budget the run converges on the conclusion.
   const nodeStage55 = withLog("node_stage_5_5", (state) => {
     const result = antiHallucinationGate(state);
+    if (result.pass !== true) {
+      const decision = routeGateFailure(state);
+      return { hallucination_result: result, ...decision.update };
+    }
     return { hallucination_result: result };
   });
 
@@ -208,13 +217,23 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
     .addEdge("node_stage_2", "node_stage_3")
     .addEdge("node_stage_3", "node_stage_4")
     .addEdge("node_stage_4", "node_stage_5")
-    .addEdge("node_stage_5", "node_stage_5_5")
-    .addConditionalEdges("node_stage_5_5", (state: GraphState) =>
-      state.hallucination_result?.pass === true ? "node_stage_6" : "node_quality"
-    )
-    .addConditionalEdges("node_stage_6", (state: GraphState) =>
-      state.needs_revision === true ? "node_stage_5" : "node_quality"
-    )
+    .addConditionalEdges("node_stage_5", (state: GraphState) => {
+      if (!state.needs_revision || state.revision_target === "none") {
+        return "node_stage_5_5";
+      }
+      return `node_${state.revision_target.replace(/-/g, "_")}`;
+    })
+    .addConditionalEdges("node_stage_5_5", (state: GraphState) => {
+      if (state.hallucination_result?.pass !== true) {
+        const route = state.hallucination_result?.failure_route;
+        if (state.backtrack_count >= 3) {
+          return "node_quality";
+        }
+        return route === "stage-5" ? "node_stage_5" : "node_stage_3";
+      }
+      return "node_stage_6";
+    })
+    .addEdge("node_stage_6", "node_quality")
     .addEdge("node_quality", END);
 
   return workflow;
@@ -222,7 +241,14 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
 
 
 function runQualityScore(state: GraphState): NonNullable<GraphState["quality_score"]> {
-  const base = state.evidence_quality === "Insufficient" ? 0 : 40;
+  if (state.evidence_quality === "Insufficient") {
+    return {
+      total: 0,
+      scale: "full_50",
+      dimension_scores: { evidence: 0, conclusion: 0 },
+    };
+  }
+  const base = 40;
   const bonus = (state.conclusion_points?.length ?? 0) > 0 ? 5 : 0;
   return {
     total: Math.min(45, base + bonus),
