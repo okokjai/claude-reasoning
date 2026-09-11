@@ -1,0 +1,29 @@
+{
+  "name": "cr-reasoning-v2",
+  "version": "2.0.0",
+  "type": "module",
+  "bin": {
+    "cr-reasoning": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/langgraph": "^1.4.14",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.4",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^11.0.0",
+    "yaml": "^2.4.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "22.20.2",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "2.1.9"
+  }
+}
