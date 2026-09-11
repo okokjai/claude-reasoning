@@ -233,14 +233,18 @@ function runQualityScore(state: GraphState): NonNullable<GraphState["quality_sco
 
 export async function reason(
   question: string,
-  opts?: { threadId?: string; dbPath?: string; invoker?: LlmInvoker }
+  opts?: { threadId?: string; dbPath?: string; invoker?: LlmInvoker; mode?: GraphState["primary_mode"] }
 ): Promise<{ threadId: string; state: GraphState }> {
   const threadId = opts?.threadId ?? `cr-${Date.now()}`;
   const invoker = opts?.invoker;
   if (!invoker) throw new Error("reason(): invoker is required");
   const saver = SqliteSaver.fromConnString(opts?.dbPath ?? DEFAULT_DB_PATH);
   const graph = buildReasoningGraph({ invoker }).compile({ checkpointer: saver });
-  const input = GraphStateSchema.parse({ session_id: threadId, raw_question: question });
+  const input = GraphStateSchema.parse({
+    session_id: threadId,
+    raw_question: question,
+    primary_mode: opts?.mode,
+  });
   const result = await graph.invoke(input, { configurable: { thread_id: threadId } });
   return { threadId, state: GraphStateSchema.parse(result) };
 }

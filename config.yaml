@@ -1,0 +1,8 @@
+# cr-reasoning v2 invoker config.
+# Resolution order: --config <path> flag → CR_REASONING_CONFIG env → ./config.yaml
+# Env overrides:    CR_REASONING_BASE_URL / CR_REASONING_API_KEY / CR_REASONING_MODEL
+#
+# Any OpenAI-compatible /chat/completions endpoint works.
+baseUrl: "https://api.openai.com/v1"
+apiKey: ""
+model: "gpt-4o-mini"

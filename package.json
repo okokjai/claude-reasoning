@@ -3,7 +3,8 @@
   "version": "2.0.0",
   "type": "module",
   "bin": {
-    "cr-reasoning": "./dist/cli.js"
+    "cr-reasoning": "./dist/cli.js",
+    "cr-reasoning-mcp": "./dist/mcp.js"
   },
   "scripts": {
     "build": "tsc",

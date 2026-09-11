@@ -1,0 +1,7 @@
+[STAGE:c0]	{"immutable_constraints":[],"assumptions":[],"clarification_needed":false}
+[STAGE:stage-0]	{"pain_statement":"p","original_frame":"of","selected_frame":"AlphaWorks is good","backup_frame":"bf","candidate_frame_count":1,"selected_frame_count":1,"cheapest_falsifier":"cf","iteration_count":0,"framing_status":"confirmed"}
+[STAGE:stage-1]	{"core_problem":"AlphaWorks is good","sub_problems":[],"known_facts":[]}
+[STAGE:stage-2]	{"hypotheses":["AlphaWorks is good"],"claim_registry":[]}
+[STAGE:stage-4]	{"preliminary_conclusion":"AlphaWorks is good [src-0]","conclusion_card":"card","conclusion_points":[{"point":"AlphaWorks is good","level":"[Confirmed]"}]}
+[STAGE:stage-5]	{"needs_revision":false,"revision_target":"none","residual_uncertainty":""}
+[STAGE:stage-6]	{"conclusion_card":"final card","conclusion_points":[{"point":"AlphaWorks is good","level":"[Confirmed]"}],"evidence_quality":"Sufficient"}
