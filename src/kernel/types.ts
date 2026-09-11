@@ -219,8 +219,8 @@ export const GraphStateChannels = Annotation.Root({
   scale: scalar<z.infer<typeof Scale>>(),
   platform_mode: scalar<z.infer<typeof PlatformMode>>(),
   can_branch: scalar<boolean>(),
-  evidence_cap: counter(),
-  quality_cap: counter(),
+  evidence_cap: Annotation<number>({ reducer: (a, b) => (b === undefined ? a : b), default: () => 5 }),
+  quality_cap: Annotation<number>({ reducer: (a, b) => (b === undefined ? a : b), default: () => 45 }),
 
   // 2. C0 user context
   immutable_constraints: list<string>(),
