@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { PromptLoader, OUTPUT_OVERRIDE } from "../../src/kernel/prompt-loader.js";
 
 describe("PromptLoader", () => {
-  const loader = new PromptLoader("C:/tmp/DONE/cr-reasoning-v2/prompts");
+  const loader = new PromptLoader("C:/tmp/DONE/claude-reasoning/prompts");
 
   it("loads raw stage file verbatim", () => {
     expect(loader.load("stages/stage-4-synthesis.md")).toContain("Stage 4");

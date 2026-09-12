@@ -104,6 +104,15 @@ describe("MCP stdio entry point (Task 8b)", () => {
               arguments: { question: "Should we adopt AlphaWorks?", mode: "design" },
             },
           },
+          {
+            jsonrpc: "2.0",
+            id: 4,
+            method: "tools/call",
+            params: {
+              name: "claude_reason",
+              arguments: { question: "Should we adopt AlphaWorks?", mode: "design" },
+            },
+          },
         ],
         {
           CR_REASONING_INVOKER_MODULE: resolve("test/fixtures/offline-invoker.mjs"),
@@ -118,7 +127,12 @@ describe("MCP stdio entry point (Task 8b)", () => {
       ).toBeNull();
 
       const tools = session.replies.find((r) => r.id === 2)?.result?.tools ?? [];
-      expect(tools.map((t) => t.name).sort()).toEqual(["cr_reason", "cr_resume"]);
+      expect(tools.map((t) => t.name).sort()).toEqual([
+        "claude_reason",
+        "claude_resume",
+        "cr_reason",
+        "cr_resume",
+      ]);
 
       const call = session.replies.find((r) => r.id === 3);
       expect(call?.error).toBeUndefined();
@@ -126,6 +140,11 @@ describe("MCP stdio entry point (Task 8b)", () => {
       expect(payload.threadId).toMatch(/^cr-/);
       expect(payload.state.primary_mode).toBe("design");
       expect(payload.state.conclusion_card).toBe("final card");
+
+      const aliasCall = session.replies.find((r) => r.id === 4);
+      expect(aliasCall?.error).toBeUndefined();
+      const aliasPayload = JSON.parse(aliasCall?.result?.content?.[0]?.text ?? "{}");
+      expect(aliasPayload.state.conclusion_card).toBe("final card");
     } finally {
       session?.child.kill();
       db.cleanup();

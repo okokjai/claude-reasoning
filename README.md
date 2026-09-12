@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 Claude Reasoning v2 (cr-reasoning-v2)
+# 🧠 Claude Reasoning v2 (`claude-reasoning`)
 
 **Next-generation structured reasoning pipeline ported to LangGraphJS host — not another flat expert panel.**
 
@@ -8,9 +8,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](package.json)
+[![NPM Package](https://img.shields.io/badge/NPM-claude--reasoning-red.svg)](https://www.npmjs.com/package/claude-reasoning)
 [![Runtime](https://img.shields.io/badge/Runtime-Node.js%20%7C%20TypeScript-3178C6.svg?logo=typescript)](tsconfig.json)
 [![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraphJS%201.4-FF6F00.svg)](https://langchain-ai.github.io/langgraphjs/)
-[![SQLite](https://img.shields.io/badge/Checkpointer-SqliteSaver-003B57.svg?logo=sqlite)](https://www.sqlite.org/)
 [![MCP](https://img.shields.io/badge/MCP-Stdio%20Ready-orange.svg)](src/mcp.ts)
 [![Tests](https://img.shields.io/badge/Tests-56%2F56%20Passing-brightgreen.svg)](test/)
 
@@ -20,7 +20,7 @@
 
 ## ⚡ What This Is (and Is Not)
 
-`cr-reasoning-v2` is a **production-grade structured reasoning engine**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality assessment layer — orchestrating problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → anti-hallucination gate → conclusion.
+`claude-reasoning` (v2.0.0) is a **production-grade structured reasoning engine**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality assessment layer — orchestrating problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → anti-hallucination gate → conclusion.
 
 In **v1.2.0**, reasoning was simulated by the LLM reading Markdown templates in its conversation context.  
 In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraphJS StateGraph)** with **SQLite persistent checkpoints**, **deterministic programmatic verification gates**, and **hard-bounded defect backtracking**.
@@ -42,8 +42,8 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 | **Context Overhead** | 22 Markdown files read into LLM context (~15k tokens) | **Zero Context Bloat**: host loads prompts; only relevant stage variables injected |
 | **Anti-Hallucination** | LLM self-reports adherence in prompt | **Deterministic P0 Gate (`gates.ts`)**: AST/code-level verification of entities & sources |
 | **Backtracking Safety** | Unbounded (vulnerable to Stage 2 $\leftrightarrow$ 5 infinite loops) | **Single-Writer Routing Bounds**: `BACKTRACK_MAX <= 3`, `STAGE_0_REVISIONS_MAX <= 1` |
-| **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `cr-reasoning resume` / MCP |
-| **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API + CLI + MCP Stdio Server |
+| **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `claude-reasoning resume` / MCP |
+| **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API (`claude-reasoning`) + CLI (`claude-reasoning`) + MCP Server |
 | **Test Verification** | Manual review only; unevaluated test suite | **14 test files, 56/56 automated tests (100% pass rate, tsc clean)** |
 
 ---
@@ -147,8 +147,8 @@ v2.0.0 replaces prompt honor-systems with hard code verifications in `src/kernel
 
 ```bash
 # Clone and install dependencies
-git clone https://github.com/okokjai/claude-reasoning.git cr-reasoning-v2
-cd cr-reasoning-v2
+git clone https://github.com/okokjai/claude-reasoning.git
+cd claude-reasoning
 npm install
 npm run build
 ```
@@ -174,43 +174,57 @@ Supported environment variables: `CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`
 
 ```bash
 # Execute structured reasoning
-npx cr-reasoning run "Should we migrate our database to SQLite checkpointer in production?" --mode decision
+npx claude-reasoning run "Should we migrate our database to SQLite checkpointer in production?" --mode decision
 
 # Output machine-readable JSON state
-npx cr-reasoning run "How to optimize memory usage in LangGraphJS?" --mode optimization --json
+npx claude-reasoning run "How to optimize memory usage in LangGraphJS?" --mode optimization --json
 
 # Resume after HITL interrupt or machine crash
-npx cr-reasoning resume cr-1718290000000 --input "On-premise deployment, max 10k budget"
+npx claude-reasoning resume cr-1718290000000 --input "On-premise deployment, max 10k budget"
 ```
 
 ### 2. Claude Desktop Integration (MCP Stdio Server)
 
-Add to `claude_desktop_config.json` or `mcp_servers.json`:
+Installed as a dependency? Use the `claude-reasoning-mcp` bin; otherwise point at the built server:
 
 ```json
 {
   "mcpServers": {
-    "cr-reasoning": {
-      "command": "node",
-      "args": ["<path-to-repo>/dist/mcp.js"],
+    "claude-reasoning": {
+      "command": "npx",
+      "args": ["-y", "claude-reasoning-mcp"],
       "env": {
         "CR_REASONING_BASE_URL": "https://api.openai.com/v1",
         "CR_REASONING_API_KEY": "sk-...",
-        "CR_REASONING_MODEL": "gpt-4o"
+        "CR_REASONING_MODEL": "gpt-4o",
+        "CR_REASONING_DB_PATH": "<path-to-repo>/.cr-reasoning/state.db"
       }
     }
   }
 }
 ```
 
+Serving a local checkout instead:
+
+```json
+{
+  "mcpServers": {
+    "claude-reasoning": {
+      "command": "node",
+      "args": ["<path-to-repo>/dist/mcp.js"]
+    }
+  }
+}
+```
+
 Registered tools available in Claude Desktop:
-- `cr_reason({ question: string, mode?: string })`: triggers full graph reasoning.
-- `cr_resume({ threadId: string, input?: string })`: resumes paused thread with clarification answers.
+- `claude_reason` / `cr_reason`: triggers full graph reasoning (`{ question: string, mode?: string }`).
+- `claude_resume` / `cr_resume`: resumes paused thread with clarification answers (`{ threadId: string, input?: string }`).
 
 ### 3. Programmatic TypeScript API
 
 ```typescript
-import { reason, resume } from "cr-reasoning-v2";
+import { reason, resume } from "claude-reasoning";
 
 // Run reasoning
 const { threadId, state } = await reason("Analyze potential bottleneck in our token bucket implementation", {

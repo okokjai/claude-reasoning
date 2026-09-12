@@ -1,7 +1,7 @@
 // test/integration/cli.test.ts
 // Contract (plan Task 8b, spec §10.2):
-// - `cr-reasoning run "<q>" [--mode m] [--json]`
-// - `cr-reasoning resume <thread_id> --input "<t>" [--json]`
+// - `claude-reasoning run "<q>" [--mode m] [--json]` (and `cr-reasoning` alias)
+// - `claude-reasoning resume <thread_id> --input "<t>" [--json]`
 // - offline execution via CR_REASONING_INVOKER_MODULE / CR_REASONING_FIXTURES
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";

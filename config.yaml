@@ -1,4 +1,4 @@
-# cr-reasoning v2 invoker config.
+# claude-reasoning invoker config.
 # Resolution order: --config <path> flag → CR_REASONING_CONFIG env → ./config.yaml
 # Env overrides:    CR_REASONING_BASE_URL / CR_REASONING_API_KEY / CR_REASONING_MODEL
 #

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// src/cli.ts — cr-reasoning (spec §10.2)
-//   cr-reasoning run "<q>" [--mode m] [--json] [--config config.yaml]
-//   cr-reasoning resume <thread_id> --input "<t>" [--json]
+// src/cli.ts — claude-reasoning (spec §10.2). `cr-reasoning` is a bin alias.
+//   claude-reasoning run "<q>" [--mode m] [--json] [--config config.yaml]
+//   claude-reasoning resume <thread_id> --input "<t>" [--json]
 import { reason, resume } from "./kernel/executor.js";
 import { resolveInvoker, resolveDbPath } from "./adapters/invoker-resolver.js";
 import type { PrimaryMode } from "./kernel/types.js";
@@ -37,7 +37,7 @@ function stringArg(args: CliArgs, key: string): string | undefined {
 }
 
 function fail(message: string): never {
-  console.error(`cr-reasoning: ${message}`);
+  console.error(`claude-reasoning: ${message}`);
   process.exit(1);
 }
 
@@ -54,7 +54,7 @@ async function main() {
 
   if (command === "run") {
     const question = stringArg(args, "positional");
-    if (!question) fail('usage: cr-reasoning run "<question>" [--mode m] [--json]');
+    if (!question) fail('usage: claude-reasoning run "<question>" [--mode m] [--json]');
     const mode = stringArg(args, "mode") ?? "decision";
     if (!MODES.includes(mode as PrimaryMode)) {
       fail(`invalid --mode ${JSON.stringify(mode)}; expected one of: ${MODES.join(", ")}`);
@@ -69,20 +69,20 @@ async function main() {
       console.log(JSON.stringify({ threadId, state }));
     } else {
       console.log(`thread: ${threadId}`);
-      console.log(state.conclusion_card ?? "(interrupted: clarification needed — run `cr-reasoning resume <threadId> --input \"<answer>\"`)");
+      console.log(state.conclusion_card ?? "(interrupted: clarification needed — run `claude-reasoning resume <threadId> --input \"<answer>\"`)");
     }
     return;
   }
 
   // resume
   const threadId = stringArg(args, "positional");
-  if (!threadId) fail("usage: cr-reasoning resume <thread_id> --input \"<text>\" [--json]");
+  if (!threadId) fail("usage: claude-reasoning resume <thread_id> --input \"<text>\" [--json]");
   const input = stringArg(args, "input");
   const { state } = await resume(threadId, input, { dbPath, invoker });
   if (args.json) {
     console.log(JSON.stringify({ threadId, state }));
   } else {
-    console.log(state.conclusion_card ?? "(interrupted: clarification needed — run `cr-reasoning resume <threadId> --input \"<answer>\"`)");
+    console.log(state.conclusion_card ?? "(interrupted: clarification needed — run `claude-reasoning resume <threadId> --input \"<answer>\"`)");
   }
 }
 

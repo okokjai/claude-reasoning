@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `cr-reasoning` will be documented in this file.
+All notable changes to `claude-reasoning` (`cr-reasoning`) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Major architectural upgrade migrating from prompt-chained agent execution (`claude-reasoning-1.2.0`) to a deterministic TypeScript host backed by LangGraphJS and SQLite checkpointer persistence.
 
 ### Breaking Changes vs v1.2.0
-- **SKILL.md Demotion**: `SKILL.md` is demoted to a thin trigger invoking the underlying CLI binary (`cr-reasoning run`) or MCP stdio service. Graph execution, state transitions, and verifications are strictly managed by the TypeScript runtime.
+- **Identity Unification**: package, CLI, MCP server, and repository adopted the single name `claude-reasoning`; `cr-reasoning` / `cr-reasoning-mcp` are preserved as bin and MCP-tool aliases (`cr_reason`, `cr_resume`). `SKILL.md` is demoted to a thin trigger invoking the CLI binary or MCP stdio service. Graph execution, state transitions, and verifications are strictly managed by the TypeScript runtime.
 - **Strict Structured Outputs**: Stage nodes use Zod schemas for input/output parsing. Missing or invalid keys trigger a single fail-loud repair retry before failing with `SchemaViolationError`.
 - **Runtime Enforced State**: State updates are managed by LangGraph channels (`GraphStateChannels`) and validated via `GraphStateSchema` at pipeline boundaries.
 
@@ -28,8 +28,8 @@ Major architectural upgrade migrating from prompt-chained agent execution (`clau
   - Single-writer discipline: counters mutated exclusively at routing decision points (`routeCritique`, `routeGateFailure`).
   - Safe convergence to `node_quality` with `BACKTRACK_LIMIT_EXCEEDED` on budget exhaustion.
 - **Dual Entry Points**:
-  - CLI (`cr-reasoning run "<q>"`, `cr-reasoning resume <threadId> --input "<answer>"`).
-  - MCP Stdio Server (`cr_reason`, `cr_resume` tools).
+  - CLI (`claude-reasoning run "<q>"`, `claude-reasoning resume <threadId> --input "<answer>"`; `cr-reasoning` alias).
+  - MCP Stdio Server (`claude_reason`/`claude_resume`, aliased `cr_reason`/`cr_resume`).
   - Shared SQLite thread namespace allowing cross-interface resumes.
 - **Passive LLM Invoker Contract**: `LlmInvoker` with strict JSON parser, native HTTP adapters (Anthropic/OpenAI compatible), and `CR_REASONING_INVOKER_MODULE` offline test seam.
 - **Zero-Migration Prompts**: Bit-for-bit SHA256 preservation of all 22 prompt assets from `claude-reasoning-1.2.0`.

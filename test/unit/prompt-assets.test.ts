@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const SRC = "C:/tmp/claude-reasoning-1.2.0";
-const DST = "C:/tmp/DONE/cr-reasoning-v2/prompts";
+const DST = "C:/tmp/DONE/claude-reasoning/prompts";
 const sha = (p: string) => createHash("sha256").update(readFileSync(p)).digest("hex");
 
 function walk(dir: string): string[] {

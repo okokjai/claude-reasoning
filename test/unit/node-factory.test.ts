@@ -6,7 +6,7 @@ import { makeStageNode, routeCritique } from "../../src/kernel/node-factory.js";
 import { GraphStateSchema, type GraphState } from "../../src/kernel/types.js";
 
 const Out = z.object({ foo: z.string() });
-const loader = new PromptLoader("C:/tmp/DONE/cr-reasoning-v2/prompts");
+const loader = new PromptLoader("C:/tmp/DONE/claude-reasoning/prompts");
 const state = (over: Partial<GraphState>): GraphState =>
   GraphStateSchema.parse({ session_id: "s", raw_question: "q", ...over });
 

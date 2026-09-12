@@ -3,6 +3,7 @@
 // -> s5 -(conditional)-> node_stage_5_5 -(conditional)-> s6 -> node_quality -> END.
 // SQLite checkpointing via SqliteSaver enables HITL interrupt + crash resume.
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { StateGraph, Annotation, START, END, Command, interrupt } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
@@ -26,7 +27,7 @@ const S6Out = z.object({
 });
 
 /** Default durable checkpoint store — shared so `reason` and `resume` see the same thread. */
-const DEFAULT_DB_PATH = join(tmpdir(), "cr-reasoning-v2-checkpoints.sqlite");
+const DEFAULT_DB_PATH = join(tmpdir(), "claude-reasoning-checkpoints.sqlite");
 
 function log(state: GraphState, node: string): Pick<GraphState, "step_execution_log"> {
   return { step_execution_log: [node] };
@@ -41,7 +42,7 @@ function withLog(node: string, fn: (state: GraphState) => Promise<Partial<GraphS
 }
 
 export function buildReasoningGraph(deps: ExecutorDeps) {
-  const loader = deps.loader ?? new PromptLoader("C:/tmp/DONE/cr-reasoning-v2/prompts");
+  const loader = deps.loader ?? new PromptLoader(fileURLToPath(new URL("../../prompts", import.meta.url)));
   const { invoker } = deps;
 
   const nodeInit = withLog("node_init", (state) => ({
