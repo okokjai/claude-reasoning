@@ -1,94 +1,198 @@
-# cr-reasoning-v2
+<div align="center">
 
-Next-generation reasoning pipeline ported from `claude-reasoning-1.2.0` to LangGraphJS with SQLite state persistence, deterministic verification gates, bounded defect backtracking, and dual MCP stdio + CLI entry points.
+# 🧠 Claude Reasoning v2 (cr-reasoning-v2)
 
-## Architecture: Skeleton vs Brain Split
+**Next-generation structured reasoning pipeline ported to LangGraphJS host — not another flat expert panel.**
 
-`cr-reasoning-v2` decouples control flow orchestration from reasoning intelligence:
+**Skeleton vs Brain · SQLite Checkpointing · Deterministic P0 Gates · Bounded Backtracking · Dual MCP + CLI**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](package.json)
+[![Runtime](https://img.shields.io/badge/Runtime-Node.js%20%7C%20TypeScript-3178C6.svg?logo=typescript)](tsconfig.json)
+[![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraphJS%201.4-FF6F00.svg)](https://langchain-ai.github.io/langgraphjs/)
+[![SQLite](https://img.shields.io/badge/Checkpointer-SqliteSaver-003B57.svg?logo=sqlite)](https://www.sqlite.org/)
+[![MCP](https://img.shields.io/badge/MCP-Stdio%20Ready-orange.svg)](src/mcp.ts)
+[![Tests](https://img.shields.io/badge/Tests-56%2F56%20Passing-brightgreen.svg)](test/)
+
+</div>
+
+---
+
+## ⚡ What This Is (and Is Not)
+
+`cr-reasoning-v2` is a **production-grade structured reasoning engine**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality assessment layer — orchestrating problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → anti-hallucination gate → conclusion.
+
+In **v1.2.0**, reasoning was simulated by the LLM reading Markdown templates in its conversation context.  
+In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraphJS StateGraph)** with **SQLite persistent checkpoints**, **deterministic programmatic verification gates**, and **hard-bounded defect backtracking**.
+
+**What this is not:**
+- It is **not** a loose multi-agent discussion or flat expert panel.
+- It is **not** a prompt wrapper that lets the LLM guess whether its own output passed verification.
+- It is **not** an unbounded loop. Backtracking between stages is bounded by mathematical limits ($\le 3$ global backtracks, $\le 1$ Stage 0 revision).
+- It is **not** dependent on external network access for testing. The full regression and topology suite runs **100% offline** via deterministic mocks.
+
+---
+
+## 💥 What Makes v2.0.0 Different from v1.2.0
+
+| Dimension | v1.2.0 (Markdown Skill) | v2.0.0 (TypeScript + LangGraphJS Engine) |
+|---|---|---|
+| **Architecture** | Prompt-driven DAG simulation in LLM context | **Skeleton vs Brain split**: TypeScript host runs graph; LLM is a passive invoker |
+| **State Persistence** | Transient conversation memory (lost across turns) | **SQLite Checkpointer (`SqliteSaver`)**: auto-saved per super-step, crash-resilient |
+| **Context Overhead** | 22 Markdown files read into LLM context (~15k tokens) | **Zero Context Bloat**: host loads prompts; only relevant stage variables injected |
+| **Anti-Hallucination** | LLM self-reports adherence in prompt | **Deterministic P0 Gate (`gates.ts`)**: AST/code-level verification of entities & sources |
+| **Backtracking Safety** | Unbounded (vulnerable to Stage 2 $\leftrightarrow$ 5 infinite loops) | **Single-Writer Routing Bounds**: `BACKTRACK_MAX <= 3`, `STAGE_0_REVISIONS_MAX <= 1` |
+| **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `cr-reasoning resume` / MCP |
+| **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API + CLI + MCP Stdio Server |
+| **Test Verification** | Manual review only; unevaluated test suite | **14 test files, 56/56 automated tests (100% pass rate, tsc clean)** |
+
+---
+
+## 🏛️ Architecture: Skeleton vs Brain Split
 
 ```
                   ┌─────────────────────────────────────────────────────────┐
-                  │                 Skeleton (TypeScript host)              │
+                  │                 Skeleton (TypeScript Host)              │
                   │  - LangGraphJS StateGraph                               │
-                  │  - SQLite checkpointing (SqliteSaver)                   │
-                  │  - Deterministic P0 gates & 4-dimension scoring         │
-                  │  - Bounded backtracking routing & single-writer counter │
+                  │  - SQLite Checkpointing (SqliteSaver)                   │
+                  │  - Deterministic P0 Gates & 4-Dimension Scoring         │
+                  │  - Bounded Backtracking Routing & Single-Writer Counter │
                   └────────────────────────────┬────────────────────────────┘
                                                │ Passive LlmInvoker
                                                ▼
                   ┌─────────────────────────────────────────────────────────┐
                   │                  Brain (LLM & Prompts)                  │
-                  │  - 22 zero-migration prompt assets                      │
-                  │  - Stage-specific structured output schemas (Zod)       │
-                  │  - Fail-loud parsing with single-attempt repair         │
+                  │  - 22 Zero-Migration Prompt Assets (SHA-256 byte-equal) │
+                  │  - Stage-Specific Structured Output Schemas (Zod)       │
+                  │  - Fail-Loud Parsing with Single Surgical Repair        │
                   └─────────────────────────────────────────────────────────┘
 ```
 
-### Graph Topology
+---
+
+## 🔄 Graph Topology & Control Flow
 
 ```mermaid
 graph TD
     START([START]) --> node_init[node_init]
-    node_init --> node_c0[node_c0]
-    node_c0 -->|clarification_needed && !user_clarification| node_hitl_clarify[node_hitl_clarify - interrupt]
-    node_c0 -->|clarification satisfied| node_stage_0[node_stage_0 - framing]
+    node_init --> node_c0[node_c0: User Context & Constraints]
+    
+    node_c0 -->|clarification_needed && !user_clarification| node_hitl_clarify[node_hitl_clarify: HITL Interrupt]
+    node_c0 -->|clarification satisfied| node_stage_0[node_stage_0: Mini-Brainstorm Framing]
     node_hitl_clarify -.-> node_stage_0
-    node_stage_0 --> node_stage_1[node_stage_1 - decompose]
-    node_stage_1 --> node_stage_2[node_stage_2 - hypothesis]
-    node_stage_2 --> node_stage_3[node_stage_3 - evidence]
-    node_stage_3 --> node_stage_4[node_stage_4 - synthesis]
-    node_stage_4 --> node_stage_5[node_stage_5 - critique]
+    
+    node_stage_0 --> node_stage_1[node_stage_1: Problem Decomposition]
+    node_stage_1 --> node_stage_2[node_stage_2: Hypotheses & Claim Registry]
+    node_stage_2 --> node_stage_3[node_stage_3: 4-Path Verification & Search]
+    node_stage_3 --> node_stage_4[node_stage_4: Synthesis & Conclusion Card]
+    node_stage_4 --> node_stage_5[node_stage_5: Multi-Perspective Critique]
+    
+    %% Bounded Backtracking Edges
     node_stage_5 -->|needs_revision && backtrack < 3| node_stage_0
     node_stage_5 -->|needs_revision && backtrack < 3| node_stage_2
     node_stage_5 -->|needs_revision && backtrack < 3| node_stage_3
-    node_stage_5 -->|pass or backtrack limit reached| node_stage_5_5[node_stage_5_5 - P0 gate]
+    node_stage_5 -->|pass or backtrack limit reached| node_stage_5_5[node_stage_5_5: P0 Anti-Hallucination Gate]
+    
+    %% Gate Failure Edges
     node_stage_5_5 -->|entity or source fail && backtrack < 3| node_stage_3
     node_stage_5_5 -->|cross-reference fail && backtrack < 3| node_stage_5
-    node_stage_5_5 -->|pass| node_stage_6[node_stage_6 - conclusion]
-    node_stage_5_5 -->|backtrack >= 3 failsafe| node_quality[node_quality - score]
+    node_stage_5_5 -->|pass| node_stage_6[node_stage_6: Final Conclusion]
+    node_stage_5_5 -->|backtrack >= 3 failsafe| node_quality[node_quality: Scoring & Assessment]
+    
     node_stage_6 --> node_quality
     node_quality --> END([END])
 ```
 
-## Deterministic Verification & Bounded Backtracking
+---
 
-- **P0 Anti-Hallucination Gate (`node_stage_5_5`)**: Triple-check verifying entity grounding, citation source anchors, and cross-reference disclosure for low-confidence evidence contradictions.
-- **Stage 6 Conclusion Gates**: 4 verification gates (`gate_1_evidence`, `gate_2_boundary`, `gate_3_counter_evidence`, `gate_4_confidence`).
-- **Single-Writer Routing Bounds**:
-  - Global defect backtrack limit: $\le 3$ (`BACKTRACK_MAX`).
-  - Stage 0 framing revision limit: $\le 1$ (`STAGE_0_REVISIONS_MAX`).
-  - Safe convergence on budget exhaustion: writes `BACKTRACK_LIMIT_EXCEEDED` to `residual_uncertainty`, forces `needs_revision: false`, and progresses to `node_quality`.
+## 🧩 5 Reasoning Modes
 
-## Quickstart
+Auto-routed in `A0` according to problem characteristics (or explicitly overridden):
+
+| Mode | Mechanism | Use For |
+|---|---|---|
+| 🔍 **Diagnostic** | Symptoms $\to$ Candidate Causes $\to$ Elimination $\to$ Minimal Intervention | System crashes, test failures, bug root causes |
+| 🏛️ **Design** | Requirements $\to$ Constraints $\to$ Solution Space $\to$ Pareto Frontier | System architecture, schema & API design |
+| ⚖️ **Decision** | Options $\times$ Criteria $\to$ Weighted Scoring $\to$ Sensitivity Analysis | Tech stack selection, vendor comparison |
+| ⚡ **Optimization** | Current State $\to$ Gradient Direction $\to$ Step Size $\to$ Convergence | Performance bottleneck tuning, latency optimization |
+| 💡 **Innovation** | Break Assumptions $\to$ Recombine Elements $\to$ New Combinations | Novel capability generation, overcoming deadlocks |
+
+---
+
+## 🛡️ Deterministic Gates & Precision Audit
+
+v2.0.0 replaces prompt honor-systems with hard code verifications in `src/kernel/gates.ts`:
+
+### 1. P0 Anti-Hallucination Gate (`node_stage_5_5`)
+- **Entity Grounding**: Every named entity in the conclusion must trace back to the query or verified evidence in `evidence_matrix`.
+- **Source Anchoring**: Citations (`[src-X]`) must exist in `source_quality_matrix`.
+- **Cross-Reference Disclosure**: Low-confidence or conflicting evidence cannot be silently dropped.
+
+### 2. Stage 6 Conclusion Gates (`conclusionGates`)
+- `gate_1_evidence`: Is evidence quality `Sufficient`?
+- `gate_2_boundary`: Are boundary conditions explicitly marked?
+- `gate_3_counter_evidence`: Is the cheapest falsifier explicitly refuted?
+- `gate_4_confidence`: Is conclusion certainty calibrated to evidence tier?
+
+### 3. Bounded Backtracking Invariants
+- `BACKTRACK_MAX = 3`: Maximum total defect revisions allowed.
+- `STAGE_0_REVISIONS_MAX = 1`: Framing revisions capped to prevent goal-post shifting.
+- **Budget Exhaustion Protection**: If limits are reached, the system writes `[BACKTRACK_LIMIT_EXCEEDED]` to `residual_uncertainty`, forces `needs_revision: false`, and routes straight to `node_quality` with explicit uncertainty warnings.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Installation
+
+```bash
+# Clone and install dependencies
+git clone https://github.com/okokjai/claude-reasoning.git cr-reasoning-v2
+cd cr-reasoning-v2
+npm install
+npm run build
+```
+
+### 2. Configuration (`config.yaml` / Environment Variables)
+
+Create a `config.yaml` in your working directory or set environment variables:
+
+```yaml
+baseUrl: "https://api.openai.com/v1"   # Or any OpenAI-compatible endpoint
+apiKey: "sk-..."
+model: "gpt-4o"
+dbPath: "./.cr-reasoning/state.db"     # SQLite checkpoint path
+```
+
+Supported environment variables: `CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`, `CR_REASONING_MODEL`, `CR_REASONING_DB_PATH`.
+
+---
+
+## 💻 Usage & Universal Entry Points
 
 ### 1. CLI Usage
 
 ```bash
-# Run a reasoning session
-cr-reasoning run "Should we adopt SQLite checkpointer in production?" --mode decision
+# Execute structured reasoning
+npx cr-reasoning run "Should we migrate our database to SQLite checkpointer in production?" --mode decision
 
-# Output JSON state
-cr-reasoning run "Should we migrate from MySQL to Postgres?" --mode decision --json
+# Output machine-readable JSON state
+npx cr-reasoning run "How to optimize memory usage in LangGraphJS?" --mode optimization --json
 
-# Resume after HITL clarification or crash
-cr-reasoning resume cr-1718290000000 --input "On-premise deployment with max 10k budget"
+# Resume after HITL interrupt or machine crash
+npx cr-reasoning resume cr-1718290000000 --input "On-premise deployment, max 10k budget"
 ```
 
-CLI arguments:
-- `run "<question>"`: required positional prompt.
-- `--mode <decision|design|diagnostic|innovation|optimization>`: primary mode (default `decision`).
-- `--config <path>`: path to `config.yaml` (default `./config.yaml`).
-- `--json`: output raw JSON containing `{ threadId, state }`.
-- `resume <threadId> --input "<text>"`: resume thread with clarification answer or continue paused run.
+### 2. Claude Desktop Integration (MCP Stdio Server)
 
-### 2. Claude Desktop Integration (`mcp_servers.json`)
+Add to `claude_desktop_config.json` or `mcp_servers.json`:
 
 ```json
 {
   "mcpServers": {
     "cr-reasoning": {
       "command": "node",
-      "args": ["C:/tmp/DONE/cr-reasoning-v2/dist/mcp.js"],
+      "args": ["<path-to-repo>/dist/mcp.js"],
       "env": {
         "CR_REASONING_BASE_URL": "https://api.openai.com/v1",
         "CR_REASONING_API_KEY": "sk-...",
@@ -99,34 +203,41 @@ CLI arguments:
 }
 ```
 
-Registered MCP tools:
-- `cr_reason({ question: string, mode?: string })`: runs graph reasoning pipeline.
-- `cr_resume({ threadId: string, input?: string })`: resumes paused/interrupted reasoning thread.
+Registered tools available in Claude Desktop:
+- `cr_reason({ question: string, mode?: string })`: triggers full graph reasoning.
+- `cr_resume({ threadId: string, input?: string })`: resumes paused thread with clarification answers.
 
-### 3. Configuration (`config.yaml` / Environment Variables)
+### 3. Programmatic TypeScript API
 
-Configuration precedence:
-- Environment variables: `CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`, `CR_REASONING_MODEL`, `CR_REASONING_CONFIG`, `CR_REASONING_DB_PATH`.
-- Local configuration file `config.yaml`:
-  ```yaml
-  baseUrl: "https://api.openai.com/v1"
-  apiKey: "your-api-key"
-  model: "gpt-4o"
-  ```
+```typescript
+import { reason, resume } from "cr-reasoning-v2";
 
-### 4. Offline Testing Guarantee & Zero-Migration Prompts
+// Run reasoning
+const { threadId, state } = await reason("Analyze potential bottleneck in our token bucket implementation", {
+  mode: "diagnostic",
+  dbPath: "./state.db",
+});
 
-- **Zero-Migration**: All 22 prompt assets under `prompts/` are bit-for-bit identical to `claude-reasoning-1.2.0` (validated via SHA256 integrity checks in `test/unit/prompt-assets.test.ts`).
-- **Offline Invariant**: Test fixtures use `MockLlmInvoker` and custom script invokers without outbound HTTP calls or API keys.
-- **Hook for External Integration Tests**: `CR_REASONING_INVOKER_MODULE` can specify a custom invoker module exporting `createInvoker(env)`.
+console.log("Conclusion Card:", state.conclusion_card);
+console.log("Quality Score:", state.quality_score?.total);
+```
 
-## Test Suite
+---
 
-Verified with 100% pass rate:
-- **Total Test Files**: 14
-- **Total Tests**: 56
-- Run checks:
-  ```bash
-  npm run typecheck    # npx tsc --noEmit
-  npm test             # npx vitest run
-  ```
+## 🧪 Test Suite & Invariant Guarantees
+
+Every commit and release satisfies strict verification invariants:
+
+```bash
+npm run typecheck    # npx tsc --noEmit -> Exit code 0
+npm test             # npx vitest run -> 14 passed (14 Files), 56 passed (56 Tests)
+```
+
+- **Zero-Migration Verification**: All 22 prompt assets under `prompts/` are verified byte-for-byte identical to v1.2.0 via SHA-256 (`test/unit/prompt-assets.test.ts`).
+- **Offline Reliability**: The entire test suite runs with deterministic mocks (`MockLlmInvoker`), zero external HTTP requests, and zero API token costs.
+
+---
+
+## 📄 License
+
+MIT © [okokjai](https://github.com/okokjai)
