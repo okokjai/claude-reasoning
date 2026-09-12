@@ -161,7 +161,7 @@ Create a `config.yaml` in your working directory or set environment variables:
 baseUrl: "https://api.openai.com/v1"   # Or any OpenAI-compatible endpoint
 apiKey: "sk-..."
 model: "gpt-4o"
-dbPath: "./.cr-reasoning/state.db"     # SQLite checkpoint path
+dbPath: "./.claude-reasoning/state.db"  # SQLite checkpoint path
 ```
 
 Supported environment variables: `CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`, `CR_REASONING_MODEL`, `CR_REASONING_DB_PATH`.
@@ -197,7 +197,7 @@ Installed as a dependency? Use the `claude-reasoning-mcp` bin; otherwise point a
         "CR_REASONING_BASE_URL": "https://api.openai.com/v1",
         "CR_REASONING_API_KEY": "sk-...",
         "CR_REASONING_MODEL": "gpt-4o",
-        "CR_REASONING_DB_PATH": "<path-to-repo>/.cr-reasoning/state.db"
+        "CR_REASONING_DB_PATH": "<path-to-repo>/.claude-reasoning/state.db"
       }
     }
   }
