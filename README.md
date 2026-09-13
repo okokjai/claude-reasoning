@@ -44,7 +44,7 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 | **Backtracking Safety** | Unbounded (vulnerable to Stage 2 $\leftrightarrow$ 5 infinite loops) | **Single-Writer Routing Bounds**: `BACKTRACK_MAX <= 3`, `STAGE_0_REVISIONS_MAX <= 1` |
 | **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `claude-reasoning resume` / MCP |
 | **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API (`claude-reasoning`) + CLI (`claude-reasoning`) + MCP Server |
-| **Test Verification** | Manual review only; unevaluated test suite | **20 test files, 91/91 automated tests (100% pass rate, tsc clean)** |
+| **Test Verification** | Manual review only (no automated test suite) | **20 test files, 91/91 automated tests (100% pass rate, tsc clean)** |
 
 ---
 
