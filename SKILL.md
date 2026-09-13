@@ -1,6 +1,6 @@
 ---
 name: claude-reasoning
-version: 2.1.0
+version: 2.2.0
 description: Graph-based reasoning pipeline. Dual-mode — when the engine
   (MCP/CLI invoker) is reachable it runs the full DAG with SQLite checkpoints;
   when the engine is absent the skill degrades to native in-session execution

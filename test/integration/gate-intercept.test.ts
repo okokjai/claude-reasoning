@@ -107,4 +107,42 @@ describe("gate interception (Task 9 scenarios 3–4)", () => {
       db.cleanup();
     }
   });
+
+  // Full-graph run: Stage 6 conclusion gates fail twice ("Insufficient" evidence
+  // both times). The first failure must route back to node_stage_1 exactly once
+  // (single-writer counter at 1); the second failure exhausts the revision budget
+  // and must converge on node_quality rather than loop.
+  it("routes a Stage 6 gate failure back to Stage 1 once, then converges", async () => {
+    const db = tempDb();
+    try {
+      const invoker = scriptInvoker({
+        c0: [C0],
+        "stage-0": [STAGE0],
+        "stage-1": [STAGE1],
+        "stage-2": [STAGE2],
+        "stage-4": [SOURCED_CONCLUSION],
+        "stage-5": [PASS_CRITIQUE],
+        "stage-6": [INSUFFICIENT_STAGE6],
+      });
+
+      const { state } = await reason("Should we adopt AlphaWorks?", {
+        dbPath: db.dbPath,
+        invoker,
+        toolAdapter: mockToolAdapter(),
+      });
+
+      // The counter was incremented exactly once, not per failure.
+      expect(state.stage_6_revision_count).toBe(1);
+      // Stage 6 ran twice (initial + retry after the Stage 1 re-entry).
+      expect(invoker.calls.filter((s) => s === "stage-6")).toHaveLength(2);
+      // Stage 1 was re-entered: it appears twice in the execution log.
+      expect(state.step_execution_log.filter((n) => n === "node_stage_1")).toHaveLength(2);
+      // The second failure exhausted the budget and the run terminated on
+      // node_quality (END edge) instead of looping.
+      expect(state.quality_score?.total).toBe(0);
+      expect(invoker.calls.filter((s) => s === "stage-6").length).toBeLessThan(3);
+    } finally {
+      db.cleanup();
+    }
+  });
 });
