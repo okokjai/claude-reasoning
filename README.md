@@ -7,12 +7,12 @@
 **Skeleton vs Brain · SQLite Checkpointing · Deterministic P0 Gates · Bounded Backtracking · Dual MCP + CLI**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-2.2.0-blue.svg)](package.json)
 [![NPM Package](https://img.shields.io/badge/NPM-claude--reasoning-red.svg)](https://www.npmjs.com/package/claude-reasoning)
 [![Runtime](https://img.shields.io/badge/Runtime-Node.js%20%7C%20TypeScript-3178C6.svg?logo=typescript)](tsconfig.json)
 [![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraphJS%201.4-FF6F00.svg)](https://langchain-ai.github.io/langgraphjs/)
 [![MCP](https://img.shields.io/badge/MCP-Stdio%20Ready-orange.svg)](src/mcp.ts)
-[![Tests](https://img.shields.io/badge/Tests-56%2F56%20Passing-brightgreen.svg)](test/)
+[![Tests](https://img.shields.io/badge/Tests-90%2F90%20Passing-brightgreen.svg)](test/)
 
 </div>
 
@@ -44,7 +44,7 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 | **Backtracking Safety** | Unbounded (vulnerable to Stage 2 $\leftrightarrow$ 5 infinite loops) | **Single-Writer Routing Bounds**: `BACKTRACK_MAX <= 3`, `STAGE_0_REVISIONS_MAX <= 1` |
 | **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `claude-reasoning resume` / MCP |
 | **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API (`claude-reasoning`) + CLI (`claude-reasoning`) + MCP Server |
-| **Test Verification** | Manual review only; unevaluated test suite | **14 test files, 56/56 automated tests (100% pass rate, tsc clean)** |
+| **Test Verification** | Manual review only; unevaluated test suite | **20 test files, 90/90 automated tests (100% pass rate, tsc clean)** |
 
 ---
 
@@ -164,7 +164,11 @@ model: "gpt-4o"
 dbPath: "./.claude-reasoning/state.db"  # SQLite checkpoint path
 ```
 
-Supported environment variables: `CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`, `CR_REASONING_MODEL`, `CR_REASONING_DB_PATH`.
+Supported environment variables (per-field precedence: `CR_REASONING_*` → generic `ANTHROPIC_*` / `OPENAI_*` → `config.yaml`):
+`CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`, `CR_REASONING_MODEL`, `CR_REASONING_DB_PATH`.
+Generic fallbacks: `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_MODEL`.
+
+`config.yaml` is **optional** — when env already supplies `baseUrl`, the file is not consulted. This lets the engine inherit the ambient session's provider (e.g. a `cc-switch` local proxy on `127.0.0.1`) without duplicating credentials.
 
 ---
 
@@ -244,7 +248,7 @@ Every commit and release satisfies strict verification invariants:
 
 ```bash
 npm run typecheck    # npx tsc --noEmit -> Exit code 0
-npm test             # npx vitest run -> 14 passed (14 Files), 56 passed (56 Tests)
+npm test             # npx vitest run -> 20 passed (20 Files), 90 passed (90 Tests)
 ```
 
 - **Zero-Migration Verification**: All 22 prompt assets under `prompts/` are verified byte-for-byte identical to v1.2.0 via SHA-256 (`test/unit/prompt-assets.test.ts`).

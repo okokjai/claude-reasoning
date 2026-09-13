@@ -43,7 +43,7 @@ export async function startMcpServer(): Promise<void> {
   const toolAdapter = await resolveToolAdapter();
   const dbPath = resolveDbPath();
 
-  const server = new McpServer({ name: "claude-reasoning", version: "2.0.0" });
+  const server = new McpServer({ name: "claude-reasoning", version: "2.2.0" });
 
   server.registerTool(
     "cr_reason",

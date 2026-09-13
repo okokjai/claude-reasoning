@@ -5,6 +5,42 @@ All notable changes to `claude-reasoning` (`cr-reasoning`) will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-09-13
+
+Stage 3 evidence integrity, protocol selection, and gate enforcement.
+
+### Fixed
+- **Stage 3 no longer fabricates evidence (`src/kernel/executor.ts`)**: `node_stage_3` synthesized `evidence_matrix` entries from `state.hypotheses`, emitting synthetic `source_anchor` values (`src-0`, …) and a hardcoded `confidence_bucket: "high"`. Because `antiHallucinationGate`'s source check validates against that same matrix, the check passed vacuously. Retrieval now runs through an injected `ToolAdapter`.
+- **`confidence_bucket` is a structural proxy**: `high` is unreachable — the kernel has not read source content, so it derives `medium` at ≥2 distinct hosts and `low` otherwise, and records the limitation in `data_gap_list`.
+- **Protocol mismatch (`src/adapters/http-invoker.ts`)**: the adapter always posted OpenAI-shaped bodies to `/chat/completions` while `invoker-resolver` supplied `ANTHROPIC_BASE_URL`. Protocol is now selected from the variable that supplied `baseUrl`.
+- **Stage 6 gates now enforce (`src/kernel/executor.ts`)**: the unconditional edge to `node_quality` became a conditional edge routing to Stage 1 while the revision budget allows.
+
+### Added
+- `ToolAdapter` interface (`src/kernel/tool-adapter.ts`) and `ExecutorDeps.toolAdapter`.
+- `CR_REASONING_TOOL_MODULE` seam (mirrors `CR_REASONING_INVOKER_MODULE`).
+- `test/unit/dist-freshness.test.ts` — the build output now has an observer.
+
+### Changed
+- Specifications moved into the repository at `docs/superpowers/`, where drift is diffable.
+
+### Removed
+- `plugins/{algorithms,tools,routers}` extension architecture and `.cr-runs/*.jsonl` trail were never implemented and are now removed from the design (remediation spec §7): no consumer existed, and `step_execution_log` already covers the trail.
+
+### Breaking Changes
+None. All additions are optional and `protocol` defaults to the prior `"openai"` behaviour.
+
+## [2.1.0] - 2026-09-13
+
+Dual-mode execution: the skill degrades gracefully from engine mode (MCP/CLI + SQLite) to native in-session execution when no backend is reachable, and the invoker now inherits ambient provider credentials.
+
+### Added
+- **Dual-Mode Router (`SKILL.md`)**: engine mode (MCP `claude_reason`/`cr_reason`, then CLI) is preferred; on engine failure (timeout, missing backend, non-zero exit) the skill replays the same `prompts/` stage contracts in-session instead of erroring.
+- **Ambient Env Inheritance (`src/adapters/invoker-resolver.ts`)**: per-field resolution order is now `CR_REASONING_*` env → generic `ANTHROPIC_*` / `OPENAI_*` env → `config.yaml`. New generic fallbacks: `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_MODEL`.
+
+### Changed
+- **`config.yaml` is now optional**: when `baseUrl` resolves from env the file is not consulted; a missing file no longer throws. Missing `baseUrl` from all sources still fails loud with a clearer error.
+- **Env precedence inversion**: env vars now beat `config.yaml` field values (previously `baseUrl` in config won over `CR_REASONING_BASE_URL`). Explicit env configuration always wins.
+
 ## [2.0.0] - 2026-09-12
 
 Major architectural upgrade migrating from prompt-chained agent execution (`claude-reasoning-1.2.0`) to a deterministic TypeScript host backed by LangGraphJS and SQLite checkpointer persistence.
