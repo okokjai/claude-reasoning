@@ -99,7 +99,8 @@ graph TD
     node_stage_5_5 -->|pass| node_stage_6[node_stage_6: Final Conclusion]
     node_stage_5_5 -->|backtrack >= 3 failsafe| node_quality[node_quality: Scoring & Assessment]
     
-    node_stage_6 --> node_quality
+    node_stage_6 -->|revision_target == stage-1| node_stage_1
+    node_stage_6 -->|otherwise| node_quality
     node_quality --> END([END])
 ```
 
@@ -165,7 +166,8 @@ dbPath: "./.claude-reasoning/state.db"  # SQLite checkpoint path
 ```
 
 Supported environment variables (per-field precedence: `CR_REASONING_*` → generic `ANTHROPIC_*` / `OPENAI_*` → `config.yaml`):
-`CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`, `CR_REASONING_MODEL`, `CR_REASONING_DB_PATH`.
+`CR_REASONING_BASE_URL`, `CR_REASONING_API_KEY`, `CR_REASONING_MODEL`, `CR_REASONING_DB_PATH`, `CR_REASONING_TOOL_MODULE`.
+`CR_REASONING_TOOL_MODULE` names a JS module exporting `createToolAdapter(env)` used to inject retrieval in place of the default no-op adapter.
 Generic fallbacks: `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_MODEL`.
 
 `config.yaml` is **optional** — when env already supplies `baseUrl`, the file is not consulted. This lets the engine inherit the ambient session's provider (e.g. a `cc-switch` local proxy on `127.0.0.1`) without duplicating credentials.
