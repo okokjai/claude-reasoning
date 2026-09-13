@@ -70,41 +70,15 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 
 ---
 
-## 🔄 Architecture: Forward DAG-shaped Pipeline
+## 🔄 Graph Topology & Control Flow
 
-```mermaid
----
-title: Claude Reasoning Pipeline & Bounded Control Flow
----
-flowchart TD
-    INIT["node_init<br/><sub>A1 Mode / A0 Strategy / A2 Thresholds</sub>"]
-    C0{"node_c0<br/><sub>C0 User Context & Constraints</sub>"}
-    HITL["⏸️ node_hitl_clarify<br/><sub>LangGraph interrupt()</sub>"]
-    S0["Stage 0: Mini-Brainstorm<br/><sub>Framing & Cheap Falsifiers</sub>"]
-    S1["Stage 1: Decomposition<br/><sub>Sub-problems & MECE Breakdown</sub>"]
-    S2["Stage 2: Hypotheses<br/><sub>Competing Claims & Registry</sub>"]
-    S3["Stage 3: Real Retrieval<br/><sub>ToolAdapter & Evidence Matrix</sub>"]
-    S4["Stage 4: Synthesis<br/><sub>Preliminary Conclusion Card</sub>"]
-    S5["Stage 5: Critique<br/><sub>Multi-perspective & Precision Audit</sub>"]
-    S55{"🛡️ Stage 5.5 Gate<br/><sub>P0 Anti-Hallucination</sub>"}
-    S6["Stage 6: Conclusion<br/><sub>Calibration & Conclusion Gates</sub>"]
-    Q["node_quality<br/><sub>Scoring & Assessment</sub>"]
-    END_NODE([🏁 END<br/><sub>SqliteSaver Checkpointed</sub>])
-
-    INIT --> C0
-    C0 -->|clarification_needed| HITL
-    HITL -.->|user resume| S0
-    C0 -->|validated| S0
-    S0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S55 --> S6 --> Q --> END_NODE
-
-    %% Bounded Backtracking Reroutes (v1.2.0 Proven Semantics)
-    S5 -.->|framing defect<br/>≤1 return| S0
-    S5 -.->|hypothesis defect| S2
-    S5 -.->|evidence defect| S3
-    S55 -.->|entity/source fail| S3
-    S55 -.->|cross-reference fail| S5
-    S6 -.->|decomposition fix<br/>≤1 return| S1
-    S55 -.->|backtrack ≥ 3 failsafe| Q
+```
+[START] ──▶ C0 Constraints ──▶ S0 Framing ──▶ S1 Decompose ──▶ S2 Hypotheses ──▶ S3 Retrieval ──▶ S4 Synthesis ──▶ S5 Critique
+                                     ▲                                                                                 │
+                                     │                       [ Bounded Recovery Bus ]                                  ▼
+                                     └────────── [Backtracks < 3] ◀── Gate Intercept (S5.5 / S6) ──────────────────────┤
+                                                                                                                       │
+                                                 [Backtracks >= 3 Failsafe] ───────────────────────────────────────────┴──▶ Quality ──▶ [END]
 ```
 
 **Stage Path**: `INIT → C0 → [HITL] → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6 → Quality → END`
