@@ -12,7 +12,7 @@
 [![Runtime](https://img.shields.io/badge/Runtime-Node.js%20%7C%20TypeScript-3178C6.svg?logo=typescript)](tsconfig.json)
 [![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraphJS%201.4-FF6F00.svg)](https://langchain-ai.github.io/langgraphjs/)
 [![MCP](https://img.shields.io/badge/MCP-Stdio%20Ready-orange.svg)](src/mcp.ts)
-[![Tests](https://img.shields.io/badge/Tests-90%2F90%20Passing-brightgreen.svg)](test/)
+[![Tests](https://img.shields.io/badge/Tests-91%2F91%20Passing-brightgreen.svg)](test/)
 
 </div>
 
@@ -44,7 +44,7 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 | **Backtracking Safety** | Unbounded (vulnerable to Stage 2 $\leftrightarrow$ 5 infinite loops) | **Single-Writer Routing Bounds**: `BACKTRACK_MAX <= 3`, `STAGE_0_REVISIONS_MAX <= 1` |
 | **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `claude-reasoning resume` / MCP |
 | **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API (`claude-reasoning`) + CLI (`claude-reasoning`) + MCP Server |
-| **Test Verification** | Manual review only; unevaluated test suite | **20 test files, 90/90 automated tests (100% pass rate, tsc clean)** |
+| **Test Verification** | Manual review only; unevaluated test suite | **20 test files, 91/91 automated tests (100% pass rate, tsc clean)** |
 
 ---
 
@@ -250,7 +250,7 @@ Every commit and release satisfies strict verification invariants:
 
 ```bash
 npm run typecheck    # npx tsc --noEmit -> Exit code 0
-npm test             # npx vitest run -> 20 passed (20 Files), 90 passed (90 Tests)
+npm test             # npx vitest run -> 20 passed (20 Files), 91 passed (91 Tests)
 ```
 
 - **Zero-Migration Verification**: All 22 prompt assets under `prompts/` are verified byte-for-byte identical to v1.2.0 via SHA-256 (`test/unit/prompt-assets.test.ts`).
