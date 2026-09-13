@@ -72,60 +72,13 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 
 ## 🔄 Graph Topology & Control Flow
 
-```mermaid
-flowchart TD
-    classDef step fill:#161b22,stroke:#30363d,stroke-width:1px,color:#e6edf3;
-    classDef gate fill:#21262d,stroke:#d29922,stroke-width:1.5px,color:#f0883e;
-    classDef hitl fill:#21262d,stroke:#a371f7,stroke-width:1.5px,color:#bc8cff;
-    classDef terminal fill:#238636,stroke:#2ea043,stroke-width:1.5px,color:#fff;
-    classDef bus fill:#2d1d1b,stroke:#f85149,stroke-width:1.5px,color:#ff7b72;
-
-    START([● START]) --> INIT[1. Contract Init & Mode]
-    INIT --> C0{2. C0 Constraints Check}
-
-    %% HITL Branch
-    C0 -->|Ambiguous| HITL[⏸️ HITL Clarify]
-    HITL -.->|User Resume| S0
-    C0 -->|Valid| S0[3. Stage 0: Mini-Brainstorm]
-
-    %% Main Pipeline
-    S0 --> S1[4. Stage 1: Problem Decomposition]
-    S1 --> S2[5. Stage 2: Hypotheses & Claim Registry]
-    S2 --> S3[6. Stage 3: Real Tool Retrieval]
-    S3 --> S4[7. Stage 4: Synthesis & Argumentation]
-    S4 --> S5[8. Stage 5: Multi-Perspective Critique]
-
-    %% Invariant Gates
-    S5 --> G55{🛡️ S5.5 Anti-Hallucination}
-    G55 -->|Pass| S6[9. Stage 6: Conclusion Card]
-    S6 --> G6{⚖️ S6 Conclusion Gates}
-    
-    %% Termination
-    G6 -->|Pass| QUAL[10. Quality Assessment]
-    QUAL --> END([🏁 END • SqliteSaver Checkpointed])
-
-    %% Side Recovery Track (Clean Bus Routing)
-    S5 -.->|Defect Found| BUS[[🔄 Bounded Recovery Bus]]
-    G55 -.->|Source Missing| BUS
-    G6 -.->|Unclosed Subproblem| BUS
-    
-    BUS ==>|Count < 3| S1
-    BUS ==>|Count >= 3 Failsafe| QUAL
-
-    class INIT,S0,S1,S2,S3,S4,S5,S6 step;
-    class C0,G55,G6 gate;
-    class HITL hitl;
-    class QUAL,END terminal;
-    class BUS bus;
 ```
-
-```
-[START] ──▶ C0 歧義檢驗 ──▶ S0 框架 ──▶ S1 拆解 ──▶ S2 假說 ──▶ S3 檢索 ──▶ S4 綜合 ──▶ S5 批判
-                                ▲                                                      │
-                                │                  【🔄 有界回溯總線】                  ▼
-                                └────── [回溯次數 < 3] ◀── 門禁攔截 (S5.5 / S6) ───┤
-                                                                                      │
-                                [回溯 >= 3 熔斷] ────────────────────────────────────┴──▶ Quality ──▶ [END]
+[START] ──▶ C0 Constraints ──▶ S0 Framing ──▶ S1 Decompose ──▶ S2 Hypotheses ──▶ S3 Retrieval ──▶ S4 Synthesis ──▶ S5 Critique
+                                     ▲                                                                                 │
+                                     │                     【🔄 Bounded Recovery Bus】                                 ▼
+                                     └────────── [Backtracks < 3] ◀── Gate Intercept (S5.5 / S6) ──────────────────────┤
+                                                                                                                       │
+                                                 [Backtracks >= 3 Failsafe] ───────────────────────────────────────────┴──▶ Quality ──▶ [END]
 ```
 
 ### Control Flow & Invariant Matrix
