@@ -74,80 +74,58 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 
 ```mermaid
 flowchart TD
-    %% Styling Definitions
-    classDef startEnd fill:#24292e,stroke:#fff,stroke-width:2px,color:#fff;
-    classDef primary fill:#1f6feb,stroke:#388bfd,stroke-width:1px,color:#fff;
-    classDef gate fill:#d29922,stroke:#f1e05a,stroke-width:1px,color:#fff;
-    classDef hitl fill:#8957e5,stroke:#a371f7,stroke-width:1px,color:#fff;
-    classDef finish fill:#238636,stroke:#2ea043,stroke-width:1px,color:#fff;
+    classDef step fill:#161b22,stroke:#30363d,stroke-width:1px,color:#e6edf3;
+    classDef gate fill:#21262d,stroke:#d29922,stroke-width:1.5px,color:#f0883e;
+    classDef hitl fill:#21262d,stroke:#a371f7,stroke-width:1.5px,color:#bc8cff;
+    classDef terminal fill:#238636,stroke:#2ea043,stroke-width:1.5px,color:#fff;
+    classDef bus fill:#2d1d1b,stroke:#f85149,stroke-width:1.5px,color:#ff7b72;
 
-    START([🚀 START]) --> node_init
+    START([● START]) --> INIT[1. Contract Init & Mode]
+    INIT --> C0{2. C0 Constraints Check}
 
-    %% Phase 1: Context & Hard Constraints
-    subgraph S_INIT ["Phase 1: Task Framing & HITL"]
-        node_init["node_init<br/><sub>A1 Mode / A0 Strategy / A2 Thresholds</sub>"]
-        node_c0{"node_c0<br/><sub>Constraints & Ambiguity Check</sub>"}
-        node_hitl_clarify["⏸️ node_hitl_clarify<br/><sub>LangGraph interrupt()</sub>"]
-        
-        node_init --> node_c0
-        node_c0 -->|clarification_needed| node_hitl_clarify
-        node_hitl_clarify -.->|resume| node_stage_0
-        node_c0 -->|constraints validated| node_stage_0
-    end
+    %% HITL Branch
+    C0 -->|Ambiguous| HITL[⏸️ HITL Clarify]
+    HITL -.->|User Resume| S0
+    C0 -->|Valid| S0[3. Stage 0: Mini-Brainstorm]
 
-    %% Phase 2: Core Reasoning & Retrieval
-    subgraph S_CORE ["Phase 2: Core Reasoning Engine"]
-        node_stage_0["node_stage_0: Mini-Brainstorm<br/><sub>Framing status / Candidate frames</sub>"]
-        node_stage_1["node_stage_1: Decomposition<br/><sub>Sub-problems / MECE breakdown</sub>"]
-        node_stage_2["node_stage_2: Hypotheses<br/><sub>Claim Registry / Negative queries</sub>"]
-        node_stage_3["node_stage_3: Real Retrieval<br/><sub>ToolAdapter / Evidence Matrix</sub>"]
-        node_stage_4["node_stage_4: Synthesis<br/><sub>Preliminary Conclusion Card</sub>"]
+    %% Main Pipeline
+    S0 --> S1[4. Stage 1: Problem Decomposition]
+    S1 --> S2[5. Stage 2: Hypotheses & Claim Registry]
+    S2 --> S3[6. Stage 3: Real Tool Retrieval]
+    S3 --> S4[7. Stage 4: Synthesis & Argumentation]
+    S4 --> S5[8. Stage 5: Multi-Perspective Critique]
 
-        node_stage_0 --> node_stage_1
-        node_stage_1 --> node_stage_2
-        node_stage_2 --> node_stage_3
-        node_stage_3 --> node_stage_4
-    end
+    %% Invariant Gates
+    S5 --> G55{🛡️ S5.5 Anti-Hallucination}
+    G55 -->|Pass| S6[9. Stage 6: Conclusion Card]
+    S6 --> G6{⚖️ S6 Conclusion Gates}
+    
+    %% Termination
+    G6 -->|Pass| QUAL[10. Quality Assessment]
+    QUAL --> END([🏁 END • SqliteSaver Checkpointed])
 
-    %% Phase 3: Gates & Bounded Backtracking
-    subgraph S_GATES ["Phase 3: Verification & Invariant Gates"]
-        node_stage_5{"node_stage_5: Critique<br/><sub>Multi-perspective / Precision Audit</sub>"}
-        node_stage_5_5{"🛡️ node_stage_5_5<br/><sub>P0 Anti-Hallucination Gate</sub>"}
-        node_stage_6{"⚖️ node_stage_6<br/><sub>4 Conclusion Gates</sub>"}
+    %% Side Recovery Track (Clean Bus Routing)
+    S5 -.->|Defect Found| BUS[[🔄 Bounded Recovery Bus]]
+    G55 -.->|Source Missing| BUS
+    G6 -.->|Unclosed Subproblem| BUS
+    
+    BUS ==>|Count < 3| S1
+    BUS ==>|Count >= 3 Failsafe| QUAL
 
-        node_stage_4 --> node_stage_5
-        node_stage_5 -->|Critique Passed| node_stage_5_5
-        node_stage_5_5 -->|Gate Passed| node_stage_6
-    end
+    class INIT,S0,S1,S2,S3,S4,S5,S6 step;
+    class C0,G55,G6 gate;
+    class HITL hitl;
+    class QUAL,END terminal;
+    class BUS bus;
+```
 
-    %% Backtracking Routing Paths
-    node_stage_5 ==>|needs_revision & count < 3| B_ROUTE{Defect Route}
-    B_ROUTE -->|framing_defect| node_stage_0
-    B_ROUTE -->|hypothesis_defect| node_stage_2
-    B_ROUTE -->|evidence_defect| node_stage_3
-
-    node_stage_5_5 ==>|entity/source fail & count < 3| node_stage_3
-    node_stage_5_5 ==>|cross_ref fail & count < 3| node_stage_5
-
-    node_stage_6 ==>|unclosed subproblems & rev < 1| node_stage_1
-
-    %% Phase 4: Assessment & Termination
-    subgraph S_END ["Phase 4: Assessment & Checkpoint"]
-        node_quality["📊 node_quality<br/><sub>Precision Score / Residual Uncertainty</sub>"]
-        END_NODE([🏁 END<br/><sub>SqliteSaver Checkpointed</sub>])
-        
-        node_quality --> END_NODE
-    end
-
-    node_stage_5_5 -->|backtrack >= 3 limit| node_quality
-    node_stage_6 -->|all gates passed or limit reached| node_quality
-
-    %% Apply Styles
-    class START,END_NODE startEnd;
-    class node_init,node_stage_0,node_stage_1,node_stage_2,node_stage_3,node_stage_4 primary;
-    class node_c0,node_stage_5,node_stage_5_5,node_stage_6,B_ROUTE gate;
-    class node_hitl_clarify hitl;
-    class node_quality finish;
+```
+[START] ──▶ C0 歧義檢驗 ──▶ S0 框架 ──▶ S1 拆解 ──▶ S2 假說 ──▶ S3 檢索 ──▶ S4 綜合 ──▶ S5 批判
+                                ▲                                                      │
+                                │                  【🔄 有界回溯總線】                  ▼
+                                └────── [回溯次數 < 3] ◀── 門禁攔截 (S5.5 / S6) ───┤
+                                                                                      │
+                                [回溯 >= 3 熔斷] ────────────────────────────────────┴──▶ Quality ──▶ [END]
 ```
 
 ### Control Flow & Invariant Matrix
@@ -155,7 +133,7 @@ flowchart TD
 | Node / Transition | Condition | Behavior & Target Route | Invariant Guarantee |
 |---|---|---|---|
 | **C0 HITL Interrupt** | `clarification_needed && !user_clarification` | Invokes `interrupt()`, checkpoints state in SQLite, waits for `resume` | Rejects proceeding on ambiguous tasks |
-| **S5 Defect Backtrack** | `needs_revision && backtrack_count < 3` | Routes to `stage-0`, `stage-2`, or `stage-3` | Single-writer counter mutation prevents infinite loops |
+| **S5 Defect Backtrack** | `needs_revision && backtrack_count < 3` | Routes to `stage-0`, `stage-2`, or `stage-3` via recovery bus | Single-writer counter mutation prevents infinite loops |
 | **S5.5 Anti-Hallucination** | Entity / Source / Cross-Ref check failure | Entity/Source fail routes to `stage-3`; Cross-Ref fail routes to `stage-5` | Eliminates unsourced claims |
 | **S6 Decomposition Gate** | Unclosed sub-problems (`revision_count < 1`) | Routes back to `stage-1` for decomposition revision | Limited to at most 1 revision, otherwise records Data Gaps |
 | **Failsafe Convergence** | `backtrack_count >= 3` | Bypasses remaining loops, routes straight to `node_quality` | Enforces finite step mathematical termination |
