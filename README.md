@@ -249,6 +249,49 @@ npm test             # npx vitest run -> 20 passed (20 Files), 91 passed (91 Tes
 
 ---
 
+## 📁 Project Structure
+
+```
+claude-reasoning/
+├── src/                               # TypeScript Engine Kernel & Entry Points
+│   ├── index.ts                       # Programmatic Library API (reason, resume)
+│   ├── cli.ts                         # Standalone CLI entry point (claude-reasoning run/resume)
+│   ├── mcp.ts                         # Stdio MCP server (claude_reason, cr_reason, claude_resume)
+│   ├── adapters/                      # Transport & Environment Resolvers
+│   │   ├── http-invoker.ts            # Dual-protocol HTTP adapter (Anthropic / OpenAI)
+│   │   ├── invoker-resolver.ts        # Priority-based env & config credential resolver
+│   │   └── tool-adapter-resolver.ts   # Injected ToolAdapter resolver (CR_REASONING_TOOL_MODULE)
+│   └── kernel/                        # Core LangGraphJS Engine & State Management
+│       ├── executor.ts                # StateGraph assembly, DAG execution & super-step loops
+│       ├── node-factory.ts            # Idempotent node execution & single-writer routing
+│       ├── types.ts                   # Authoritative GraphState channels & Zod schemas
+│       ├── gates.ts                   # P0 Anti-Hallucination & Stage 6 conclusion gates
+│       ├── precision.ts               # Precision audit & quality scoring formulas
+│       ├── tool-adapter.ts            # ToolAdapter interface for passive retrieval
+│       ├── invoker.ts                 # Passive LlmInvoker contract & strictParse
+│       └── prompt-loader.ts           # Zero-migration loader for static prompt templates
+├── prompts/                           # 22 Bit-for-bit Preserved Prompt Assets (v1.2.0)
+│   ├── contracts/                     # 8 Precondition & transfer rules (A0–A4, C0–C2)
+│   ├── stages/                        # 8 Structured reasoning stages (stage-0 to stage-6)
+│   ├── modes/                         # 5 Strategy modes (decision, design, diagnostic, ...)
+│   └── quality/                       # 1 Comprehensive self-assessment rubric
+├── docs/superpowers/                  # System Specifications & SDD Audit Ledgers
+│   ├── specs/                         # Architecture specifications & invariant alignment reports
+│   └── plans/                         # Step-by-step implementation & remediation plans
+├── test/                              # Comprehensive Test Suite (20 files, 91/91 passing)
+│   ├── unit/                          # 12 Unit test suites (gates, protocol, reducer dedup, etc.)
+│   ├── integration/                   # 8 Integration suites (topology, HITL, crash resume, etc.)
+│   ├── mocks/                         # Deterministic mock invokers & fixtures (zero network)
+│   └── fixtures/                      # Offline replay scripts & test fixtures
+├── SKILL.md                           # Dual-Mode Router (Engine MCP/CLI ↔ Native In-Session)
+├── config.yaml                        # Invoker endpoint & model configuration
+├── package.json                       # Dependencies & CLI binary definitions
+├── tsconfig.json                      # Strict TypeScript compiler options
+└── vitest.config.ts                   # Vitest testing configuration
+```
+
+---
+
 ## 📄 License
 
 MIT © [okokjai](https://github.com/okokjai)
