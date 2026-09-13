@@ -1,6 +1,7 @@
 // src/kernel/executor.ts
 // Graph assembly: START -> node_init -> node_c0 -> s0 -> s1 -> s2 -> s3 -> s4
-// -> s5 -(conditional)-> node_stage_5_5 -(conditional)-> s6 -> node_quality -> END.
+// -> s5 -(conditional)-> node_stage_5_5 -(conditional)-> s6 -(conditional)->
+//    node_quality -> END.
 // SQLite checkpointing via SqliteSaver enables HITL interrupt + crash resume.
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -13,7 +14,7 @@ import type { ToolAdapter, ToolResult } from "./tool-adapter.js";
 import { PromptLoader } from "./prompt-loader.js";
 import { GraphStateChannels, GraphStateSchema, type GraphState } from "./types.js";
 import { makeStageNode, routeCritique, routeGateFailure } from "./node-factory.js";
-import { antiHallucinationGate, conclusionGates } from "./gates.js";
+import { antiHallucinationGate, conclusionGates, STAGE_6_REVISIONS_MAX } from "./gates.js";
 import { runPrecisionAudit } from "./precision.js";
 
 export interface ExecutorDeps {
@@ -155,6 +156,35 @@ function withLog(node: string, fn: (state: GraphState) => Promise<Partial<GraphS
     const out = await fn(state);
     return { ...out, ...log(state, node) };
   };
+}
+
+/** Single writer for stage_6_revision_count (§11.2.3): incremented here, never in a node. */
+export function routeStage6(state: GraphState): {
+  update: Partial<GraphState>;
+  goto: "node_stage_1" | "node_quality";
+} {
+  if (state.stage_6_gate_passed === true) {
+    return { update: { revision_target: "none" }, goto: "node_quality" };
+  }
+  if (state.stage_6_revision_count < STAGE_6_REVISIONS_MAX) {
+    return {
+      update: { stage_6_revision_count: state.stage_6_revision_count + 1, revision_target: "stage-1" },
+      goto: "node_stage_1",
+    };
+  }
+  const prev = state.residual_uncertainty ?? "";
+  return {
+    update: {
+      residual_uncertainty: prev ? `${prev}; STAGE_6_GATE_WARNING` : "STAGE_6_GATE_WARNING",
+      revision_target: "none",
+    },
+    goto: "node_quality",
+  };
+}
+
+/** Reads the token `routeStage6` wrote, so the edge never re-derives intent from the counter. */
+export function stage6EdgeTarget(state: GraphState): "node_stage_1" | "node_quality" {
+  return state.revision_target === "stage-1" ? "node_stage_1" : "node_quality";
 }
 
 export function buildReasoningGraph(deps: ExecutorDeps) {
@@ -317,13 +347,13 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       preliminary_conclusion: state.preliminary_conclusion ?? out.conclusion_card,
       evidence_quality: out.evidence_quality as GraphState["evidence_quality"],
     });
+    const decision = routeStage6({ ...state, stage_6_gate_passed: cGates.all_passed } as GraphState);
     return {
       conclusion_card: out.conclusion_card,
       conclusion_points: out.conclusion_points,
       evidence_quality: out.evidence_quality as GraphState["evidence_quality"],
-      residual_uncertainty: cGates.all_passed
-        ? state.residual_uncertainty
-        : `${state.residual_uncertainty ? state.residual_uncertainty + "; " : ""}STAGE_6_GATE_WARNING`,
+      stage_6_gate_passed: cGates.all_passed,
+      ...decision.update,
     };
   });
 
@@ -371,7 +401,7 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       }
       return "node_stage_6";
     })
-    .addEdge("node_stage_6", "node_quality")
+    .addConditionalEdges("node_stage_6", stage6EdgeTarget)
     .addEdge("node_quality", END);
 
   return workflow;

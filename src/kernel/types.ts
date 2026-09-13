@@ -181,6 +181,7 @@ export const GraphStateSchema = z.object({
 
   // 6. Gates & outputs
   hallucination_result: HallucinationResult.optional(),
+  stage_6_gate_passed: z.boolean().optional(),
   conclusion_card: z.string().optional(),
   conclusion_points: z.array(ConclusionPoint).default([]),
   quality_score: z
@@ -293,6 +294,7 @@ export const GraphStateChannels = Annotation.Root({
 
   // 6. Gates & outputs
   hallucination_result: scalar<z.infer<typeof HallucinationResult> | undefined>(),
+  stage_6_gate_passed: scalar<boolean | undefined>(),
   conclusion_card: scalar<string | undefined>(),
   conclusion_points: replaceList<z.infer<typeof ConclusionPoint>>(),
   quality_score: scalar<
