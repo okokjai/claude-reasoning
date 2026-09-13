@@ -12,7 +12,7 @@ import type { LlmInvoker } from "./invoker.js";
 import { PromptLoader } from "./prompt-loader.js";
 import { GraphStateChannels, GraphStateSchema, type GraphState } from "./types.js";
 import { makeStageNode, routeCritique, routeGateFailure } from "./node-factory.js";
-import { antiHallucinationGate } from "./gates.js";
+import { antiHallucinationGate, conclusionGates } from "./gates.js";
 import { runPrecisionAudit } from "./precision.js";
 
 export interface ExecutorDeps {
@@ -58,6 +58,7 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
         assumptions: z.array(z.string()).default([]),
         clarification_needed: z.boolean().default(false),
       }),
+      fallbackValue: { immutable_constraints: [], assumptions: [], clarification_needed: true },
       invoker,
       loader,
     });
@@ -91,6 +92,17 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       iteration_count: z.number().int().min(0).max(1),
       framing_status: z.enum(["confirmed", "assumed", "uncertain"]),
     }),
+    fallbackValue: {
+      pain_statement: "",
+      original_frame: "",
+      selected_frame: "",
+      backup_frame: "",
+      candidate_frame_count: 1,
+      selected_frame_count: 1,
+      cheapest_falsifier: "",
+      iteration_count: 0,
+      framing_status: "uncertain",
+    },
     invoker,
     loader,
   }));
@@ -103,6 +115,7 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       sub_problems: z.array(z.string()).default([]),
       known_facts: z.array(z.string()).default([]),
     }),
+    fallbackValue: { core_problem: "", sub_problems: [], known_facts: [] },
     invoker,
     loader,
   }));
@@ -114,6 +127,7 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       hypotheses: z.array(z.string()).default([]),
       claim_registry: GraphStateSchema.shape.claim_registry,
     }),
+    fallbackValue: { hypotheses: [], claim_registry: [] },
     invoker,
     loader,
   }));
@@ -138,6 +152,7 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       conclusion_card: z.string(),
       conclusion_points: z.array(z.object({ point: z.string(), level: z.string() })).default([]),
     }),
+    fallbackValue: { preliminary_conclusion: "", conclusion_card: "", conclusion_points: [] },
     invoker,
     loader,
   }));
@@ -154,6 +169,7 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
         revision_target: z.enum(["none", "stage-0", "stage-1", "stage-2", "stage-3"]).default("none"),
         residual_uncertainty: z.string().default(""),
       }),
+      fallbackValue: { needs_revision: true, revision_target: "none", residual_uncertainty: "STAGE_5_SCHEMA_FALLBACK" },
       invoker,
       loader,
     });
@@ -178,14 +194,23 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       stage: "stage-6",
       promptPath: "stages/stage-6-conclusion.md",
       outSchema: S6Out,
+      fallbackValue: { conclusion_card: "", conclusion_points: [], evidence_quality: "Insufficient" },
       invoker,
       loader,
     });
     const out = await s6(state);
+    const cGates = conclusionGates({
+      ...state,
+      preliminary_conclusion: state.preliminary_conclusion ?? out.conclusion_card,
+      evidence_quality: out.evidence_quality as GraphState["evidence_quality"],
+    });
     return {
       conclusion_card: out.conclusion_card,
       conclusion_points: out.conclusion_points,
       evidence_quality: out.evidence_quality as GraphState["evidence_quality"],
+      residual_uncertainty: cGates.all_passed
+        ? state.residual_uncertainty
+        : `${state.residual_uncertainty ? state.residual_uncertainty + "; " : ""}STAGE_6_GATE_WARNING`,
     };
   });
 
@@ -193,7 +218,6 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
     const audit = runQualityScore(state);
     return { quality_score: audit };
   });
-
   const workflow = new StateGraph(GraphStateChannels)
     .addNode("node_init", nodeInit)
     .addNode("node_c0", nodeC0)
@@ -242,19 +266,26 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
 
 
 function runQualityScore(state: GraphState): NonNullable<GraphState["quality_score"]> {
+  const precision = runPrecisionAudit(state);
   if (state.evidence_quality === "Insufficient") {
     return {
       total: 0,
       scale: "full_50",
-      dimension_scores: { evidence: 0, conclusion: 0 },
+      dimension_scores: { evidence: 0, conclusion: 0, precision: precision.precision_score },
     };
   }
   const base = 40;
   const bonus = (state.conclusion_points?.length ?? 0) > 0 ? 5 : 0;
+  const precisionBonus = Math.min(5, precision.precision_score);
+  const total = Math.min(50, base + bonus + (precisionBonus > 3 ? 5 : 0));
   return {
-    total: Math.min(45, base + bonus),
+    total,
     scale: "full_50",
-    dimension_scores: { evidence: base, conclusion: bonus },
+    dimension_scores: {
+      evidence: base,
+      conclusion: bonus,
+      precision: precision.precision_score,
+    },
   };
 }
 

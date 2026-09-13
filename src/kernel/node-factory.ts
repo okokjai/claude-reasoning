@@ -2,7 +2,9 @@
 // §11.2 function-node disciplines:
 // 1. Idempotent write-back — nodes return Partial<GraphState> only.
 // 2. Fail-loud ACL — schema violation triggers at most ONE repair retry
-//    (re-invoke with prior invalid output + Zod issue list), then throws.
+//    (re-invoke with prior invalid output + Zod issue list). A second failure
+//    degrades to the node's deterministic `fallbackValue` when provided, and
+//    otherwise throws SchemaViolationError.
 // 3. Zero counter mutation — counters and the step log are written ONLY by
 //    routeCritique at routing decision points.
 // 4. Deps injected — invoker/loader passed in, so tests run offline.
@@ -19,6 +21,7 @@ export interface StageNodeOpts {
   outSchema: ZodTypeAny;
   invoker: LlmInvoker;
   loader: PromptLoader;
+  fallbackValue?: Record<string, unknown>;
 }
 
 export function makeStageNode(opts: StageNodeOpts): (state: GraphState) => Promise<Partial<GraphState>> {
@@ -43,6 +46,19 @@ export function makeStageNode(opts: StageNodeOpts): (state: GraphState) => Promi
         return strictParse(repair, opts.outSchema) as Partial<GraphState>;
       } catch (err2) {
         if (!(err2 instanceof SchemaViolationError)) throw err2;
+        if (opts.fallbackValue !== undefined) {
+          const fallback = { ...opts.fallbackValue } as Record<string, unknown>;
+          const degradedTag = `[DEGRADED_${opts.stage.toUpperCase().replace(/-/g, "_")}]`;
+          if ("residual_uncertainty" in fallback) {
+            const prev = (fallback.residual_uncertainty as string) || "";
+            fallback.residual_uncertainty = prev ? `${prev}; ${degradedTag}` : degradedTag;
+          } else if (state.residual_uncertainty !== undefined) {
+            fallback.residual_uncertainty = state.residual_uncertainty
+              ? `${state.residual_uncertainty}; ${degradedTag}`
+              : degradedTag;
+          }
+          return fallback as Partial<GraphState>;
+        }
         throw new SchemaViolationError(
           `${opts.stage}: schema violation after 1 repair retry: ${err2.message}`,
           err2.raw

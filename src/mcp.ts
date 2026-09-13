@@ -14,18 +14,44 @@ import type { PrimaryMode } from "./kernel/types.js";
 
 const MODES = ["decision", "design", "diagnostic", "innovation", "optimization"] as const;
 
+// Some upstream models / protocol proxies double-wrap tool arguments as
+// `{ arguments: { ...real } }` instead of `{ ...real }`. A bare Zod shape
+// would reject that with -32602 before the handler runs, so every tool
+// schema pre-processes its input: a payload consisting of a single
+// `arguments` object key is flattened one level.
+function unwrapArgs<T extends z.ZodRawShape>(shape: T) {
+  return z.preprocess((val) => {
+    if (
+      val !== null &&
+      typeof val === "object" &&
+      !Array.isArray(val) &&
+      Object.keys(val).length === 1 &&
+      "arguments" in val
+    ) {
+      const inner = (val as Record<string, unknown>).arguments;
+      if (inner !== null && typeof inner === "object" && !Array.isArray(inner)) {
+        return inner;
+      }
+    }
+    return val;
+  }, z.object(shape));
+}
+
 export async function startMcpServer(): Promise<void> {
   const invoker = await resolveInvoker();
   const dbPath = resolveDbPath();
 
   const server = new McpServer({ name: "claude-reasoning", version: "2.0.0" });
 
-  server.tool(
+  server.registerTool(
     "cr_reason",
-    "Run the full reasoning pipeline on a question; returns threadId plus the final (or interrupted) state.",
     {
-      question: z.string().min(1),
-      mode: z.enum(MODES).optional(),
+      description:
+        "Run the full reasoning pipeline on a question; returns threadId plus the final (or interrupted) state.",
+      inputSchema: unwrapArgs({
+        question: z.string().min(1),
+        mode: z.enum(MODES).optional(),
+      }),
     },
     async ({ question, mode }) => {
       const { threadId, state } = await reason(question, {
@@ -38,13 +64,15 @@ export async function startMcpServer(): Promise<void> {
       };
     }
   );
-
-  server.tool(
+  server.registerTool(
     "cr_resume",
-    "Resume a paused reasoning thread; supply the user's clarification, or omit input to continue after a crash.",
     {
-      threadId: z.string().min(1),
-      input: z.string().optional(),
+      description:
+        "Resume a paused reasoning thread; supply the user's clarification, or omit input to continue after a crash.",
+      inputSchema: unwrapArgs({
+        threadId: z.string().min(1),
+        input: z.string().optional(),
+      }),
     },
     async ({ threadId, input }) => {
       const { state } = await resume(threadId, input, { invoker, dbPath });
@@ -55,12 +83,15 @@ export async function startMcpServer(): Promise<void> {
   );
 
   // Backward-compatible aliases — identical thin shells over reason()/resume()
-  server.tool(
+  server.registerTool(
     "claude_reason",
-    "Run the full reasoning pipeline on a question; returns threadId plus the final (or interrupted) state.",
     {
-      question: z.string().min(1),
-      mode: z.enum(MODES).optional(),
+      description:
+        "Run the full reasoning pipeline on a question; returns threadId plus the final (or interrupted) state.",
+      inputSchema: unwrapArgs({
+        question: z.string().min(1),
+        mode: z.enum(MODES).optional(),
+      }),
     },
     async ({ question, mode }) => {
       const { threadId, state } = await reason(question, {
@@ -74,12 +105,15 @@ export async function startMcpServer(): Promise<void> {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "claude_resume",
-    "Resume a paused reasoning thread; supply the user's clarification, or omit input to continue after a crash.",
     {
-      threadId: z.string().min(1),
-      input: z.string().optional(),
+      description:
+        "Resume a paused reasoning thread; supply the user's clarification, or omit input to continue after a crash.",
+      inputSchema: unwrapArgs({
+        threadId: z.string().min(1),
+        input: z.string().optional(),
+      }),
     },
     async ({ threadId, input }) => {
       const { state } = await resume(threadId, input, { invoker, dbPath });

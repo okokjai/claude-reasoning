@@ -45,10 +45,25 @@ async function main() {
   const [command, ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
 
-  if (command !== "run" && command !== "resume") {
-    fail(`unknown command ${JSON.stringify(command)}; expected "run" or "resume"`);
+  if (command === "--help" || command === "-h" || command === "help") {
+    console.log(`claude-reasoning CLI (v2.0.0)
+
+Usage:
+  claude-reasoning run "<question>" [--mode m] [--json] [--config config.yaml]
+  claude-reasoning resume <thread_id> --input "<text>" [--json]
+
+Options:
+  --mode <m>       Reasoning mode: decision (default), design, diagnostic, innovation, optimization
+  --json           Output result as JSON with threadId and state
+  --config <path>  YAML config file path (default: ./config.yaml or CR_REASONING_CONFIG)
+  --threadId <id>  Custom session/thread identifier
+`);
+    return;
   }
 
+  if (command !== "run" && command !== "resume") {
+    fail(`unknown command ${JSON.stringify(command)}; expected "run", "resume", or "--help"`);
+  }
   const invoker = await resolveInvoker(stringArg(args, "config"));
   const dbPath = resolveDbPath();
 

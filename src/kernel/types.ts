@@ -204,11 +204,18 @@ export type GraphState = z.infer<typeof GraphStateSchema>;
 // ---------------------------------------------------------------------------
 
 const scalar = <T>() => Annotation<T>({ reducer: (a, b) => (b === undefined ? a : b) });
-const list = <T>() =>
-  Annotation<T[]>({ reducer: (a, b) => a.concat(b), default: () => [] as T[] });
+const replaceList = <T>() =>
+  Annotation<T[]>({
+    reducer: (a, b) => (b === undefined ? a : b),
+    default: () => [] as T[],
+  });
+const appendList = <T>() =>
+  Annotation<T[]>({
+    reducer: (a, b) => (b === undefined ? a : a.concat(b)),
+    default: () => [] as T[],
+  });
 const counter = () =>
   Annotation<number>({ reducer: (a, b) => (b === undefined ? a : b), default: () => 0 });
-
 export const GraphStateChannels = Annotation.Root({
   // 1. Session & task context
   session_id: scalar<string>(),
@@ -223,31 +230,31 @@ export const GraphStateChannels = Annotation.Root({
   quality_cap: Annotation<number>({ reducer: (a, b) => (b === undefined ? a : b), default: () => 45 }),
 
   // 2. C0 user context
-  immutable_constraints: list<string>(),
-  assumptions: list<string>(),
+  immutable_constraints: replaceList<string>(),
+  assumptions: replaceList<string>(),
   clarification_needed: scalar<boolean>(),
   user_clarification: scalar<string | undefined>(),
 
   // 3. Pipeline artifacts (C2 transfer)
   brainstorm_packet: scalar<z.infer<typeof BrainstormPacket> | undefined>(),
   core_problem: scalar<string | undefined>(),
-  sub_problems: list<string>(),
-  known_facts: list<string>(),
-  hypotheses: list<string>(),
-  claim_registry: list<z.infer<typeof ClaimEntry>>(),
-  search_paths_required: list<string>(),
-  negative_search_queries: list<string>(),
-  evidence_matrix: list<z.infer<typeof EvidenceMatrixEntry>>(),
+  sub_problems: replaceList<string>(),
+  known_facts: replaceList<string>(),
+  hypotheses: replaceList<string>(),
+  claim_registry: replaceList<z.infer<typeof ClaimEntry>>(),
+  search_paths_required: replaceList<string>(),
+  negative_search_queries: replaceList<string>(),
+  evidence_matrix: replaceList<z.infer<typeof EvidenceMatrixEntry>>(),
   source_quality_matrix: Annotation<Record<string, unknown>>({
     reducer: (a, b) => (b === undefined ? a : { ...a, ...b }),
     default: () => ({}),
   }),
-  data_gap_list: list<string>(),
+  data_gap_list: replaceList<string>(),
   preliminary_conclusion: scalar<string | undefined>(),
   evidence_quality: scalar<z.infer<typeof EvidenceQuality> | undefined>(),
   verification_complete: scalar<boolean | undefined>(),
   browse_verified: scalar<boolean | undefined>(),
-  contradictory_evidence_ref: list<z.infer<typeof SourceTierEntry>>(),
+  contradictory_evidence_ref: replaceList<z.infer<typeof SourceTierEntry>>(),
 
   // 4. Stage 5 critique write-back
   needs_revision: scalar<boolean>(),
@@ -262,11 +269,11 @@ export const GraphStateChannels = Annotation.Root({
   // 6. Gates & outputs
   hallucination_result: scalar<z.infer<typeof HallucinationResult> | undefined>(),
   conclusion_card: scalar<string | undefined>(),
-  conclusion_points: list<z.infer<typeof ConclusionPoint>>(),
+  conclusion_points: replaceList<z.infer<typeof ConclusionPoint>>(),
   quality_score: scalar<
     { total: number; scale: z.infer<typeof QualityScale>; dimension_scores: Record<string, number> } | undefined
   >(),
 
   // 7. Execution
-  step_execution_log: list<string>(),
+  step_execution_log: appendList<string>(),
 });
