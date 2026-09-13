@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { reason } from "../../src/kernel/executor.js";
 import { scriptInvoker } from "../mocks/fixture-script.js";
+import { mockToolAdapter } from "../mocks/mock-adapter.js";
 import { tempDb } from "../mocks/temp-db.js";
 
 const C0 = '{"immutable_constraints":[],"assumptions":[],"clarification_needed":false}';
@@ -63,7 +64,11 @@ describe("gate interception (Task 9 scenarios 3–4)", () => {
         "stage-6": [STAGE6],
       });
 
-      const { state } = await reason("Should we adopt AlphaWorks?", { dbPath: db.dbPath, invoker });
+      const { state } = await reason("Should we adopt AlphaWorks?", {
+        dbPath: db.dbPath,
+        invoker,
+        toolAdapter: mockToolAdapter(),
+      });
 
       expect(state.hallucination_result?.pass).toBe(true);
       expect(state.conclusion_card).toBe("final card");
@@ -88,7 +93,11 @@ describe("gate interception (Task 9 scenarios 3–4)", () => {
         "stage-6": [INSUFFICIENT_STAGE6],
       });
 
-      const { state } = await reason("Should we adopt AlphaWorks?", { dbPath: db.dbPath, invoker });
+      const { state } = await reason("Should we adopt AlphaWorks?", {
+        dbPath: db.dbPath,
+        invoker,
+        toolAdapter: mockToolAdapter(),
+      });
 
       // gate_1 is the evidence check: "Insufficient" fails it, and the quality
       // node must record the Redo verdict rather than scoring a partial pass.

@@ -10,6 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { reason, resume } from "./kernel/executor.js";
 import { resolveInvoker, resolveDbPath } from "./adapters/invoker-resolver.js";
+import { resolveToolAdapter } from "./adapters/tool-adapter-resolver.js";
 import type { PrimaryMode } from "./kernel/types.js";
 
 const MODES = ["decision", "design", "diagnostic", "innovation", "optimization"] as const;
@@ -39,6 +40,7 @@ function unwrapArgs<T extends z.ZodRawShape>(shape: T) {
 
 export async function startMcpServer(): Promise<void> {
   const invoker = await resolveInvoker();
+  const toolAdapter = await resolveToolAdapter();
   const dbPath = resolveDbPath();
 
   const server = new McpServer({ name: "claude-reasoning", version: "2.0.0" });
@@ -56,6 +58,7 @@ export async function startMcpServer(): Promise<void> {
     async ({ question, mode }) => {
       const { threadId, state } = await reason(question, {
         invoker,
+        toolAdapter,
         dbPath,
         mode: mode as PrimaryMode | undefined,
       });
@@ -75,7 +78,7 @@ export async function startMcpServer(): Promise<void> {
       }),
     },
     async ({ threadId, input }) => {
-      const { state } = await resume(threadId, input, { invoker, dbPath });
+      const { state } = await resume(threadId, input, { invoker, toolAdapter, dbPath });
       return {
         content: [{ type: "text", text: JSON.stringify({ threadId, state }) }],
       };
@@ -96,6 +99,7 @@ export async function startMcpServer(): Promise<void> {
     async ({ question, mode }) => {
       const { threadId, state } = await reason(question, {
         invoker,
+        toolAdapter,
         dbPath,
         mode: mode as PrimaryMode | undefined,
       });
@@ -116,7 +120,7 @@ export async function startMcpServer(): Promise<void> {
       }),
     },
     async ({ threadId, input }) => {
-      const { state } = await resume(threadId, input, { invoker, dbPath });
+      const { state } = await resume(threadId, input, { invoker, toolAdapter, dbPath });
       return {
         content: [{ type: "text", text: JSON.stringify({ threadId, state }) }],
       };

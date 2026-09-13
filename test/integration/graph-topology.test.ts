@@ -1,6 +1,7 @@
 // test/integration/graph-topology.test.ts
 import { describe, it, expect } from "vitest";
 import { MockLlmInvoker } from "../mocks/mock-invoker.js";
+import { mockToolAdapter } from "../mocks/mock-adapter.js";
 import { tempDb } from "../mocks/temp-db.js";
 import { reason } from "../../src/kernel/executor.js";
 import { conclusionGates } from "../../src/kernel/gates.js";
@@ -37,6 +38,7 @@ describe("happy-path topology", () => {
         threadId: "t-topo-1",
         dbPath,
         invoker: new MockLlmInvoker(fixtures),
+        toolAdapter: mockToolAdapter(),
       });
       expect(threadId).toBe("t-topo-1");
       expect(state.conclusion_card).toBeTruthy();
@@ -55,6 +57,7 @@ describe("happy-path topology", () => {
         threadId: "t-topo-2",
         dbPath,
         invoker: new MockLlmInvoker(fixtures),
+        toolAdapter: mockToolAdapter(),
       });
       const gates = conclusionGates(state);
       expect(gates).toEqual({ gate_1: "yes", gate_2: "yes", gate_3: "yes", gate_4: "yes", all_passed: true });

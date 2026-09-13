@@ -117,6 +117,7 @@ describe("MCP stdio entry point (Task 8b)", () => {
         {
           CR_REASONING_INVOKER_MODULE: resolve("test/fixtures/offline-invoker.mjs"),
           CR_REASONING_FIXTURES: resolve("test/fixtures/happy-path.tsv"),
+          CR_REASONING_TOOL_MODULE: resolve("test/fixtures/offline-tool-adapter.mjs"),
           CR_REASONING_DB_PATH: db.dbPath,
         }
       );

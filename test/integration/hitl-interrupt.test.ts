@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import { reason, resume } from "../../src/kernel/executor.js";
 import { ambiguousInvoker, clarifiedInvoker } from "../mocks/hitl-invoker.js";
+import { mockToolAdapter } from "../mocks/mock-adapter.js";
 import { tempDb } from "../mocks/temp-db.js";
 
 describe("HITL: C0 ambiguity pause/resume via SQLite", () => {
@@ -17,6 +18,7 @@ describe("HITL: C0 ambiguity pause/resume via SQLite", () => {
         threadId,
         dbPath,
         invoker: ambiguousInvoker(),
+        toolAdapter: mockToolAdapter(),
       });
 
       expect(first.state.clarification_needed).toBe(true);
@@ -26,6 +28,7 @@ describe("HITL: C0 ambiguity pause/resume via SQLite", () => {
       const second = await resume(threadId, "Budget 10k, on-prem required", {
         dbPath,
         invoker: clarifiedInvoker(),
+        toolAdapter: mockToolAdapter(),
       });
 
       expect(second.state.clarification_needed).toBe(false);

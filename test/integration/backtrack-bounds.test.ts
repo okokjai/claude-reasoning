@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import { reason } from "../../src/kernel/executor.js";
 import { BACKTRACK_MAX } from "../../src/kernel/gates.js";
 import { scriptInvoker } from "../mocks/fixture-script.js";
+import { mockToolAdapter } from "../mocks/mock-adapter.js";
 import { tempDb } from "../mocks/temp-db.js";
 
 const C0 = '{"immutable_constraints":[],"assumptions":[],"clarification_needed":false}';
@@ -57,7 +58,11 @@ describe("bounded backtracking (Task 9 scenarios 1–2)", () => {
         "stage-6": [STAGE6],
       });
 
-      const { state } = await reason("Should we adopt AlphaWorks?", { dbPath: db.dbPath, invoker });
+      const { state } = await reason("Should we adopt AlphaWorks?", {
+        dbPath: db.dbPath,
+        invoker,
+        toolAdapter: mockToolAdapter(),
+      });
 
       // The first framing defect is real: counter advances and Stage 0 re-runs.
       expect(state.stage_0_revision_count).toBe(1);
@@ -88,7 +93,11 @@ describe("bounded backtracking (Task 9 scenarios 1–2)", () => {
         "stage-6": [STAGE6],
       });
 
-      const { state } = await reason("Should we adopt AlphaWorks?", { dbPath: db.dbPath, invoker });
+      const { state } = await reason("Should we adopt AlphaWorks?", {
+        dbPath: db.dbPath,
+        invoker,
+        toolAdapter: mockToolAdapter(),
+      });
 
       expect(state.backtrack_count).toBe(BACKTRACK_MAX);
       expect(state.residual_uncertainty).toContain("BACKTRACK_LIMIT_EXCEEDED");

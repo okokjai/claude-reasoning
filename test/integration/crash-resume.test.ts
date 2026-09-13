@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { reason, resume } from "../../src/kernel/executor.js";
 import { flakyInvoker } from "../mocks/flaky-invoker.js";
+import { mockToolAdapter } from "../mocks/mock-adapter.js";
 import { tempDb } from "../mocks/temp-db.js";
 
 describe("Crash resume: SQLite checkpoint idempotency", () => {
@@ -20,6 +21,7 @@ describe("Crash resume: SQLite checkpoint idempotency", () => {
           threadId,
           dbPath,
           invoker: flakyInvoker("[STAGE:stage-4]", 1),
+          toolAdapter: mockToolAdapter(),
         })
       ).rejects.toThrow(/simulated crash/);
 
@@ -27,6 +29,7 @@ describe("Crash resume: SQLite checkpoint idempotency", () => {
       const resumed = await resume(threadId, undefined, {
         dbPath,
         invoker: flakyInvoker("[STAGE:stage-6]", 340),
+        toolAdapter: mockToolAdapter(),
       });
 
       const log = resumed.state.step_execution_log;
@@ -62,12 +65,14 @@ describe("Crash resume: SQLite checkpoint idempotency", () => {
           threadId,
           dbPath,
           invoker: flakyInvoker("[STAGE:stage-5]", 1),
+          toolAdapter: mockToolAdapter(),
         })
       ).rejects.toThrow(/simulated crash/);
 
       const resumed = await resume(threadId, undefined, {
         dbPath,
         invoker: flakyInvoker("[STAGE:stage-6]", 340),
+        toolAdapter: mockToolAdapter(),
       });
 
       expect(resumed.state.stage_0_revision_count).toBe(0);

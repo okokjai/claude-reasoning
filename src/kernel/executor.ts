@@ -9,6 +9,7 @@ import { StateGraph, Annotation, START, END, Command, interrupt } from "@langcha
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { z } from "zod";
 import type { LlmInvoker } from "./invoker.js";
+import type { ToolAdapter, ToolResult } from "./tool-adapter.js";
 import { PromptLoader } from "./prompt-loader.js";
 import { GraphStateChannels, GraphStateSchema, type GraphState } from "./types.js";
 import { makeStageNode, routeCritique, routeGateFailure } from "./node-factory.js";
@@ -18,6 +19,121 @@ import { runPrecisionAudit } from "./precision.js";
 export interface ExecutorDeps {
   invoker: LlmInvoker;
   loader?: PromptLoader;
+  toolAdapter?: ToolAdapter;
+}
+
+/** Structural proxy only: the kernel has not read the sources, so `high` is unreachable by design. */
+export function deriveConfidenceBucket(hostCount: number): "medium" | "low" {
+  return hostCount >= 2 ? "medium" : "low";
+}
+
+function distinctHosts(results: ToolResult[]): number {
+  const hosts = new Set<string>();
+  for (const r of results) {
+    try {
+      hosts.add(new URL(r.url).host);
+    } catch {
+      hosts.add(r.url);
+    }
+  }
+  return hosts.size;
+}
+
+export interface Stage3Output {
+  evidence_matrix: GraphState["evidence_matrix"];
+  unverified_hypotheses: string[];
+  tool_calls: GraphState["tool_calls"];
+  cross_validation: GraphState["cross_validation"];
+  verification_complete: boolean;
+  evidence_quality: GraphState["evidence_quality"];
+  data_gap_list: string[];
+  step_execution_log: string[];
+}
+
+const STAGE3_CONCURRENCY = 4;
+
+/** Pure aggregation over injected retrieval. No LLM call, no fabrication. */
+export async function runStage3(
+  state: GraphState,
+  adapter: ToolAdapter
+): Promise<Stage3Output> {
+  const hypotheses = state.hypotheses;
+  const paths = state.search_paths_required;
+  const calls: GraphState["tool_calls"] = [];
+  const evidence: GraphState["evidence_matrix"] = [];
+  const unverified: string[] = [];
+
+  let nextIndex = 0;
+  const results: { hypothesis: string; query: string; results: ToolResult[]; seconds: number }[] = [];
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= hypotheses.length) return;
+      const hypothesis = hypotheses[i] as string;
+      const query = paths[i % Math.max(1, paths.length)] ?? hypothesis;
+      const started = Date.now();
+      let found: ToolResult[] = [];
+      try {
+        found = await adapter.search(query, state.evidence_cap);
+      } catch {
+        found = [];
+      }
+      results.push({ hypothesis, query, results: found, seconds: (Date.now() - started) / 1000 });
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(STAGE3_CONCURRENCY, Math.max(1, hypotheses.length)) }, worker)
+  );
+
+  results.sort((a, b) => hypotheses.indexOf(a.hypothesis) - hypotheses.indexOf(b.hypothesis));
+
+  results.forEach((r, i) => {
+    calls.push({
+      sequence: i + 1,
+      tool: "search",
+      parameters: { query: r.query },
+      summary: `${r.results.length} results`,
+      engine: "tool-adapter",
+      duration_seconds: Number(r.seconds.toFixed(3)),
+    });
+    if (r.results.length === 0) {
+      unverified.push(r.hypothesis);
+      return;
+    }
+    const bucket = deriveConfidenceBucket(distinctHosts(r.results));
+    const top = r.results[0] as ToolResult;
+    evidence.push({
+      hypothesis: r.hypothesis,
+      evidence_summary: top.title || top.snippet,
+      confidence_bucket: bucket,
+      source_anchor: top.url,
+      date: new Date().toISOString().slice(0, 10),
+    });
+  });
+
+  const anyResults = results.some((r) => r.results.length > 0);
+  const gaps = [
+    "cross_validation not assessable without content reading",
+    "confidence_bucket is a structural proxy (distinct-host count), not content judgment",
+  ];
+  if (!anyResults) gaps.push("no retrieval results for any hypothesis");
+
+  return {
+    evidence_matrix: evidence,
+    unverified_hypotheses: unverified,
+    tool_calls: calls,
+    cross_validation: {
+      has_multiple_sources: evidence.length > 1,
+      has_discrepancy_over_20pct: false,
+      discrepancy_list: [],
+      discrepancy_root_cause: "",
+      consensus_range: "",
+    },
+    verification_complete: anyResults,
+    evidence_quality: anyResults ? "Sufficient" : "Insufficient",
+    data_gap_list: gaps,
+    step_execution_log: ["node_stage_3"],
+  };
 }
 
 const S6Out = z.object({
@@ -132,17 +248,14 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
     loader,
   }));
 
-  // Pure TS — no LLM call. Builds evidence_matrix from required/negative search paths.
-  const nodeStage3 = withLog("node_stage_3", (state) => ({
-    evidence_matrix: state.hypotheses.map((h, i) => ({
-      hypothesis: h,
-      evidence_summary: `synthesized from search path ${state.search_paths_required[i % Math.max(1, state.search_paths_required.length)] ?? "default"}`,
-      confidence_bucket: "high" as const,
-      source_anchor: `src-${i}`,
-      date: new Date().toISOString().slice(0, 10),
-    })),
-    verification_complete: true,
-  }));
+  const nodeStage3 = withLog("node_stage_3", (state) =>
+    runStage3(
+      state,
+      deps.toolAdapter ?? {
+        search: async () => [],
+      }
+    )
+  );
 
   const nodeStage4 = withLog("node_stage_4", makeStageNode({
     stage: "stage-4",
@@ -291,13 +404,21 @@ function runQualityScore(state: GraphState): NonNullable<GraphState["quality_sco
 
 export async function reason(
   question: string,
-  opts?: { threadId?: string; dbPath?: string; invoker?: LlmInvoker; mode?: GraphState["primary_mode"] }
+  opts?: {
+    threadId?: string;
+    dbPath?: string;
+    invoker?: LlmInvoker;
+    toolAdapter?: ToolAdapter;
+    mode?: GraphState["primary_mode"];
+  }
 ): Promise<{ threadId: string; state: GraphState }> {
   const threadId = opts?.threadId ?? `cr-${Date.now()}`;
   const invoker = opts?.invoker;
   if (!invoker) throw new Error("reason(): invoker is required");
   const saver = SqliteSaver.fromConnString(opts?.dbPath ?? DEFAULT_DB_PATH);
-  const graph = buildReasoningGraph({ invoker }).compile({ checkpointer: saver });
+  const graph = buildReasoningGraph({ invoker, toolAdapter: opts?.toolAdapter }).compile({
+    checkpointer: saver,
+  });
   const input = GraphStateSchema.parse({
     session_id: threadId,
     raw_question: question,
@@ -310,12 +431,14 @@ export async function reason(
 export async function resume(
   threadId: string,
   input?: string,
-  opts?: { dbPath?: string; invoker?: LlmInvoker }
+  opts?: { dbPath?: string; invoker?: LlmInvoker; toolAdapter?: ToolAdapter }
 ): Promise<{ threadId: string; state: GraphState }> {
   const invoker = opts?.invoker;
   if (!invoker) throw new Error("resume(): invoker is required");
   const saver = SqliteSaver.fromConnString(opts?.dbPath ?? DEFAULT_DB_PATH);
-  const graph = buildReasoningGraph({ invoker }).compile({ checkpointer: saver });
+  const graph = buildReasoningGraph({ invoker, toolAdapter: opts?.toolAdapter }).compile({
+    checkpointer: saver,
+  });
   // Post-crash continuation re-enters with a `null` payload so the checkpoint is
   // the sole source of truth: an empty string would be falsy (the Command
   // rejects it) and a fresh object would replay `node_init` and clobber state.

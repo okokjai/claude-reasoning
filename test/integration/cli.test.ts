@@ -11,6 +11,7 @@ import { tempDb } from "../mocks/temp-db.js";
 const CLI_PATH = resolve("src/cli.ts");
 const INVOKER_MODULE = resolve("test/fixtures/offline-invoker.mjs");
 const FIXTURES_FILE = resolve("test/fixtures/happy-path.tsv");
+const TOOL_MODULE = resolve("test/fixtures/offline-tool-adapter.mjs");
 
 function runCli(args: string[], envOverrides: Record<string, string> = {}) {
   const tsxCli = resolve("node_modules/tsx/dist/cli.mjs");
@@ -20,6 +21,7 @@ function runCli(args: string[], envOverrides: Record<string, string> = {}) {
       ...process.env,
       CR_REASONING_INVOKER_MODULE: INVOKER_MODULE,
       CR_REASONING_FIXTURES: FIXTURES_FILE,
+      CR_REASONING_TOOL_MODULE: TOOL_MODULE,
       ...envOverrides,
     },
   });

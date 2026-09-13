@@ -4,6 +4,7 @@
 //   claude-reasoning resume <thread_id> --input "<t>" [--json]
 import { reason, resume } from "./kernel/executor.js";
 import { resolveInvoker, resolveDbPath } from "./adapters/invoker-resolver.js";
+import { resolveToolAdapter } from "./adapters/tool-adapter-resolver.js";
 import type { PrimaryMode } from "./kernel/types.js";
 
 const MODES: readonly PrimaryMode[] = ["decision", "design", "diagnostic", "innovation", "optimization"];
@@ -65,6 +66,7 @@ Options:
     fail(`unknown command ${JSON.stringify(command)}; expected "run", "resume", or "--help"`);
   }
   const invoker = await resolveInvoker(stringArg(args, "config"));
+  const toolAdapter = await resolveToolAdapter();
   const dbPath = resolveDbPath();
 
   if (command === "run") {
@@ -77,6 +79,7 @@ Options:
     const { threadId, state } = await reason(question, {
       dbPath,
       invoker,
+      toolAdapter,
       threadId: stringArg(args, "threadId"),
       mode: mode as PrimaryMode,
     });
@@ -93,7 +96,7 @@ Options:
   const threadId = stringArg(args, "positional");
   if (!threadId) fail("usage: claude-reasoning resume <thread_id> --input \"<text>\" [--json]");
   const input = stringArg(args, "input");
-  const { state } = await resume(threadId, input, { dbPath, invoker });
+  const { state } = await resume(threadId, input, { dbPath, invoker, toolAdapter });
   if (args.json) {
     console.log(JSON.stringify({ threadId, state }));
   } else {
