@@ -77,6 +77,23 @@ const EvidenceMatrixEntry = z.object({
   date: z.string(),
 });
 
+const ToolCallEntry = z.object({
+  sequence: z.number().int(),
+  tool: z.string(),
+  parameters: z.record(z.string(), z.unknown()),
+  summary: z.string(),
+  engine: z.string(),
+  duration_seconds: z.number(),
+});
+
+const CrossValidation = z.object({
+  has_multiple_sources: z.boolean(),
+  has_discrepancy_over_20pct: z.boolean(),
+  discrepancy_list: z.array(z.string()),
+  discrepancy_root_cause: z.string(),
+  consensus_range: z.string(),
+});
+
 const BrainstormPacket = z.object({
   pain_statement: z.string(),
   original_frame: z.string(),
@@ -147,6 +164,9 @@ export const GraphStateSchema = z.object({
   evidence_quality: EvidenceQuality.optional(),
   verification_complete: z.boolean().optional(),
   browse_verified: z.boolean().optional(),
+  unverified_hypotheses: z.array(z.string()).default([]),
+  tool_calls: z.array(ToolCallEntry).default([]),
+  cross_validation: CrossValidation.optional(),
   contradictory_evidence_ref: z.array(SourceTierEntry).default([]),
 
   // 4. Stage 5 critique write-back
@@ -195,6 +215,8 @@ export type EvidenceMatrixEntry = z.infer<typeof EvidenceMatrixEntry>;
 export type BrainstormPacket = z.infer<typeof BrainstormPacket>;
 export type ConclusionPoint = z.infer<typeof ConclusionPoint>;
 export type HallucinationResult = z.infer<typeof HallucinationResult>;
+export type ToolCallEntry = z.infer<typeof ToolCallEntry>;
+export type CrossValidation = z.infer<typeof CrossValidation>;
 
 export type GraphState = z.infer<typeof GraphStateSchema>;
 
@@ -255,6 +277,9 @@ export const GraphStateChannels = Annotation.Root({
   verification_complete: scalar<boolean | undefined>(),
   browse_verified: scalar<boolean | undefined>(),
   contradictory_evidence_ref: replaceList<z.infer<typeof SourceTierEntry>>(),
+  unverified_hypotheses: replaceList<string>(),
+  tool_calls: replaceList<z.infer<typeof ToolCallEntry>>(),
+  cross_validation: scalar<z.infer<typeof CrossValidation> | undefined>(),
 
   // 4. Stage 5 critique write-back
   needs_revision: scalar<boolean>(),
