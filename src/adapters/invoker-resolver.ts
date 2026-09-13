@@ -50,7 +50,7 @@ export async function resolveInvoker(configPath?: string): Promise<LlmInvoker> {
       "Invoker needs a baseUrl: set CR_REASONING_BASE_URL (or ANTHROPIC_BASE_URL / OPENAI_BASE_URL), or create ./config.yaml"
     );
   }
-  const baseUrlFromAnthropic = env.CR_REASONING_BASE_URL === undefined && env.OPENAI_BASE_URL === undefined && env.ANTHROPIC_BASE_URL !== undefined;
+  const baseUrlFromAnthropic = env.CR_REASONING_BASE_URL === undefined && env.ANTHROPIC_BASE_URL !== undefined;
   const httpConfig: HttpInvokerConfig = {
     baseUrl,
     protocol: baseUrlFromAnthropic ? "anthropic" : "openai",
