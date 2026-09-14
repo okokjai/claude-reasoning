@@ -30,4 +30,13 @@ describe("dist freshness", () => {
     // Presence-only smoke: the two assertions above are the real gate.
     expect(existsSync(join(DIST, "index.js"))).toBe(true);
   });
+
+  it.skipIf(!hasDist)("dist/mcp.js carries the same version as package.json", () => {
+    // Post-v2.2.1: src/mcp.ts McpServer.version was hardcoded "2.2.0" while
+    // package.json had already been bumped. Drift must not happen again.
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+    const mcpSrc = readFileSync(join(DIST, "mcp.js"), "utf8");
+    const match = mcpSrc.match(/version:\s*"([^"]+)"/);
+    expect(match?.[1]).toBe(pkg.version);
+  });
 });
