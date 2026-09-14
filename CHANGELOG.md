@@ -5,6 +5,40 @@ All notable changes to `claude-reasoning` (`cr-reasoning`) will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-09-15
+
+Prompt-to-schema alignment: C0 contract (`prompts/contracts/C0.md`) instructs the model to emit `clarification_needed` as a question list, while the schema previously required a strict boolean — causing every real-model run to fail validation, trigger `fallbackValue: { clarification_needed: true }`, and halt at C0 via `interrupt()`.
+
+### Fixed
+- **C0 `clarification_needed` schema union (`src/kernel/executor.ts`)**: `outSchema.clarification_needed` now accepts `z.union([z.boolean(), z.array(z.string()).transform(a => a.length > 0)])`. A non-empty list of questions maps to `true` (triggering HITL clarification routing), an empty list maps to `false` (proceeding to Stage 0), and raw boolean values remain fully supported. Byte-for-byte SHA-256 prompt immutability is preserved.
+
+### Documentation
+- **MCP timeout guideline (`README.md`)**: documented that a full reasoning run traverses 8–10 LLM stages plus retrieval, typically requiring 60–120+ seconds, which exceeds the default 60s timeout of strict MCP clients. Clients must configure a minimum 180s request timeout.
+
+### Added
+- `test/integration/c0-array-contract.test.ts` — 2 tests verifying that array-shaped `clarification_needed` correctly triggers HITL pause when non-empty and continues to Stage 0 when empty.
+
+### Breaking Changes
+None.
+
+## [2.2.2] - 2026-09-15
+
+Empty LLM replies now fail loud at the transport boundary instead of surfacing as a cryptic `strictParse failed: SyntaxError: Unexpected end of JSON input` two layers up (observed in a v2.0.0-era run: an Anthropic thinking-model completion returned an empty `text` block and the C0 stage burned its repair retry on garbage).
+
+### Fixed
+- **Empty-reply fail loud (`src/adapters/http-invoker.ts` `extractReply`)**: an empty or whitespace-only reply (missing `choices`, empty `text` block, truncated completion) previously returned `""` silently. It now throws `SchemaViolationError` immediately, so the existing node-factory single repair retry handles it and the failure message names the transport, not the parser. Replies whose `content[]` starts with non-text blocks (e.g. `type:"thinking"`) now resolve to the first `text` block instead of `""`.
+- **Forced JSON output (`src/adapters/http-invoker.ts` `buildRequest`)**: OpenAI-protocol requests now send `response_format: { type: "json_object" }` by default; the existing 400-retry path drops it for endpoints that reject the parameter. Response shapes are validated via Zod schemas (`AnthropicReply` / `OpenAIReply`) instead of inline casts.
+
+### Added
+- `test/unit/http-invoker-protocol.test.ts` — 5 new assertions: first-text-block extraction past thinking blocks, and empty-reply throw on empty `text` block / missing `choices` / whitespace-only content; plus the `json_object` default pin. The prior `returns empty string on unknown shape` expectation (which pinned the bug) is replaced by the fail-loud contract.
+
+### Investigation notes (no code change)
+- **Repair-retry context (`src/kernel/node-factory.ts`)**: `raw-llm.log` (v2.0.0-era, 2026-09-12) suggested the repair turn dropped the original `[STAGE:c0]` user message. The log writer records only the *last* user message per call; at current HEAD the repair `invoke` includes the full original messages. Log observation, not a bug.
+- **"CLI hang" without env vars**: `resolveInvoker` correctly resolves credentials from `~/.claude/claude-reasoning/config.yaml` and the CLI legitimately blocks on real LLM generation; an interrupted foreground run (kill after N seconds) is expected behavior, not a hang. With-env control (`http://127.0.0.1:1`) fails fast with `fetch failed` as designed.
+
+### Breaking Changes
+None. (`extractReply` was silently returning `""`; the new throw is strictly a contract tightening at a previously undefined boundary.)
+
 ## [2.2.1] - 2026-09-14
 
 Engine-mode MCP unblocked: `tools/list` was broadcasting an empty `inputSchema` (so clients sent `{}` and got `-32602 Required at question`), and the CLI 401'd whenever `npx claude-reasoning` ran from a cwd without a local `config.yaml`.

@@ -1,6 +1,7 @@
 // src/adapters/http-invoker.ts
+import { z } from "zod";
 import type { LlmInvoker } from "../kernel/invoker.js";
-
+import { SchemaViolationError } from "../kernel/invoker.js";
 export interface HttpInvokerConfig {
   baseUrl: string;
   apiKey?: string;
@@ -40,17 +41,36 @@ export function buildRequest(
   for (const u of users) apiMessages.push({ role: "user", content: u });
   const payload: Record<string, unknown> = { model: config.model, messages: apiMessages };
   if (config.temperature !== undefined) payload.temperature = config.temperature;
-  if (config.responseFormat === "json_object") payload.response_format = { type: "json_object" };
+  // Force JSON output: structured stages parse strict JSON; endpoints that reject
+  // response_format fall back below via the existing 400-retry path.
+  if (config.responseFormat === undefined) payload.response_format = { type: "json_object" };
   return { url: `${config.baseUrl}/chat/completions`, init: { method: "POST", headers, body: JSON.stringify(payload) } };
 }
 
+const AnthropicReply = z.object({
+  content: z.array(z.object({ text: z.string().optional() }).passthrough()).min(1).optional(),
+});
+const OpenAIReply = z.object({
+  choices: z.array(z.object({ message: z.object({ content: z.string().optional() }).passthrough() })).min(1).optional(),
+});
+
 export function extractReply(data: unknown, protocol: "anthropic" | "openai"): string {
+  let reply = "";
   if (protocol === "anthropic") {
-    const blocks = (data as { content?: { text?: string }[] })?.content;
-    return blocks?.[0]?.text ?? "";
+    // content[] may carry non-text blocks (e.g. type:"thinking"); take the first text block.
+    const parsed = AnthropicReply.safeParse(data);
+    const textBlock = parsed.success ? parsed.data.content?.find((b) => typeof b.text === "string") : undefined;
+    reply = textBlock?.text ?? "";
+  } else {
+    const parsed = OpenAIReply.safeParse(data);
+    reply = parsed.success ? parsed.data.choices?.[0]?.message?.content ?? "" : "";
   }
-  const choices = (data as { choices?: { message?: { content?: string } }[] })?.choices;
-  return choices?.[0]?.message?.content ?? "";
+  // Fail loud: an empty/whitespace reply (truncated or blocked completion) must not
+  // silently become a strictParse "Unexpected end of JSON input" two layers up.
+  if (reply.trim() === "") {
+    throw new SchemaViolationError("HttpInvoker: empty reply from LLM endpoint", "");
+  }
+  return reply;
 }
 
 /** Production adapter: an OpenAI-compatible or Anthropic-protocol endpoint. Offline tests never construct this. */

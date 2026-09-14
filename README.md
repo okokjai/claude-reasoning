@@ -7,12 +7,12 @@
 **Skeleton vs Brain · SQLite Checkpointing · Deterministic P0 Gates · Bounded Backtracking · Dual MCP + CLI**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.2.1-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-2.2.3-blue.svg)](package.json)
 [![NPM Package](https://img.shields.io/badge/NPM-claude--reasoning-red.svg)](https://www.npmjs.com/package/claude-reasoning)
 [![Runtime](https://img.shields.io/badge/Runtime-Node.js%20%7C%20TypeScript-3178C6.svg?logo=typescript)](tsconfig.json)
 [![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraphJS%201.4-FF6F00.svg)](https://langchain-ai.github.io/langgraphjs/)
 [![MCP](https://img.shields.io/badge/MCP-Stdio%20Ready-orange.svg)](src/mcp.ts)
-[![Tests](https://img.shields.io/badge/Tests-100%2F100%20Passing-brightgreen.svg)](test/)
+[![Tests](https://img.shields.io/badge/Tests-106%2F106%20Passing-brightgreen.svg)](test/)
 
 </div>
 
@@ -20,10 +20,10 @@
 
 ## ⚡ What This Is (and Is Not)
 
-`claude-reasoning` (v2.2.1) is a **production-grade structured reasoning engine**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality assessment layer — orchestrating problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → anti-hallucination gate → conclusion.
+`claude-reasoning` (v2.2.3) is a **production-grade structured reasoning engine**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality assessment layer — orchestrating problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → anti-hallucination gate → conclusion.
 
 In **v1.2.0**, reasoning was simulated by the LLM reading Markdown templates in its conversation context.  
-In **v2.2.1**, the pipeline is executed by a **TypeScript host engine (LangGraphJS StateGraph)** with **SQLite persistent checkpoints**, **deterministic programmatic verification gates**, and **hard-bounded defect backtracking**.
+In **v2.2.3**, the pipeline is executed by a **TypeScript host engine (LangGraphJS StateGraph)** with **SQLite persistent checkpoints**, **deterministic programmatic verification gates**, and **hard-bounded defect backtracking**.
 
 **What this is not:**
 - It is **not** a loose multi-agent discussion or flat expert panel.
@@ -33,9 +33,9 @@ In **v2.2.1**, the pipeline is executed by a **TypeScript host engine (LangGraph
 
 ---
 
-## 💥 What Makes v2.2.1 Different from v1.2.0
+## 💥 What Makes v2.2.3 Different from v1.2.0
 
-| Dimension | v1.2.0 (Markdown Skill) | v2.2.1 (TypeScript + LangGraphJS Engine) |
+| Dimension | v1.2.0 (Markdown Skill) | v2.2.3 (TypeScript + LangGraphJS Engine) |
 |---|---|---|
 | **Architecture** | Prompt-driven DAG simulation in LLM context | **Skeleton vs Brain split**: TypeScript host runs graph; LLM is a passive invoker |
 | **State Persistence** | Transient conversation memory (lost across turns) | **SQLite Checkpointer (`SqliteSaver`)**: auto-saved per super-step, crash-resilient |
@@ -44,7 +44,7 @@ In **v2.2.1**, the pipeline is executed by a **TypeScript host engine (LangGraph
 | **Backtracking Safety** | Unbounded (vulnerable to Stage 2 $\leftrightarrow$ 5 infinite loops) | **Single-Writer Routing Bounds**: `BACKTRACK_MAX <= 3`, `STAGE_0_REVISIONS_MAX <= 1` |
 | **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `claude-reasoning resume` / MCP |
 | **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API (`claude-reasoning`) + CLI (`claude-reasoning`) + MCP Server |
-| **Test Verification** | Manual review only (no automated test suite) | **22 test files, 100/100 automated tests (100% pass rate, tsc clean)** |
+| **Test Verification** | Manual review only (no automated test suite) | **23 test files, 106/106 automated tests (100% pass rate, tsc clean)** |
 
 ---
 
@@ -113,7 +113,7 @@ Auto-routed in `A0` according to problem characteristics (or explicitly overridd
 
 ## 🛡️ Deterministic Gates & Precision Audit
 
-v2.2.1 replaces prompt honor-systems with hard code verifications in `src/kernel/gates.ts`:
+v2.2.3 replaces prompt honor-systems with hard code verifications in `src/kernel/gates.ts`:
 
 ### 1. P0 Anti-Hallucination Gate (`node_stage_5_5`)
 - **Entity Grounding**: Every named entity in the conclusion must trace back to the query or verified evidence in `evidence_matrix`.
@@ -225,6 +225,8 @@ Registered tools available in Claude Desktop:
 - `claude_reason` / `cr_reason`: triggers full graph reasoning (`{ question: string, mode?: string }`).
 - `claude_resume` / `cr_resume`: resumes paused thread with clarification answers (`{ threadId: string, input?: string }`).
 
+**Timeout**: a full reasoning run (`claude_reason`) executes the complete DAG — 8–10 sequential LLM calls plus retrieval — and typically takes **60–120+ seconds**. MCP clients defaulting to a 60s request timeout will abort mid-run; configure your client to at least **180s** (Claude Desktop: `"timeout": 180000` in the server env block). Every stage boundary is checkpointed to SQLite, so a `claude_resume`-style re-entry can pick up a paused thread, but an aborted tool call cannot be continued automatically.
+
 ### 3. Programmatic TypeScript API
 
 ```typescript
@@ -246,9 +248,8 @@ console.log("Quality Score:", state.quality_score?.total);
 
 Every commit and release satisfies strict verification invariants:
 
-```bash
+npm test             # npx vitest run -> 23 passed (23 Files), 106 passed (106 Tests)
 npm run typecheck    # npx tsc --noEmit -> Exit code 0
-npm test             # npx vitest run -> 20 passed (20 Files), 91 passed (91 Tests)
 ```
 
 - **Zero-Migration Verification**: All 22 prompt assets under `prompts/` are verified byte-for-byte identical to v1.2.0 via SHA-256 (`test/unit/prompt-assets.test.ts`).
@@ -285,9 +286,9 @@ claude-reasoning/
 ├── docs/superpowers/                  # System Specifications & SDD Audit Ledgers
 │   ├── specs/                         # Architecture specifications & invariant alignment reports
 │   └── plans/                         # Step-by-step implementation & remediation plans
-├── test/                              # Comprehensive Test Suite (22 files, 100/100 passing)
-│   ├── unit/                          # 12 Unit test suites (gates, protocol, reducer dedup, etc.)
-│   ├── integration/                   # 8 Integration suites (topology, HITL, crash resume, etc.)
+├── test/                              # Comprehensive Test Suite (23 files, 106/106 passing)
+│   ├── unit/                          # 14 Unit test suites (gates, protocol, reducer dedup, etc.)
+│   ├── integration/                   # 9 Integration suites (topology, HITL, crash resume, C0 contract, etc.)
 │   ├── mocks/                         # Deterministic mock invokers & fixtures (zero network)
 │   └── fixtures/                      # Offline replay scripts & test fixtures
 ├── SKILL.md                           # Dual-Mode Router (Engine MCP/CLI ↔ Native In-Session)

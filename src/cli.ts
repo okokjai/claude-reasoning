@@ -47,7 +47,7 @@ async function main() {
   const args = parseArgs(rest);
 
   if (command === "--help" || command === "-h" || command === "help") {
-    console.log(`claude-reasoning CLI (v2.2.1)
+    console.log(`claude-reasoning CLI (v2.2.3)
 
 Usage:
   claude-reasoning run "<question>" [--mode m] [--json] [--config config.yaml]

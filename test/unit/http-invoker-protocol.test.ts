@@ -28,6 +28,11 @@ describe("buildRequest", () => {
     const { url } = buildRequest({ baseUrl: "https://x/v1", model: "m" }, msgs);
     expect(url).toBe("https://x/v1/chat/completions");
   });
+  it("forces json_object response format for OpenAI by default", () => {
+    const { init } = buildRequest({ baseUrl: "https://api.openai.com/v1", protocol: "openai", model: "m", apiKey: "k" }, msgs);
+    const body = JSON.parse(init.body as string);
+    expect(body.response_format).toEqual({ type: "json_object" });
+  });
 });
 
 describe("extractReply", () => {
@@ -37,8 +42,19 @@ describe("extractReply", () => {
   it("reads OpenAI choices[0].message.content", () => {
     expect(extractReply({ choices: [{ message: { content: "B" } }] }, "openai")).toBe("B");
   });
-  it("returns empty string on unknown shape", () => {
-    expect(extractReply({ nope: true }, "openai")).toBe("");
+  it("reads first text block when thinking blocks precede it", () => {
+    expect(
+      extractReply({ content: [{ type: "thinking", thinking: "hmm" }, { type: "text", text: "A" }] }, "anthropic")
+    ).toBe("A");
+  });
+  it("THROWS on empty reply (empty text block)", () => {
+    expect(() => extractReply({ content: [{ type: "text", text: "" }] }, "anthropic")).toThrow(/empty reply/);
+  });
+  it("THROWS on empty reply (missing choices)", () => {
+    expect(() => extractReply({ nope: true }, "openai")).toThrow(/empty reply/);
+  });
+  it("THROWS on whitespace-only reply", () => {
+    expect(() => extractReply({ choices: [{ message: { content: "  \n " } }] }, "openai")).toThrow(/empty reply/);
   });
 });
 

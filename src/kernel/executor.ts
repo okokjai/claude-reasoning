@@ -202,7 +202,13 @@ export function buildReasoningGraph(deps: ExecutorDeps) {
       outSchema: z.object({
         immutable_constraints: z.array(z.string()).default([]),
         assumptions: z.array(z.string()).default([]),
-        clarification_needed: z.boolean().default(false),
+        // The zero-migration C0 prompt (prompts/contracts/C0.md) instructs the
+        // model to emit clarification_needed as a LIST of questions. Accept both
+        // shapes: a non-empty list means "clarification needed", an empty list
+        // or explicit false/true behaves as the boolean the router expects.
+        clarification_needed: z
+          .union([z.boolean(), z.array(z.string()).transform((a) => a.length > 0)])
+          .default(false),
       }),
       fallbackValue: { immutable_constraints: [], assumptions: [], clarification_needed: true },
       invoker,
