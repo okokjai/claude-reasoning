@@ -5,6 +5,22 @@ All notable changes to `claude-reasoning` (`cr-reasoning`) will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-09-14
+
+Engine-mode MCP unblocked: `tools/list` was broadcasting an empty `inputSchema` (so clients sent `{}` and got `-32602 Required at question`), and the CLI 401'd whenever `npx claude-reasoning` ran from a cwd without a local `config.yaml`.
+
+### Fixed
+- **MCP `inputSchema` broadcast (`src/mcp.ts`)**: `unwrapArgs` returned `z.preprocess(...)` (a `ZodEffects`), which `McpServer`'s `normalizeObjectSchema()` cannot introspect. `tools/list` therefore fell back to `EMPTY_OBJECT_JSON_SCHEMA` — `properties:{}` — while the runtime still required `question`. Every real call from a strict client failed with `-32602`. `unwrapArgs` now returns a `ZodObject` whose `parse`/`parseAsync`/`safeParse`/`safeParseAsync`/`spa` are overridden on the instance to unwrap `{arguments:{...}}` before delegating to the prototype. `_def.typeName === "ZodObject"` and `.shape` are preserved, so the advertised schema is correct and the double-wrap tolerance is retained.
+- **CLI 401 from non-repo cwd (`src/adapters/invoker-resolver.ts`)**: the implicit config default was `./config.yaml` only; from any other directory `apiKey` resolved to `undefined` and the remote endpoint rejected with `HttpInvoker: 401 Unauthorized`. The implicit lookup now per-field merges `./config.yaml` over `~/.claude/claude-reasoning/config.yaml`, and treats empty strings (`""`) as unset at both file AND env layer — so a repo-shipped placeholder (`baseUrl: ""`) or a stray `CR_REASONING_API_KEY=` no longer shadows real credentials. Explicit `--config` / `CR_REASONING_CONFIG` still fails loud on a missing path (no silent fallback).
+
+### Added
+- `test/unit/mcp-schema-broadcast.test.ts` — pins `tools/list` to expose `question`/`mode`/`threadId`/`input` properties AND keeps the `{arguments:{...}}` double-wrap tolerance.
+- `test/unit/invoker-resolver-fallback.test.ts` — pins the user-level config fallback, the cwd-wins ordering, the explicit-path-fails-loud contract, AND the empty-string-as-unset behavior at both file and env layers.
+- `test/unit/dist-freshness.test.ts` — new assertion: `dist/mcp.js` must not regress to `z.preprocess` inside `unwrapArgs`.
+
+### Breaking Changes
+None.
+
 ## [2.2.0] - 2026-09-13
 
 Stage 3 evidence integrity, protocol selection, and gate enforcement.

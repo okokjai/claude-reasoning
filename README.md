@@ -7,7 +7,7 @@
 **Skeleton vs Brain · SQLite Checkpointing · Deterministic P0 Gates · Bounded Backtracking · Dual MCP + CLI**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.2.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-2.2.1-blue.svg)](package.json)
 [![NPM Package](https://img.shields.io/badge/NPM-claude--reasoning-red.svg)](https://www.npmjs.com/package/claude-reasoning)
 [![Runtime](https://img.shields.io/badge/Runtime-Node.js%20%7C%20TypeScript-3178C6.svg?logo=typescript)](tsconfig.json)
 [![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraphJS%201.4-FF6F00.svg)](https://langchain-ai.github.io/langgraphjs/)
@@ -44,7 +44,7 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 | **Backtracking Safety** | Unbounded (vulnerable to Stage 2 $\leftrightarrow$ 5 infinite loops) | **Single-Writer Routing Bounds**: `BACKTRACK_MAX <= 3`, `STAGE_0_REVISIONS_MAX <= 1` |
 | **Clarification (HITL)** | Model ad-hoc asks user; state resets on reply | **LangGraph `interrupt()`**: pauses graph, resumes via `claude-reasoning resume` / MCP |
 | **Interface** | Claude `/skill` slash command only | **Universal Triple Entry**: npm Library API (`claude-reasoning`) + CLI (`claude-reasoning`) + MCP Server |
-| **Test Verification** | Manual review only (no automated test suite) | **20 test files, 91/91 automated tests (100% pass rate, tsc clean)** |
+| **Test Verification** | Manual review only (no automated test suite) | **22 test files, 99/99 automated tests (100% pass rate, tsc clean)** |
 
 ---
 
@@ -278,7 +278,7 @@ claude-reasoning/
 ├── docs/superpowers/                  # System Specifications & SDD Audit Ledgers
 │   ├── specs/                         # Architecture specifications & invariant alignment reports
 │   └── plans/                         # Step-by-step implementation & remediation plans
-├── test/                              # Comprehensive Test Suite (20 files, 91/91 passing)
+├── test/                              # Comprehensive Test Suite (22 files, 99/99 passing)
 │   ├── unit/                          # 12 Unit test suites (gates, protocol, reducer dedup, etc.)
 │   ├── integration/                   # 8 Integration suites (topology, HITL, crash resume, etc.)
 │   ├── mocks/                         # Deterministic mock invokers & fixtures (zero network)

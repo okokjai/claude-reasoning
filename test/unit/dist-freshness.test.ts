@@ -12,6 +12,16 @@ describe("dist freshness", () => {
     expect(readFileSync(join(DIST, "mcp.js"), "utf8")).toContain("unwrapArgs");
   });
 
+  it.skipIf(!hasDist)("dist/mcp.js does NOT regress to z.preprocess for unwrapArgs", () => {
+    // The preprocess→ZodEffects path silently broadcast properties:{} on
+    // tools/list. dist must reflect the ZodObject-with-overridden-parse fix.
+    const src = readFileSync(join(DIST, "mcp.js"), "utf8");
+    const idx = src.indexOf("function unwrapArgs");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const body = src.slice(idx, idx + 4000);
+    expect(body).not.toContain("z.preprocess");
+  });
+
   it.skipIf(!hasDist)("dist/cli.js contains the --help branch", () => {
     expect(readFileSync(join(DIST, "cli.js"), "utf8")).toContain("help");
   });

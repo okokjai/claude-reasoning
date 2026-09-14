@@ -1,8 +1,10 @@
 # claude-reasoning invoker config.
 # Resolution order: --config <path> flag → CR_REASONING_CONFIG env → ./config.yaml
 # Env overrides:    CR_REASONING_BASE_URL / CR_REASONING_API_KEY / CR_REASONING_MODEL
+# Implicit fallback: ~/.claude/claude-reasoning/config.yaml (when ./config.yaml absent)
 #
 # Any OpenAI-compatible /chat/completions endpoint works.
-baseUrl: "https://api.openai.com/v1"
+# Leave fields empty to defer to env or user-level config.
+baseUrl: ""
 apiKey: ""
-model: "gpt-4o-mini"
+model: ""

@@ -17,25 +17,50 @@ const MODES = ["decision", "design", "diagnostic", "innovation", "optimization"]
 
 // Some upstream models / protocol proxies double-wrap tool arguments as
 // `{ arguments: { ...real } }` instead of `{ ...real }`. A bare Zod shape
-// would reject that with -32602 before the handler runs, so every tool
-// schema pre-processes its input: a payload consisting of a single
-// `arguments` object key is flattened one level.
-function unwrapArgs<T extends z.ZodRawShape>(shape: T) {
-  return z.preprocess((val) => {
-    if (
-      val !== null &&
-      typeof val === "object" &&
-      !Array.isArray(val) &&
-      Object.keys(val).length === 1 &&
-      "arguments" in val
-    ) {
-      const inner = (val as Record<string, unknown>).arguments;
-      if (inner !== null && typeof inner === "object" && !Array.isArray(inner)) {
-        return inner;
-      }
-    }
-    return val;
-  }, z.object(shape));
+// would reject that with -32602 before the handler runs, so each tool's
+// inputSchema unwraps a payload consisting of a single `arguments` object
+// key one level before validating.
+//
+// Implementation note: this MUST stay a ZodObject (not z.preprocess →
+// ZodEffects). The MCP SDK's ListTools handler feeds tool.inputSchema
+// through normalizeObjectSchema(), which returns undefined for non-object
+// schemas and falls back to EMPTY_OBJECT_JSON_SCHEMA — silently advertising
+// `properties:{}` to clients and producing -32602 "Required at question"
+// on every real call. Overriding the parse methods on the ZodObject keeps
+// `_def.typeName === "ZodObject"`, so `.shape` survives normalization and
+// the broadcast schema is correct.
+function unwrapArgs<T extends z.ZodRawShape>(shape: T): z.ZodObject<T> {
+  const inner = z.object(shape);
+  const unwrap = (data: unknown): unknown =>
+    data !== null &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    Object.keys(data).length === 1 &&
+    "arguments" in data &&
+    (data as Record<string, unknown>).arguments !== null &&
+    typeof (data as Record<string, unknown>).arguments === "object" &&
+    !Array.isArray((data as Record<string, unknown>).arguments)
+      ? (data as Record<string, unknown>).arguments
+      : data;
+
+  // Dispatch through the prototype methods so `this` still refers to `inner`
+  // (so overridden .parse doesn't recurse) while unwrapping the input first.
+  type ParseParams = Parameters<z.ZodObject<T>["parse"]>[1];
+  const proto = z.ZodObject.prototype;
+  inner.parse = function (this: z.ZodObject<T>, data: unknown, params?: ParseParams) {
+    return proto.parse.call(this, unwrap(data), params);
+  } as typeof inner.parse;
+  inner.parseAsync = function (this: z.ZodObject<T>, data: unknown, params?: ParseParams) {
+    return proto.parseAsync.call(this, unwrap(data), params);
+  } as typeof inner.parseAsync;
+  inner.safeParse = function (this: z.ZodObject<T>, data: unknown, params?: ParseParams) {
+    return proto.safeParse.call(this, unwrap(data), params);
+  } as typeof inner.safeParse;
+  inner.safeParseAsync = function (this: z.ZodObject<T>, data: unknown, params?: ParseParams) {
+    return proto.safeParseAsync.call(this, unwrap(data), params);
+  } as typeof inner.safeParseAsync;
+  inner.spa = inner.safeParseAsync;
+  return inner;
 }
 
 export async function startMcpServer(): Promise<void> {
