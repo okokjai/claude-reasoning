@@ -20,10 +20,10 @@
 
 ## ⚡ What This Is (and Is Not)
 
-`claude-reasoning` (v2.0.0) is a **production-grade structured reasoning engine**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality assessment layer — orchestrating problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → anti-hallucination gate → conclusion.
+`claude-reasoning` (v2.2.1) is a **production-grade structured reasoning engine**: 8 contracts, 8 stages, 5 reasoning modes, and 1 quality assessment layer — orchestrating problem classification → framing → decomposition → hypothesis → verification → synthesis → critique → anti-hallucination gate → conclusion.
 
 In **v1.2.0**, reasoning was simulated by the LLM reading Markdown templates in its conversation context.  
-In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraphJS StateGraph)** with **SQLite persistent checkpoints**, **deterministic programmatic verification gates**, and **hard-bounded defect backtracking**.
+In **v2.2.1**, the pipeline is executed by a **TypeScript host engine (LangGraphJS StateGraph)** with **SQLite persistent checkpoints**, **deterministic programmatic verification gates**, and **hard-bounded defect backtracking**.
 
 **What this is not:**
 - It is **not** a loose multi-agent discussion or flat expert panel.
@@ -33,9 +33,9 @@ In **v2.0.0**, the pipeline is executed by a **TypeScript host engine (LangGraph
 
 ---
 
-## 💥 What Makes v2.0.0 Different from v1.2.0
+## 💥 What Makes v2.2.1 Different from v1.2.0
 
-| Dimension | v1.2.0 (Markdown Skill) | v2.0.0 (TypeScript + LangGraphJS Engine) |
+| Dimension | v1.2.0 (Markdown Skill) | v2.2.1 (TypeScript + LangGraphJS Engine) |
 |---|---|---|
 | **Architecture** | Prompt-driven DAG simulation in LLM context | **Skeleton vs Brain split**: TypeScript host runs graph; LLM is a passive invoker |
 | **State Persistence** | Transient conversation memory (lost across turns) | **SQLite Checkpointer (`SqliteSaver`)**: auto-saved per super-step, crash-resilient |
@@ -113,7 +113,7 @@ Auto-routed in `A0` according to problem characteristics (or explicitly overridd
 
 ## 🛡️ Deterministic Gates & Precision Audit
 
-v2.0.0 replaces prompt honor-systems with hard code verifications in `src/kernel/gates.ts`:
+v2.2.1 replaces prompt honor-systems with hard code verifications in `src/kernel/gates.ts`:
 
 ### 1. P0 Anti-Hallucination Gate (`node_stage_5_5`)
 - **Entity Grounding**: Every named entity in the conclusion must trace back to the query or verified evidence in `evidence_matrix`.
@@ -161,7 +161,14 @@ Supported environment variables (per-field precedence: `CR_REASONING_*` → gene
 `CR_REASONING_TOOL_MODULE` names a JS module exporting `createToolAdapter(env)` used to inject retrieval in place of the default no-op adapter.
 Generic fallbacks: `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_MODEL`.
 
-`config.yaml` is **optional** — when env already supplies `baseUrl`, the file is not consulted. This lets the engine inherit the ambient session's provider (e.g. a `cc-switch` local proxy on `127.0.0.1`) without duplicating credentials.
+Empty strings are treated as unset at **both** the env-var and config-file layer — a stray `CR_REASONING_API_KEY=` or a placeholder `apiKey: ""` no longer shadows real credentials.
+
+`config.yaml` lookup order:
+1. Explicit `--config <path>` / `CR_REASONING_CONFIG` — must exist; fail loud on a missing path.
+2. `./config.yaml` — optional, cwd-local.
+3. `~/.claude/claude-reasoning/config.yaml` — optional user-level fallback. Lets `npx claude-reasoning run ...` work from any cwd once global credentials are populated.
+
+When multiple config files exist they are **per-field merged** (cwd wins, then user-level), so a repo-shipped placeholder never shadows user-level credentials.
 
 ---
 
