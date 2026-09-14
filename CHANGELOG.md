@@ -18,6 +18,13 @@ Engine-mode MCP unblocked: `tools/list` was broadcasting an empty `inputSchema` 
 - `test/unit/invoker-resolver-fallback.test.ts` — pins the user-level config fallback, the cwd-wins ordering, the explicit-path-fails-loud contract, AND the empty-string-as-unset behavior at both file and env layers.
 - `test/unit/dist-freshness.test.ts` — new assertion: `dist/mcp.js` must not regress to `z.preprocess` inside `unwrapArgs`.
 
+### Doc-sync Phase 4 alignment (post-release audit)
+- `src/mcp.ts` `McpServer` version `2.2.0` → `2.2.1` (was hardcoded).
+- `src/cli.ts` `--help` banner `v2.0.0` → `v2.2.1`.
+- `README.md` prose: 5 stale `v2.0.0` → `v2.2.1`; v1.2.0 comparison row kept.
+- `README.md` §Configuration now documents the new resolution semantics: empty-as-unset, the 3-step `config.yaml` lookup order, and per-field merge.
+- `config.yaml` ships as pure placeholder so the fallback chain resolves cleanly inside the repo.
+
 ### Breaking Changes
 None.
 
