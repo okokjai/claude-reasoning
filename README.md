@@ -6,7 +6,7 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
 - **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected.
-- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis`, resolved via `--resolveHypothesis`) → 2–4 critical lenses chosen for the task → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist or any remains `pending`.
+- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis`, resolved via `--resolveHypothesis`) → 2–4 critical lenses chosen for the task → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, or the previous thought flagged `--needsMoreThoughts`.
 - **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search, ≥2 independent sources for `verified`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
 - **Zero MCP.** A single TypeScript state machine (`scripts/think.ts`) persisting to `scripts/.think_state.json`.
 - **Integrated High-Value References (ported & cleaned from 1.2.0):**
@@ -62,6 +62,10 @@ bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
 # Resolve hypotheses before concluding
 bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected
 bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected
+
+# Synthesize at least one more round (Path B requires ≥ 2 prior thoughts; a
+# --needsMoreThoughts flag on the last thought blocks termination too)
+bun scripts/think.ts --thought "Critique + verify against lenses" --thoughtNumber 2 --totalThoughts 5 --nextThoughtNeeded true
 
 # Conclude
 bun scripts/think.ts --thought "Synthesize into Conclusion Card" --thoughtNumber 5 --totalThoughts 5 --nextThoughtNeeded false
