@@ -1,138 +1,203 @@
 ---
 name: claude-reasoning
-version: 1.2.0
-description: Graph-based reasoning pipeline — contracts, stages, modes in separate files with a forward DAG-shaped pipeline + bounded conditional control-flow. Progressive disclosure: SKILL.md is a router; full instructions load per stage from contracts/, stages/, modes/, quality/ + reference docs. Zero Python dependency. 8 domain-aware verification paths + unified-fetch multi-engine search/scrape.
-triggers:
-  - "reasoning"
-  - "structured reasoning"
-  - "reasoning framework"
-  - "deep analysis"
-  - "why"
-  - "root cause"
-requires:
-  - "unified-fetch (MCP Server) — multi-engine search/scrape (4 search + 6 scrape, built-in fallback, configured in ~/.claude.json or mcp_servers.json)"
-  - "sequential-thinking (MCP Server) — reasoning node branching/backtracking/visualization (configured in ~/.claude.json or mcp_servers.json, package @modelcontextprotocol/server-sequential-thinking)"
-depends_on:
-  - using-superpowers@* — upstream routing
-  - auto-fix-loop@* — technical fixes requiring root cause analysis
-  - evolution@* — system evolution requiring design decisions
+version: 2.0.0
+description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# Claude Reasoning v1.2.0 — Graph-Based Reasoning Pipeline
+# claude-reasoning 2.0.0
 
-## Usage
+Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
+
+State machine: `scripts/think.ts` (TypeScript, runs on `bun` or `npx tsx`). Persistent state: `scripts/.think_state.json`. No MCP server required.
+
+---
+
+## Step 0: Structural Classifier
+
+Classify by **the structure of the question**, never by topic keywords (finance / tech / career / health). Keyword routing misclassifies — decide by asking: *is there a unique objectively verifiable answer within bounded rules?*
+
+| Structure | Route | Signal |
+|---|---|---|
+| **Closed-form** | Path A | Unique verifiable answer; bounded rules; derivation or enumeration settles it |
+| **Open-ended** | Path B | Requires judgment, trade-offs, design, critique, or real-world facts |
+
+Announce the classification in Thought 1 so the routing is inspectable.
+
+---
+
+## Path A: Closed-Form Lean Verification
+
+**3–5 thoughts. Never pad to fill a framework.**
+
+1. **Thought 1** — Restate the problem. Surface hidden or ambiguous definitions, boundary conditions, and the trap the question is actually testing.
+2. **Thought 2** — Execute the primary derivation.
+3. **Thought 3** — **Independently cross-validate with a different method**: reverse deduction, extreme-value substitution, set/complement enumeration, or brute-force state space.
+4. **Thoughts 4–5** — Only when Steps 2 and 3 disagree. Resolve the conflict, then terminate immediately.
+
+**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, any external search, depth expansion beyond 5.
+
+Terminate as soon as the two independent methods agree: `--nextThoughtNeeded false`.
+
+Rationale, measured: closed-form logic questions that were run through a fixed 11-node framework produced 6 of 6 trail entries with zero captured insight. Depth must be earned by disagreement, not scheduled.
+
+---
+
+## Path B: Open-Ended Adaptive Reasoning
+
+**No fixed round count. Converge when a round yields no new insight.**
+
+1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
+2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning.
+3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; never enable all by reflex:
+   - **First principles & constraint reduction** — reduce to irreducible constraints.
+   - **Pre-mortem & active red team** — assume catastrophic failure 12 months out; identify what killed it.
+   - **Sensitivity analysis (±20% perturbation)** — perturb key numerical or capacity assumptions; check if rankings flip.
+   - **Scale & boundary stress (0.01× / 100×)** — evaluate non-linear cliffs at degenerate extremes.
+   - **Pareto frontier & trade-off explicitization** — make sacrifice explicit; identify non-dominated options.
+   - **Differential elimination** — systematically rule out hypotheses contradicted by verified facts.
+   - **External verification** — **condition-gated, see below.**
+4. **Anti-Hallucination Semantic Gates** — Before concluding, audit findings against the 5 P0 gates in `references/hallucination-gates.md`:
+   - Entity & metric grounding (no unsourced prices or numbers).
+   - Dual-source independence (no syndicated echo-chambers).
+   - Temporal currency (verify version and recency).
+   - **Negative search & disconfirmation** (actively query for counter-evidence, e.g. limitations or issues).
+   - Honest tool absence reporting.
+5. **Standardized Conclusion Card** — Output final delivery using the calibrated structure from `references/conclusion-card.md` with explicit tags (`[Confirmed]`, `[Probable]`, `[Plausible]`, `[Contested]`, `[Unverified]`), qualitative confidence, and residual uncertainty. Never emit numeric scores.
+
+---
+
+## External Verification Contract
+
+### Trigger (must be true, all of it)
+- The task is **Path B** — never Path A.
+- The argument depends on a **real-world factual claim**: a price, a statistic, a company fact, a release date, a support-matrix entry, or "does X still hold".
+- The claim is **load-bearing**: if it flipped, the conclusion would change.
+
+If the open-ended sub-questions are purely internal (design taste, team fit, architectural preference), the module **must not fire**.
+
+### Protocol
+
+1. **Pre-register before searching.**
+   ```bash
+   bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"
+   ```
+   Registration happens *before* any search call. Formulating a claim after seeing results is post-hoc rationalization and is prohibited by this contract.
+
+2. **Probe the session's real capabilities.**
+   Use only search/fetch tools that are actually present in the current environment (`WebSearch`, `WebFetch`, or an installed MCP fetch tool). If none is available:
+   ```bash
+   bun scripts/think.ts --verifyClaim claim-1 --claimStatus unverified --claimNotes "No search or fetch tool available in this session"
+   ```
+   Never emit a search call that cannot run, and never describe a source you did not retrieve.
+
+3. **Dual independent sources & Source Tiers.**
+   - Consult `references/source-tiers.md` to classify sources into Tier 1 (primary/official), Tier 2 (reputable media/papers), Tier 3 (community blogs), or Tier 4 (disallowed AI summaries/farms).
+   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated). The state machine rejects `verified` with fewer than 2 `--claimSource` values.
+     ```bash
+     bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
+       --claimSource "https://docs.aws.amazon.com/bedrock/..." \
+       --claimSource "https://docs.anthropic.com/en/docs/..."
+     ```
+   - `single_source` — exactly one reliable source. Must be carried into the final answer with its uncertainty intact.
+     ```bash
+     bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
+       --claimSource "https://example.com/blog/..." --claimNotes "Only one third-party blog; no official confirmation"
+     ```
+
+4. **Negative Search Query (Active Falsification).**
+   Before confirming a major factual proposition, perform at least one search query targeting counter-evidence or known failure modes (e.g. `"<subject> limitations known bugs issue"`). Record any discovered caveats.
+
+5. **A negative result is a legitimate result.**
+   `not_found` and `unverified` are successful verification outcomes. Report them as such. Never trade a precise "could not verify" for vague authoritative-sounding prose.
+   ```bash
+   bun scripts/think.ts --verifyClaim claim-3 --claimStatus not_found --claimNotes "Queried 3 phrasings; no public record"
+   ```
+
+6. **Termination is gated.**
+   `--nextThoughtNeeded false` fails while any claim is still `pending`. Every pre-registered claim must reach an explicit resolution before the session can close.
+
+---
+
+## CLI Reference
+
+```bash
+# Start a session (run before every new task)
+bun scripts/think.ts --reset
+
+# Submit a thought
+bun scripts/think.ts \
+  --thought "analysis for this step" \
+  --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true
+
+# Revise an earlier thought (original is retained)
+bun scripts/think.ts --thought "corrected analysis" \
+  --thoughtNumber 3 --totalThoughts 5 --nextThoughtNeeded true \
+  --isRevision --revisesThought 1
+
+# Branch into an alternative line
+bun scripts/think.ts --thought "alternative path" \
+  --thoughtNumber 4 --totalThoughts 7 --nextThoughtNeeded true \
+  --branchFromThought 2 --branchId alt-approach
+
+# Expand depth beyond the original estimate
+bun scripts/think.ts --thought "scope is larger than estimated" \
+  --thoughtNumber 6 --totalThoughts 8 --nextThoughtNeeded true --needsMoreThoughts
+
+# Claim lifecycle
+bun scripts/think.ts --registerClaim "<pre-registered factual statement>"
+bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
+  --claimSource "https://a.example" --claimSource "https://b.example"
+bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
+  --claimSource "https://c.example" --claimNotes "only one source"
+bun scripts/think.ts --verifyClaim claim-3 --claimStatus not_found --claimNotes "no public record"
+bun scripts/think.ts --verifyClaim claim-4 --claimStatus unverified --claimNotes "no search tool in session"
+
+# Inspect full state (thoughts, branches, claims)
+bun scripts/think.ts --status
+```
+
+Status line returned after each thought:
 
 ```
-/skill claude-reasoning [question description]
-
-Modes (optional, auto-routed by the system; see contracts/A0.md):
-  diagnostic   Diagnostic reasoning — system failures, bugs, root cause
-  design       Design reasoning — architecture, API, system design
-  decision     Decision reasoning — technology selection, option comparison
-  optimization Optimization reasoning — performance tuning, parameter search
-  innovation   Innovation reasoning — breaking bottlenecks, new approaches
-
-Domains (auto-detected; see contracts/A1.md):
-  investment   Investment analysis — stocks, crypto, funds, real estate
-  finance      Personal finance — budgeting, tax, insurance, retirement
-  career       Career development — planning, negotiation, learning paths
-  learning     Learning & growth — knowledge management, skill acquisition
-  relationship Interpersonal — communication, conflict, emotions
-  tech         Technology — technical solutions, automation, tool selection
-  daily        Daily life — shopping, dining, travel, weather
-  general      General reasoning — retains all 5 reasoning modes
+[3/7] history=3 branches=alt-approach claims=claim-1,claim-2 next=true
 ```
 
-Examples:
-```
-  /skill claude-reasoning analyze Bitcoin market conditions for H2 2026
-  /skill claude-reasoning recommend a clean hotel near downtown Austin under $120
-  /skill claude-reasoning plan a career transition into AI engineering
-  /skill claude-reasoning diagnostic production server crashed at 3am
-  /skill claude-reasoning optimization reduce cloud costs without changing architecture
-```
+### Flag reference
+
+| Flag | Type | Notes |
+|---|---|---|
+| `--thought` | string | Thought content |
+| `--thoughtNumber` | int ≥ 1 | Current index |
+| `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it |
+| `--nextThoughtNeeded` | bool | `false` terminates — blocked while claims are pending |
+| `--isRevision` / `--revisesThought N` | flag / int | Both required together |
+| `--branchFromThought N` / `--branchId label` | int / string | Both required together |
+| `--needsMoreThoughts` | flag | Signals depth expansion |
+| `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending` |
+| `--verifyClaim` | string | Target claim id |
+| `--claimStatus` | enum | `verified` \| `single_source` \| `unverified` \| `not_found` |
+| `--claimSource` | string, repeatable | ≥ 2 required **only** for `verified` |
+| `--claimNotes` | string | Reason preserved with the claim |
+| `--status` | flag | Full JSON state |
+| `--reset` | flag | Clears state for a new session |
 
 ---
 
-## Pipeline Quick Reference
+## Ground Rules
 
-```
-A1 → A0 → A2 → C0 → Stage 0 → Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5 → Stage 5.5 → Stage 6
-```
-
-| Node | File | Tool |
-|------|------|------|
-| Contracts A1/A0/A2/A3/A4 | `contracts/*.md` | Contract templates (no tools) |
-| Contract C0 | `contracts/C0.md` | User context capture |
-| Contract C1 | `contracts/C1.md` | Skip strategy (mandatory Stage 0 preserved) |
-| Contract C2 | `contracts/C2.md` | Inter-stage transfer edge definitions |
-| Stage 0: Mini Brainstorming | `stages/stage-0-mini-brainstorming.md` | `sequentialthinking` + linear fallback |
-| Stage 1: Decomposition | `stages/stage-1-decomposition.md` | `sequentialthinking` |
-| Stage 2: Hypothesis | `stages/stage-2-hypothesis.md` | `sequentialthinking` |
-| Stage 3: Verification | `stages/stage-3-verification.md` | `unified-fetch` |
-| Stage 4: Synthesis | `stages/stage-4-synthesis.md` | None (pure reasoning) |
-| Stage 5: Critique | `stages/stage-5-critique.md` | `sequentialthinking`; includes Problem Reframing Check |
-| Stage 5.5: Anti-Hallucination | `stages/stage-5.5-hallucination-harness.md` | None (P0 gate, 3 checks) |
-| Stage 6: Conclusion | `stages/stage-6-conclusion.md` | None (P0 gate + Conclusion Card) |
-| Quality Self-Assessment | `quality/self-assessment.md` | Scoring → Memory |
+1. **No pseudo-quantitative scoring.** Never "confidence 8/10", "severity 3/3", "score 11/15". Numbers of that kind impersonate evidence. State the concrete fact or the concrete doubt in prose.
+2. **No keyword/domain routing.** Classification is structural. A pure logic puzzle is Path A regardless of whether it mentions money or careers.
+3. **No fixed framework quota.** Path A stops at agreement; Path B stops at the first round without new insight.
+4. **No fabricated capabilities.** Use only tools demonstrably present in the session. A missing tool is reported, not simulated.
+5. **No unbacked claims in documentation.** This skill's docs describe what `think.ts` and the tests actually do. They are not benchmarked or eval-scored.
 
 ---
 
-## Execution Flow (Read → Do)
+## Examples
 
-**Read each file before executing its stage. Files are the source of truth; this page is only the router.**
+- `references/example-path-a.md` — closed-form kinship trap, 4 thoughts, zero claims.
+- `references/example-path-b-verify.md` — open-ended architecture decision with pre-registration and mixed verification outcomes.
 
-1. **Read `contracts/A1.md`** — classify `data_type` / `primary_domain`. Non-trigger conditions → answer directly, do not enter the flow.
-2. **Read `contracts/A0.md`** — route `primary_mode` (or use a user-specified mode).
-3. **Read `contracts/A2.md`** — fill reasoning strategy; **must actually call** `mcp__unified-fetch__status` for platform detection (CLI Full / Desktop), set `evidence_cap` / `quality_cap` / `can_branch`.
-4. **Read `contracts/C0.md`** — capture user context (auto-trigger for decision/daily/career; otherwise explicit defaults).
-5. **Read `stages/stage-0-mini-brainstorming.md`** — mandatory bounded framing → emit `brainstorm_packet` (candidate only, never evidence).
-6. **Read `stages/stage-1-decomposition.md`** — decompose into sub-problems; open sequential-thinking branches.
-7. **Read `stages/stage-2-hypothesis.md`** — generate hypotheses + complete `claim_registry` (P0, before any search).
-8. **Read `stages/stage-3-verification.md`** — verify each hypothesis via unified-fetch; negative search; T1-T5 source annotation; entity existence check.
-9. **Read `stages/stage-4-synthesis.md`** — merge evidence, emit `preliminary_conclusion` (pure reasoning).
-10. **Read `stages/stage-5-critique.md`** — critique perspectives + one Problem Reframing Check + precision audit; backtrack/revise on blind spots.
-11. **Read `stages/stage-5.5-hallucination-harness.md`** — independent P0 gate (entity/source/cross-reference). Must pass before Stage 6.
-12. **Read `stages/stage-6-conclusion.md`** — P0 gates + Conclusion Card with evidence language calibration.
-13. **Read `quality/self-assessment.md`** — score (full /50 or simplified /36), write Pattern Asset to Memory.
+## State file
 
-Skip strategy per **`contracts/C1.md`**; only C1 may shorten later stages, and no rule removes mandatory Stage 0. Fallback paths (`can_branch=false`, Desktop Mode) use linear execution, never skip stages.
-
----
-
-## Reference Files (load on demand)
-
-| File | Content | Load Before |
-|------|---------|-------------|
-| `architecture.md` | Full DAG diagram, topology note, stage rules, backtracking mechanism, principles | First execution |
-| `mcp-toolchain.md` | Tool mapping tables + execution enforcement hooks | Stage 3 |
-| `output-spec.md` | Required outputs, Conclusion Card format, evidence language calibration | Stage 6 |
-| `memory-integration.md` | Memory write paths + cross-topic cache table | Stage 6 → Memory |
-
----
-
-## 5 Reasoning Modes
-
-| Mode | File | Core Mechanism | Use For |
-|------|------|----------------|---------|
-| Diagnostic | `modes/diagnostic.md` | Symptoms → candidate causes → elimination → minimal intervention | Bug fixes, system failures, data anomalies |
-| Design | `modes/design.md` | Requirements → constraints → solution space → Pareto frontier | Architecture, API design, refactoring |
-| Decision | `modes/decision.md` | Options × criteria → weighted scoring → sensitivity analysis | Tech selection, vendor selection, ranking |
-| Optimization | `modes/optimization.md` | Current state → gradient direction → step size → convergence | Performance/cost optimization, tuning |
-| Innovation | `modes/innovation.md` | Break assumptions → recombine → new combinations | Breaking bottlenecks, new features |
-
----
-
-## Collaboration with Other Skills
-
-| Upstream Skill | Role | Handoff Point |
-|---------------|------|---------------|
-| using-superpowers | Detects tasks requiring reasoning | Routes to this skill |
-| auto-fix-loop | Technical fixes needing root cause analysis | Shared hypothesis/verification stages |
-| evolution | System evolution needing design decisions | Design mode |
-
----
-
-## Post-Edit Sync (Mandatory)
-
-After any modification, `bash scripts/sync-check.sh` must pass all checks before claiming completion. The full post-edit checklist (MCP toolchain reconciliation, dead code check, date check, memory volume check) is defined in sync-check.sh's individual Steps and Step 8's memory-cleanup.sh.
+`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, and `claims` keyed by claim id. Survives across invocations; `--reset` clears it.
