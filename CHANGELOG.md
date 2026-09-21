@@ -18,7 +18,7 @@ All notable changes to this skill are documented here.
 
 - **`tests/think.test.ts`** — suite grows 20 → 27 tests: caveat enforcement for negative claim resolutions, Path B convergence gates (minimum prior thoughts, `needsMoreThoughts` trailing flag), `--status` audit trail ordering, and one pre-existing test updated to satisfy the new convergence contract.
 - **`SKILL.md`** — protocol and flag reference updated: `--claimNotes` is required for negative resolutions; termination gate documents the two new Path B convergence checks; state file documents `auditTrail`.
-- **`README.md`** — version 2.1.1; invariant table lists all 12 enforced guards; test count updated to 27.
+- **`README.md`** — version 2.1.1; invariant table lists all 13 enforced guards; test count updated to 27.
 
 ## [2.1.0] - 2026-09-21
 
