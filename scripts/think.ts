@@ -38,10 +38,23 @@ export interface Claim {
   notes?: string;
 }
 
+export type HypothesisStatus = "pending" | "selected" | "rejected" | "synthesized";
+
+export interface Hypothesis {
+  id: string;
+  statement: string;
+  status: HypothesisStatus;
+  notes?: string;
+}
+
+export type ThinkingMode = "path-a" | "path-b";
+
 export interface State {
+  mode?: ThinkingMode;
   thoughtHistory: ThoughtData[];
   branches: Record<string, ThoughtData[]>;
   claims: Record<string, Claim>;
+  hypotheses: Record<string, Hypothesis>;
 }
 
 function loadState(): State {
@@ -49,15 +62,17 @@ function loadState(): State {
     try {
       const data = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
       return {
+        mode: data.mode,
         thoughtHistory: data.thoughtHistory || [],
         branches: data.branches || {},
         claims: data.claims || {},
+        hypotheses: data.hypotheses || {},
       };
     } catch {
-      return { thoughtHistory: [], branches: {}, claims: {} };
+      return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {} };
     }
   }
-  return { thoughtHistory: [], branches: {}, claims: {} };
+  return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {} };
 }
 
 function saveState(state: State): void {
@@ -81,28 +96,34 @@ function makeStatusResponse(state: State) {
   const historyLength = state.thoughtHistory.length;
   const claimIds = Object.keys(state.claims);
   const pendingClaims = Object.values(state.claims).filter(c => c.status === "pending").map(c => c.id);
+  const hypothesisIds = Object.keys(state.hypotheses || {});
+  const pendingHypotheses = Object.values(state.hypotheses || {}).filter(h => h.status === "pending").map(h => h.id);
+
+  const base = {
+    mode: state.mode,
+    branches: branchIds,
+    thoughtHistoryLength: historyLength,
+    claims: claimIds,
+    pendingClaims,
+    hypotheses: hypothesisIds,
+    pendingHypotheses,
+  };
 
   if (historyLength === 0) {
     return {
+      ...base,
       thoughtNumber: 0,
       totalThoughts: 0,
       nextThoughtNeeded: true,
-      branches: branchIds,
-      thoughtHistoryLength: historyLength,
-      claims: claimIds,
-      pendingClaims,
     };
   }
 
   const latest = state.thoughtHistory[historyLength - 1];
   return {
+    ...base,
     thoughtNumber: latest.thoughtNumber,
     totalThoughts: latest.totalThoughts,
     nextThoughtNeeded: latest.nextThoughtNeeded,
-    branches: branchIds,
-    thoughtHistoryLength: historyLength,
-    claims: claimIds,
-    pendingClaims,
   };
 }
 
@@ -129,11 +150,37 @@ const { values } = parseArgs({
     claimStatus: { type: "string" },
     claimSource: { type: "string", multiple: true },
     claimNotes: { type: "string" },
+    mode: { type: "string" },
+    registerHypothesis: { type: "string" },
+    resolveHypothesis: { type: "string" },
+    hypothesisStatus: { type: "string" },
+    hypothesisNotes: { type: "string" },
     status: { type: "boolean", default: false },
     reset: { type: "boolean", default: false },
   },
   strict: true,
 });
+
+const VALID_MODES: ThinkingMode[] = ["path-a", "path-b"];
+
+/**
+ * Resolve the session mode from --mode / persisted state.
+ * The mode is fixed by the first classification (Step 0) and cannot be switched mid-session.
+ */
+function resolveMode(state: State, requested: string | undefined): ThinkingMode | undefined {
+  if (requested != null) {
+    if (!VALID_MODES.includes(requested as ThinkingMode)) {
+      fail(`Invalid --mode: ${requested}. Must be one of: ${VALID_MODES.join(", ")}`);
+    }
+    const mode = requested as ThinkingMode;
+    if (state.mode != null && state.mode !== mode) {
+      fail(`Session mode is already '${state.mode}'. Step 0 classification is immutable; cannot switch to '${mode}'. Use --reset to start over.`);
+    }
+    state.mode = mode;
+    return mode;
+  }
+  return state.mode;
+}
 
 // --- Command: Reset ---
 
@@ -161,6 +208,10 @@ if (values.status) {
 // --- Command: Register Claim ---
 
 if (values.registerClaim) {
+  resolveMode(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids external claims. Use internal derivation.");
+  }
   const count = Object.keys(state.claims).length + 1;
   const claimId = `claim-${count}`;
   const claim: Claim = {
@@ -173,6 +224,46 @@ if (values.registerClaim) {
   state.claims[claimId] = claim;
   saveState(state);
   console.log(JSON.stringify({ registered: claimId, statement: values.registerClaim, status: "pending" }, null, 2));
+  process.exit(0);
+}
+
+// --- Command: Register Hypothesis ---
+
+if (values.registerHypothesis) {
+  resolveMode(state, values.mode);
+  const count = Object.keys(state.hypotheses || {}).length + 1;
+  const hypId = `hyp-${count}`;
+  const hyp: Hypothesis = {
+    id: hypId,
+    statement: values.registerHypothesis,
+    status: "pending",
+  };
+  if (!state.hypotheses) state.hypotheses = {};
+  state.hypotheses[hypId] = hyp;
+  saveState(state);
+  console.log(JSON.stringify({ registered: hypId, statement: values.registerHypothesis, status: "pending" }, null, 2));
+  process.exit(0);
+}
+
+// --- Command: Resolve Hypothesis ---
+
+if (values.resolveHypothesis) {
+  resolveMode(state, values.mode);
+  const hyp = state.hypotheses?.[values.resolveHypothesis];
+  if (!hyp) fail(`Hypothesis ${values.resolveHypothesis} not found in state`);
+  const status = values.hypothesisStatus as HypothesisStatus;
+  if (!status) fail("--hypothesisStatus is required when --resolveHypothesis is set");
+
+  const validStatuses: HypothesisStatus[] = ["pending", "selected", "rejected", "synthesized"];
+  if (!validStatuses.includes(status)) {
+    fail(`Invalid --hypothesisStatus: ${status}. Must be one of: ${validStatuses.join(", ")}`);
+  }
+
+  hyp.status = status;
+  if (values.hypothesisNotes) hyp.notes = values.hypothesisNotes;
+
+  saveState(state);
+  console.log(JSON.stringify({ resolved: hyp.id, status: hyp.status, notes: hyp.notes }, null, 2));
   process.exit(0);
 }
 
@@ -190,9 +281,20 @@ if (values.verifyClaim) {
     fail(`Invalid --claimStatus: ${status}. Must be one of: ${validStatuses.join(", ")}`);
   }
 
-  // Guardrail 1: 2-source requirement for verified
-  if (status === "verified" && sources.length < 2) {
-    fail(`--claimStatus verified requires at least 2 independent --claimSource arguments. Found ${sources.length}. Use 'single_source' or 'unverified' if fewer.`);
+  // Guardrail 1: 2-source requirement for verified (count + distinct root domains)
+  if (status === "verified") {
+    const rootDomains = new Set(
+      sources.map(s => {
+        try {
+          return new URL(s).hostname.split(".").slice(-2).join(".");
+        } catch {
+          return s; // malformed URL counts as its own bucket -> fails dual-domain check
+        }
+      })
+    );
+    if (sources.length < 2 || rootDomains.size < 2) {
+      fail(`--claimStatus verified requires at least 2 independent --claimSource arguments from distinct root domains. Found ${sources.length} source(s), ${rootDomains.size} root domain(s). Use 'single_source' or 'unverified' if fewer.`);
+    }
   }
 
   claim.status = status;
@@ -222,11 +324,38 @@ if (thoughtNumber > totalThoughts) {
   totalThoughts = thoughtNumber;
 }
 
-// Guardrail 2: Cannot terminate if any claim is still pending
+// Track mode (Step 0 classification is mandatory on the first thought of a session)
+const resolvedMode = resolveMode(state, values.mode);
+if (resolvedMode == null) {
+  fail("--mode is required on the first thought of a session: 'path-a' (closed-form) or 'path-b' (open-ended). Step 0 classification is mandatory.");
+}
+
+// --- Termination Hard Gates (when nextThoughtNeeded is false) ---
 if (!nextThoughtNeeded) {
+  // Gate 1: Cannot terminate if any claim is still pending
   const pending = Object.values(state.claims).filter(c => c.status === "pending");
   if (pending.length > 0) {
     fail(`Cannot terminate with --nextThoughtNeeded false: ${pending.length} claim(s) still pending: ${pending.map(c => c.id).join(", ")}. Resolve all claims via --verifyClaim before concluding.`);
+  }
+
+  // Gate 2 (Path A): Minimum 3 thoughts (including this concluding thought, total thoughts in history + this one >= 3)
+  if (state.mode === "path-a") {
+    const totalCount = state.thoughtHistory.length + 1;
+    if (totalCount < 3) {
+      fail(`Path A requires at least 3 thoughts (1: Restate/Constraints -> 2: Derive -> 3: Cross-validate). Current: ${totalCount}.`);
+    }
+  }
+
+  // Gate 3 (Path B): Minimum 2 hypotheses registered, none pending
+  if (state.mode === "path-b") {
+    const hypList = Object.values(state.hypotheses || {});
+    if (hypList.length < 2) {
+      fail(`Path B requires at least 2 hypotheses (registered via --registerHypothesis). Found ${hypList.length}.`);
+    }
+    const pendingHyps = hypList.filter(h => h.status === "pending");
+    if (pendingHyps.length > 0) {
+      fail(`Path B requires all hypotheses to be resolved (selected, rejected, or synthesized). ${pendingHyps.length} hypotheses still pending: ${pendingHyps.map(h => h.id).join(", ")}.`);
+    }
   }
 }
 
@@ -274,4 +403,6 @@ console.error(formatThought(thoughtData));
 const status = makeStatusResponse(state);
 const branchList = status.branches.length > 0 ? ` branches=${status.branches.join(",")}` : "";
 const claimList = status.claims.length > 0 ? ` claims=${status.claims.join(",")}` : "";
-console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.thoughtHistoryLength}${branchList}${claimList} next=${status.nextThoughtNeeded}`);
+const hypList = status.hypotheses.length > 0 ? ` hypotheses=${status.hypotheses.join(",")}` : "";
+const modeStr = status.mode ? ` mode=${status.mode}` : "";
+console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.thoughtHistoryLength}${modeStr}${branchList}${claimList}${hypList} next=${status.nextThoughtNeeded}`);

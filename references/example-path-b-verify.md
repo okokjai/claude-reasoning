@@ -15,27 +15,40 @@
 ```bash
 bun scripts/think.ts --reset
 bun scripts/think.ts \
+  --mode path-b \
   --thought "Step 0: Open-ended architecture evaluation. Deconstruct into 3 load-bearing sub-questions: (1) Pricing parity and prompt caching support, (2) Multi-region network latency from Taiwan, (3) Enterprise operational overhead. Pre-registering real-world factual claims before performing any web search." \
   --thoughtNumber 1 --totalThoughts 6 --nextThoughtNeeded true
+# Output: [1/6] mode=path-b history=1 next=true
 ```
 
 ### Pre-Registering Claims Before Search (Mandatory)
 ```bash
 # Claim 1: Bedrock supports prompt caching for Claude 3.5 Sonnet
 bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"
-# Output: [1/6] ... registered claim-1
+# Output: [1/6] mode=path-b history=1 claims=claim-1 next=true ... registered claim-1
 
 # Claim 2: AWS Bedrock pricing for Claude 3.5 Sonnet matches Anthropic direct API pricing ($3/M input, $15/M output)
 bun scripts/think.ts --registerClaim "AWS Bedrock pricing for Claude 3.5 Sonnet has exact base token price parity with Anthropic API"
-# Output: [1/6] ... registered claim-2
+# Output: [1/6] mode=path-b history=1 claims=claim-1,claim-2 next=true ... registered claim-2
+```
+
+### Registering Competing Hypotheses (Mandatory for Path B)
+```bash
+# Hypothesis 1: Anthropic Direct is best for startup agility
+bun scripts/think.ts --registerHypothesis "Direct Anthropic API is optimal for agile startup speed and latest feature parity"
+# Output: {"registered": "hyp-1", "statement": "Direct Anthropic API is optimal for agile startup speed and latest feature parity", "status": "pending"}
+
+# Hypothesis 2: AWS Bedrock is superior for enterprise compliance
+bun scripts/think.ts --registerHypothesis "AWS Bedrock is superior for enterprise compliance, VPC endpoints, and unified cloud billing"
+# Output: {"registered": "hyp-2", "statement": "AWS Bedrock is superior for enterprise compliance, VPC endpoints, and unified cloud billing", "status": "pending"}
 ```
 
 ---
 
-## Thought 2: Critical Lenses Selection & Hypothesis Formulation
+## Thought 2: Critical Lenses Selection & Hypothesis Deepening
 ```bash
 bun scripts/think.ts \
-  --thought "Selecting 3 critical lenses from references/critical-lenses.md: (1) Sensitivity Analysis (token volume ±20% and caching hit rate), (2) Blast Radius & Degraded Mode (failover between direct API and cloud provider), (3) Pre-Mortem Red Team (single-vendor lock-in vs multi-region resilience). Formulating competing hypotheses: H1 = Direct Anthropic API is optimal for agile startup speed and latest feature parity; H2 = AWS Bedrock is superior for compliance, VPC endpoints, and unified enterprise billing despite potential feature lag." \
+  --thought "Selecting 3 critical lenses from references/critical-lenses.md: (1) Sensitivity Analysis (token volume ±20% and caching hit rate), (2) Blast Radius & Degraded Mode (failover between direct API and cloud provider), (3) Pre-Mortem Red Team (single-vendor lock-in vs multi-region resilience). Evaluating registered hypotheses hyp-1 and hyp-2 against operational reality." \
   --thoughtNumber 2 --totalThoughts 6 --nextThoughtNeeded true
 ```
 
@@ -95,13 +108,22 @@ bun scripts/think.ts \
 
 ---
 
-## Thought 6: Final Termination & Conclusion Card
-All claims resolved, terminating:
+## Thought 6: Resolve Hypotheses & Final Termination
+Before terminating, resolve all registered hypotheses:
+```bash
+bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected --hypothesisNotes "H1 selected for agility and feature velocity unless Bedrock offers strictly equivalent latency"
+# Output: {"resolved": "hyp-1", "status": "selected"}
+
+bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected --hypothesisNotes "H2 rejected for this team's lightweight cloud-agnostic profile, but retained as contingency if enterprise requirements change"
+# Output: {"resolved": "hyp-2", "status": "rejected"}
+```
+
+Now terminate with all claims and hypotheses resolved:
 ```bash
 bun scripts/think.ts \
-  --thought "Final conclusion formulated following references/conclusion-card.md structure. No pending claims remain; closing session." \
+  --thought "Final conclusion formulated following references/conclusion-card.md structure. All claims verified, all hypotheses resolved; closing session." \
   --thoughtNumber 6 --totalThoughts 6 --nextThoughtNeeded false
-# Output: [6/6] ... claims=claim-1:verified,claim-2:verified next=false
+# Output: [6/6] mode=path-b history=6 claims=claim-1:verified,claim-2:verified hypotheses=hyp-1:selected,hyp-2:rejected next=false
 ```
 
 ---

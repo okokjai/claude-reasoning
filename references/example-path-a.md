@@ -20,21 +20,21 @@
 bun scripts/think.ts --reset
 ```
 
-### 2. Thought 1 — Restate Problem & Clarify Boundaries
+### 2. Thought 1 - Restate Problem & Clarify Boundaries
 ```bash
 bun scripts/think.ts \
-  --thought "問題分析：
-1. 主角小明（男）有 3 個兄弟，隱含條件為小明自身為男性，因此小明家中共有 1 (小明) + 3 = 4 個男孩。
-2. 潛在語意陷阱：'每個兄弟都有 2 個姊妹'。在同一個核心家庭中，所有兄弟共享相同的姊妹集合，而非各自擁有獨立的姊妹。
-3. 邊界條件：假設無同父異母/收養等特殊未提及條件，兄弟與姊妹皆屬於同一家庭小孩。" \
+  --mode path-a \
+  --thought "問題分析:
+1. 主角小明(男)有 3 個兄弟,隱含條件為小明自身為男性,因此小明家中共有 1 (小明) + 3 = 4 個男孩。
+2. 潛在語意陷阱:'每個兄弟都有 2 個姊妹'。在同一個核心家庭中,所有兄弟共享相同的姊妹集合,而非各自擁有獨立的姊妹。
+3. 邊界條件:假設無同父異母/收養等特殊未提及條件,兄弟與姊妹皆屬於同一家庭小孩。" \
   --thoughtNumber 1 \
   --totalThoughts 4 \
   --nextThoughtNeeded true
 ```
 *Output*:
 ```
-💭 Thought 1/4
-[1/4] history=1 next=true
+[1/4] mode=path-a history=1 next=true
 ```
 
 ### 3. Thought 2 — Primary Derivation

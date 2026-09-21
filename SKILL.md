@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.0.0
+version: 2.1.0
 description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 2.0.0
+# claude-reasoning 2.1.0
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -21,7 +21,7 @@ Classify by **the structure of the question**, never by topic keywords (finance 
 | **Closed-form** | Path A | Unique verifiable answer; bounded rules; derivation or enumeration settles it |
 | **Open-ended** | Path B | Requires judgment, trade-offs, design, critique, or real-world facts |
 
-Announce the classification in Thought 1 so the routing is inspectable.
+Announce the classification in Thought 1 so the routing is inspectable. Pass it as `--mode path-a` or `--mode path-b` on the first thought; the state machine rejects a first thought without `--mode`, and the mode is immutable for the rest of the session (changing it requires `--reset`).
 
 ---
 
@@ -47,7 +47,7 @@ Rationale, measured: closed-form logic questions that were run through a fixed 1
 **No fixed round count. Converge when a round yields no new insight.**
 
 1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
-2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning.
+2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis` and resolve each before terminating (`selected`, `rejected`, or `synthesized`); Path B termination is rejected while fewer than 2 hypotheses are registered or any remains `pending`.
 3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; never enable all by reflex:
    - **First principles & constraint reduction** — reduce to irreducible constraints.
    - **Pre-mortem & active red team** — assume catastrophic failure 12 months out; identify what killed it.
@@ -92,7 +92,7 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 3. **Dual independent sources & Source Tiers.**
    - Consult `references/source-tiers.md` to classify sources into Tier 1 (primary/official), Tier 2 (reputable media/papers), Tier 3 (community blogs), or Tier 4 (disallowed AI summaries/farms).
-   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated). The state machine rejects `verified` with fewer than 2 `--claimSource` values.
+   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated). The state machine rejects `verified` with fewer than 2 `--claimSource` values or with sources sharing the same root domain.
      ```bash
      bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
        --claimSource "https://docs.aws.amazon.com/bedrock/..." \
@@ -124,8 +124,9 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 # Start a session (run before every new task)
 bun scripts/think.ts --reset
 
-# Submit a thought
+# Submit a thought (--mode required on the first thought of a session)
 bun scripts/think.ts \
+  --mode path-b \
   --thought "analysis for this step" \
   --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true
 
@@ -142,6 +143,10 @@ bun scripts/think.ts --thought "alternative path" \
 # Expand depth beyond the original estimate
 bun scripts/think.ts --thought "scope is larger than estimated" \
   --thoughtNumber 6 --totalThoughts 8 --nextThoughtNeeded true --needsMoreThoughts
+
+# Hypothesis lifecycle (Path B)
+bun scripts/think.ts --registerHypothesis "<competing option or hypothesis>"
+bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected --hypothesisNotes "wins on latency and ops cost"
 
 # Claim lifecycle
 bun scripts/think.ts --registerClaim "<pre-registered factual statement>"
@@ -176,7 +181,7 @@ Status line returned after each thought:
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending` |
 | `--verifyClaim` | string | Target claim id |
 | `--claimStatus` | enum | `verified` \| `single_source` \| `unverified` \| `not_found` |
-| `--claimSource` | string, repeatable | ≥ 2 required **only** for `verified` |
+| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains required **only** for `verified` |
 | `--claimNotes` | string | Reason preserved with the claim |
 | `--status` | flag | Full JSON state |
 | `--reset` | flag | Clears state for a new session |

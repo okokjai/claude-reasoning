@@ -48,18 +48,31 @@ describe("think.ts: basic thinking loop", () => {
     expect(status.stdout).toContain('"thoughtHistoryLength": 0');
   });
 
+  it("requires --mode on the first thought of a session", () => {
+    const res = run(`--thought "Unclassified thought" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    expect(res.code).not.toBe(0);
+    expect(res.stderr).toContain("--mode is required on the first thought of a session");
+  });
+
   it("submits sequential thoughts", () => {
-    const res1 = run(`--thought "First analysis" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    const res1 = run(`--mode path-a --thought "First analysis" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
     expect(res1.code).toBe(0);
-    expect(res1.stdout).toContain("[1/3] history=1 next=true");
+    expect(res1.stdout).toContain("[1/3] history=1 mode=path-a next=true");
 
     const res2 = run(`--thought "Second analysis" --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true`);
     expect(res2.code).toBe(0);
-    expect(res2.stdout).toContain("[2/3] history=2 next=true");
+    expect(res2.stdout).toContain("[2/3] history=2 mode=path-a next=true");
+  });
+
+  it("locks the mode once the session is classified", () => {
+    run(`--mode path-a --thought "Classified closed-form" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    const res = run(`--mode path-b --thought "Attempting to switch" --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true`);
+    expect(res.code).not.toBe(0);
+    expect(res.stderr).toContain("Step 0 classification is immutable");
   });
 
   it("supports revisions and branching", () => {
-    run(`--thought "Initial thought" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    run(`--mode path-a --thought "Initial thought" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
     const rev = run(`--thought "Corrected thought" --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true --isRevision --revisesThought 1`);
     expect(rev.code).toBe(0);
 
@@ -95,6 +108,15 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
     expect(okRes.stdout).toContain('"status": "verified"');
   });
 
+  it("rejects verified when 2 sources share the same root domain", () => {
+    run(`--registerClaim "Claim backed only by subdomains of one root domain"`);
+    const failRes = run(
+      `--verifyClaim claim-1 --claimStatus verified --claimSource "https://docs.aws.amazon.com/some/doc" --claimSource "https://aws.amazon.com/some/page"`
+    );
+    expect(failRes.code).not.toBe(0);
+    expect(failRes.stderr).toContain("distinct root domains");
+  });
+
   it("allows single_source, unverified, and not_found with fewer sources", () => {
     run(`--registerClaim "Single source claim"`);
     const resSingle = run(`--verifyClaim claim-1 --claimStatus single_source --claimSource "https://only-one.com" --claimNotes "Single tech blog report"`);
@@ -108,18 +130,24 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
   });
 
   it("blocks termination when any claim is still pending", () => {
+    run(`--mode path-b --thought "Decomposing the open question" --thoughtNumber 1 --totalThoughts 2 --nextThoughtNeeded true`);
     run(`--registerClaim "Pending claim"`);
-    const failTerm = run(`--thought "Conclusion step" --thoughtNumber 1 --totalThoughts 1 --nextThoughtNeeded false`);
+    const failTerm = run(`--thought "Conclusion step" --thoughtNumber 2 --totalThoughts 2 --nextThoughtNeeded false`);
     expect(failTerm.code).not.toBe(0);
     expect(failTerm.stderr).toContain("Cannot terminate with --nextThoughtNeeded false: 1 claim(s) still pending");
   });
 
   it("allows termination when all claims are resolved", () => {
+    run(`--mode path-b --thought "Decomposing the open question" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    run(`--registerHypothesis "H1: Option A"`);
+    run(`--registerHypothesis "H2: Option B"`);
+    run(`--resolveHypothesis hyp-1 --hypothesisStatus rejected`);
+    run(`--resolveHypothesis hyp-2 --hypothesisStatus selected`);
     run(`--registerClaim "Test claim"`);
     run(`--verifyClaim claim-1 --claimStatus unverified --claimNotes "No search tool available"`);
-    const okTerm = run(`--thought "Clean conclusion" --thoughtNumber 1 --totalThoughts 1 --nextThoughtNeeded false`);
+    const okTerm = run(`--thought "Clean conclusion" --thoughtNumber 2 --totalThoughts 2 --nextThoughtNeeded false`);
     expect(okTerm.code).toBe(0);
-    expect(okTerm.stdout).toContain("[1/1]");
+    expect(okTerm.stdout).toContain("[2/2]");
     expect(okTerm.stdout).toContain("next=false");
   });
 });
@@ -129,22 +157,22 @@ describe("integration: Scenario 1 - Path A Closed-form logic trap", () => {
     run("--reset");
 
     const t1 = run(
-      `--thought "Problem restatement: A has 3 brothers, each brother has 2 sisters. Implicit assumption: shared nuclear family siblings. Trapping point: brothers share the same sisters." --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`
+      `--mode path-a --thought "Problem restatement: A has 3 brothers, each brother has 2 sisters. Implicit assumption: shared nuclear family siblings. Trapping point: brothers share the same sisters." --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`
     );
     expect(t1.code).toBe(0);
-    expect(t1.stdout).toContain("[1/3] history=1 next=true");
+    expect(t1.stdout).toContain("[1/3] history=1 mode=path-a next=true");
 
     const t2 = run(
       `--thought "Primary derivation: Total boys = 1 (A) + 3 = 4. Total girls = 2. Total children = 4 + 2 = 6." --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true`
     );
     expect(t2.code).toBe(0);
-    expect(t2.stdout).toContain("[2/3] history=2 next=true");
+    expect(t2.stdout).toContain("[2/3] history=2 mode=path-a next=true");
 
     const t3 = run(
       `--thought "Independent cross-validation via set theory: C = B union G. |B| = 4, |G| = 2, B intersect G = empty. For all b in B, sisters(b) = G with |G| = 2. Total |C| = 6. Both methods agree. Terminating." --thoughtNumber 3 --totalThoughts 3 --nextThoughtNeeded false`
     );
     expect(t3.code).toBe(0);
-    expect(t3.stdout).toContain("[3/3] history=3 next=false");
+    expect(t3.stdout).toContain("[3/3] history=3 mode=path-a next=false");
 
     const status = run("--status");
     expect(status.stdout).toContain('"claims": []');
@@ -158,11 +186,17 @@ describe("integration: Scenario 2 - Path B Open-ended with External Verification
 
     // 1. Decompose
     const t1 = run(
-      `--thought "Decompose sub-problems: 1. Pricing parity between direct API and AWS Bedrock. 2. Feature parity: does Bedrock support Claude 3.5 Sonnet Prompt Caching? 3. Tradeoffs: IAM governance vs feature velocity." --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true`
+      `--mode path-b --thought "Decompose sub-problems: 1. Pricing parity between direct API and AWS Bedrock. 2. Feature parity: does Bedrock support Claude 3.5 Sonnet Prompt Caching? 3. Tradeoffs: IAM governance vs feature velocity." --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true`
     );
     expect(t1.code).toBe(0);
 
-    // 2. Pre-registration of claims before search
+    // 2. Competing hypotheses required by Path B
+    run(`--registerHypothesis "H1: Bedrock wins on enterprise IAM + verified feature parity"`);
+    run(`--registerHypothesis "H2: Direct API wins on SDK feature velocity"`);
+    run(`--resolveHypothesis hyp-1 --hypothesisStatus selected`);
+    run(`--resolveHypothesis hyp-2 --hypothesisStatus rejected`);
+
+    // 3. Pre-registration of claims before search
     const reg1 = run(`--registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"`);
     expect(reg1.code).toBe(0);
     expect(reg1.stdout).toContain('"registered": "claim-1"');
@@ -206,5 +240,68 @@ describe("integration: Scenario 2 - Path B Open-ended with External Verification
     expect(t3.stdout).toContain("[3/3]");
     expect(t3.stdout).toContain("claims=claim-1,claim-2");
     expect(t3.stdout).toContain("next=false");
+  });
+});
+
+describe("think.ts: Path A Hard Gates", () => {
+  it("blocks termination before 3 thoughts in path-a mode", () => {
+    run("--reset");
+    run(`--mode path-a --thought "Restating problem" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    const failTerm = run(`--thought "Conclusion too early" --thoughtNumber 2 --totalThoughts 2 --nextThoughtNeeded false`);
+    expect(failTerm.code).not.toBe(0);
+    expect(failTerm.stderr).toContain("Path A requires at least 3 thoughts");
+  });
+
+  it("forbids external claims in path-a mode", () => {
+    run("--reset");
+    run(`--mode path-a --thought "Restating problem" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    const failClaim = run(`--registerClaim "External claim"`);
+    expect(failClaim.code).not.toBe(0);
+    expect(failClaim.stderr).toContain("Path A (closed-form) forbids external claims");
+  });
+
+  it("allows termination at the 3rd thought in path-a mode", () => {
+    run("--reset");
+    run(`--mode path-a --thought "Restating" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    run(`--thought "Deriving" --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true`);
+    const okTerm = run(`--thought "Cross-validating" --thoughtNumber 3 --totalThoughts 3 --nextThoughtNeeded false`);
+    expect(okTerm.code).toBe(0);
+    expect(okTerm.stdout).toContain("next=false");
+  });
+});
+
+describe("think.ts: Path B Hard Gates", () => {
+  it("blocks termination with fewer than 2 hypotheses in path-b mode", () => {
+    run("--reset");
+    run(`--mode path-b --thought "Decomposing" --thoughtNumber 1 --totalThoughts 4 --nextThoughtNeeded true`);
+    run(`--registerHypothesis "H1: Option A is better"`);
+    const failTerm = run(`--thought "Conclusion" --thoughtNumber 2 --totalThoughts 2 --nextThoughtNeeded false`);
+    expect(failTerm.code).not.toBe(0);
+    expect(failTerm.stderr).toContain("requires at least 2 hypotheses");
+  });
+
+  it("blocks termination if any hypothesis is pending in path-b mode", () => {
+    run("--reset");
+    run(`--mode path-b --thought "Decomposing" --thoughtNumber 1 --totalThoughts 4 --nextThoughtNeeded true`);
+    run(`--registerHypothesis "H1: Option A"`);
+    run(`--registerHypothesis "H2: Option B"`);
+    run(`--resolveHypothesis hyp-1 --hypothesisStatus selected`);
+    const failTerm = run(`--thought "Conclusion" --thoughtNumber 2 --totalThoughts 2 --nextThoughtNeeded false`);
+    expect(failTerm.code).not.toBe(0);
+    expect(failTerm.stderr).toContain("hypotheses still pending");
+  });
+
+  it("allows termination when Path B requirements are met", () => {
+    run("--reset");
+    run(`--mode path-b --thought "Decomposing" --thoughtNumber 1 --totalThoughts 4 --nextThoughtNeeded true`);
+    run(`--registerHypothesis "H1: Option A"`);
+    run(`--registerHypothesis "H2: Option B"`);
+    run(`--resolveHypothesis hyp-1 --hypothesisStatus rejected`);
+    run(`--resolveHypothesis hyp-2 --hypothesisStatus selected`);
+    run(`--thought "Critiquing" --thoughtNumber 2 --totalThoughts 4 --nextThoughtNeeded true`);
+    run(`--thought "Synthesizing" --thoughtNumber 3 --totalThoughts 4 --nextThoughtNeeded true`);
+    const okTerm = run(`--thought "Conclusion" --thoughtNumber 4 --totalThoughts 4 --nextThoughtNeeded false`);
+    expect(okTerm.code).toBe(0);
+    expect(okTerm.stdout).toContain("next=false");
   });
 });
