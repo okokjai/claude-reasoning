@@ -145,9 +145,10 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
     run(`--resolveHypothesis hyp-2 --hypothesisStatus selected`);
     run(`--registerClaim "Test claim"`);
     run(`--verifyClaim claim-1 --claimStatus unverified --claimNotes "No search tool available"`);
-    const okTerm = run(`--thought "Clean conclusion" --thoughtNumber 2 --totalThoughts 2 --nextThoughtNeeded false`);
+    run(`--thought "Synthesizing after verification" --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true`);
+    const okTerm = run(`--thought "Clean conclusion" --thoughtNumber 3 --totalThoughts 3 --nextThoughtNeeded false`);
     expect(okTerm.code).toBe(0);
-    expect(okTerm.stdout).toContain("[2/2]");
+    expect(okTerm.stdout).toContain("[3/3]");
     expect(okTerm.stdout).toContain("next=false");
   });
 });
@@ -303,5 +304,87 @@ describe("think.ts: Path B Hard Gates", () => {
     const okTerm = run(`--thought "Conclusion" --thoughtNumber 4 --totalThoughts 4 --nextThoughtNeeded false`);
     expect(okTerm.code).toBe(0);
     expect(okTerm.stdout).toContain("next=false");
+  });
+
+  it("blocks termination on the very first thought in path-b mode", () => {
+    run("--reset");
+    run(`--registerHypothesis "H1: Option A"`);
+    run(`--registerHypothesis "H2: Option B"`);
+    run(`--resolveHypothesis hyp-1 --hypothesisStatus rejected`);
+    run(`--resolveHypothesis hyp-2 --hypothesisStatus selected`);
+    const failTerm = run(`--mode path-b --thought "Instant conclusion with no prior reasoning" --thoughtNumber 1 --totalThoughts 1 --nextThoughtNeeded false`);
+    expect(failTerm.code).not.toBe(0);
+    expect(failTerm.stderr).toContain("Path B requires at least 2 prior thoughts");
+  });
+
+  it("blocks termination when the previous thought flagged needsMoreThoughts", () => {
+    run("--reset");
+    run(`--mode path-b --thought "Decomposing" --thoughtNumber 1 --totalThoughts 4 --nextThoughtNeeded true`);
+    run(`--registerHypothesis "H1: Option A"`);
+    run(`--registerHypothesis "H2: Option B"`);
+    run(`--resolveHypothesis hyp-1 --hypothesisStatus selected`);
+    run(`--resolveHypothesis hyp-2 --hypothesisStatus rejected`);
+    const expand = run(`--thought "Scope expanded mid-analysis" --thoughtNumber 2 --totalThoughts 6 --nextThoughtNeeded true --needsMoreThoughts`);
+    expect(expand.code).toBe(0);
+    const failTerm = run(`--thought "Trying to conclude right after expansion flag" --thoughtNumber 3 --totalThoughts 3 --nextThoughtNeeded false`);
+    expect(failTerm.code).not.toBe(0);
+    expect(failTerm.stderr).toContain("needsMoreThoughts");
+  });
+});
+
+describe("think.ts: claim caveat enforcement", () => {
+  it("rejects single_source without --claimNotes", () => {
+    run(`--registerClaim "Single source claim"`);
+    const res = run(`--verifyClaim claim-1 --claimStatus single_source --claimSource "https://only-one.com"`);
+    expect(res.code).not.toBe(0);
+    expect(res.stderr).toContain("requires --claimNotes");
+  });
+
+  it("rejects unverified without --claimNotes", () => {
+    run(`--registerClaim "Unverifiable claim"`);
+    const res = run(`--verifyClaim claim-1 --claimStatus unverified`);
+    expect(res.code).not.toBe(0);
+    expect(res.stderr).toContain("requires --claimNotes");
+  });
+
+  it("rejects not_found without --claimNotes", () => {
+    run(`--registerClaim "Unfindable claim"`);
+    const res = run(`--verifyClaim claim-1 --claimStatus not_found`);
+    expect(res.code).not.toBe(0);
+    expect(res.stderr).toContain("requires --claimNotes");
+  });
+
+  it("still allows verified without --claimNotes", () => {
+    run(`--registerClaim "Well-sourced claim"`);
+    const res = run(`--verifyClaim claim-1 --claimStatus verified --claimSource "https://a.example" --claimSource "https://b.example"`);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain('"status": "verified"');
+  });
+});
+
+describe("think.ts: side-command audit trail", () => {
+  it("records claim and hypothesis operations in --status auditTrail", () => {
+    run("--reset");
+    run(`--mode path-b --thought "Decomposing" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true`);
+    run(`--registerClaim "Audit claim A"`);
+    run(`--registerHypothesis "Audit H1"`);
+    run(`--registerHypothesis "Audit H2"`);
+    run(`--resolveHypothesis hyp-1 --hypothesisStatus selected`);
+    run(`--resolveHypothesis hyp-2 --hypothesisStatus rejected`);
+    run(`--verifyClaim claim-1 --claimStatus not_found --claimNotes "no public record"`);
+
+    const status = run("--status");
+    expect(status.code).toBe(0);
+    const parsed = JSON.parse(status.stdout);
+    expect(Array.isArray(parsed.auditTrail)).toBe(true);
+    const ops = parsed.auditTrail.map((e: { op: string }) => e.op);
+    expect(ops).toEqual([
+      "registerClaim",
+      "registerHypothesis",
+      "registerHypothesis",
+      "resolveHypothesis",
+      "resolveHypothesis",
+      "verifyClaim",
+    ]);
   });
 });

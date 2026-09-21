@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.1.0
+version: 2.1.1
 description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 2.1.0
+# claude-reasoning 2.1.1
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -98,7 +98,7 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
        --claimSource "https://docs.aws.amazon.com/bedrock/..." \
        --claimSource "https://docs.anthropic.com/en/docs/..."
      ```
-   - `single_source` — exactly one reliable source. Must be carried into the final answer with its uncertainty intact.
+   - `single_source` — exactly one reliable source. Must be carried into the final answer with its uncertainty intact. `--claimNotes` is **required** for `single_source`, `unverified`, and `not_found` — the state machine rejects negative resolutions without a recorded caveat.
      ```bash
      bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
        --claimSource "https://example.com/blog/..." --claimNotes "Only one third-party blog; no official confirmation"
@@ -114,7 +114,7 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
    ```
 
 6. **Termination is gated.**
-   `--nextThoughtNeeded false` fails while any claim is still `pending`. Every pre-registered claim must reach an explicit resolution before the session can close.
+   `--nextThoughtNeeded false` fails while any claim is still `pending`. Every pre-registered claim must reach an explicit resolution before the session can close. In Path B, termination additionally requires **≥ 2 prior thoughts** (at least one decompose and one synthesis round) and is rejected if the immediately preceding thought set `--needsMoreThoughts` — you cannot flag depth expansion and then conclude without another round.
 
 ---
 
@@ -182,7 +182,7 @@ Status line returned after each thought:
 | `--verifyClaim` | string | Target claim id |
 | `--claimStatus` | enum | `verified` \| `single_source` \| `unverified` \| `not_found` |
 | `--claimSource` | string, repeatable | ≥ 2 from distinct root domains required **only** for `verified` |
-| `--claimNotes` | string | Reason preserved with the claim |
+| `--claimNotes` | string | **Required** for `single_source` / `unverified` / `not_found`; optional for `verified` |
 | `--status` | flag | Full JSON state |
 | `--reset` | flag | Clears state for a new session |
 
@@ -205,4 +205,4 @@ Status line returned after each thought:
 
 ## State file
 
-`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, and `claims` keyed by claim id. Survives across invocations; `--reset` clears it.
+`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, and `claimDetails`.

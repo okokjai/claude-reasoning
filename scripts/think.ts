@@ -49,12 +49,19 @@ export interface Hypothesis {
 
 export type ThinkingMode = "path-a" | "path-b";
 
+export interface AuditEntry {
+  op: "registerClaim" | "verifyClaim" | "registerHypothesis" | "resolveHypothesis";
+  target: string;
+  detail?: string;
+}
+
 export interface State {
   mode?: ThinkingMode;
   thoughtHistory: ThoughtData[];
   branches: Record<string, ThoughtData[]>;
   claims: Record<string, Claim>;
   hypotheses: Record<string, Hypothesis>;
+  auditTrail?: AuditEntry[];
 }
 
 function loadState(): State {
@@ -67,16 +74,22 @@ function loadState(): State {
         branches: data.branches || {},
         claims: data.claims || {},
         hypotheses: data.hypotheses || {},
+        auditTrail: data.auditTrail || [],
       };
     } catch {
-      return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {} };
+      return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, auditTrail: [] };
     }
   }
-  return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {} };
+  return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, auditTrail: [] };
 }
 
 function saveState(state: State): void {
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+function recordAudit(state: State, entry: AuditEntry): void {
+  if (!state.auditTrail) state.auditTrail = [];
+  state.auditTrail.push(entry);
 }
 
 function formatThought(t: ThoughtData): string {
@@ -200,6 +213,7 @@ if (values.status) {
     fullHistory: state.thoughtHistory,
     branchDetails: state.branches,
     claimDetails: state.claims,
+    auditTrail: state.auditTrail || [],
   };
   console.log(JSON.stringify(response, null, 2));
   process.exit(0);
@@ -222,6 +236,7 @@ if (values.registerClaim) {
     status: "pending",
   };
   state.claims[claimId] = claim;
+  recordAudit(state, { op: "registerClaim", target: claimId, detail: values.registerClaim });
   saveState(state);
   console.log(JSON.stringify({ registered: claimId, statement: values.registerClaim, status: "pending" }, null, 2));
   process.exit(0);
@@ -240,6 +255,7 @@ if (values.registerHypothesis) {
   };
   if (!state.hypotheses) state.hypotheses = {};
   state.hypotheses[hypId] = hyp;
+  recordAudit(state, { op: "registerHypothesis", target: hypId, detail: values.registerHypothesis });
   saveState(state);
   console.log(JSON.stringify({ registered: hypId, statement: values.registerHypothesis, status: "pending" }, null, 2));
   process.exit(0);
@@ -262,6 +278,7 @@ if (values.resolveHypothesis) {
   hyp.status = status;
   if (values.hypothesisNotes) hyp.notes = values.hypothesisNotes;
 
+  recordAudit(state, { op: "resolveHypothesis", target: hyp.id, detail: status });
   saveState(state);
   console.log(JSON.stringify({ resolved: hyp.id, status: hyp.status, notes: hyp.notes }, null, 2));
   process.exit(0);
@@ -297,10 +314,16 @@ if (values.verifyClaim) {
     }
   }
 
+  // Guardrail 2: negative resolutions require a recorded caveat
+  if ((status === "single_source" || status === "unverified" || status === "not_found") && !values.claimNotes) {
+    fail(`--claimStatus ${status} requires --claimNotes explaining why the claim could not be fully verified`);
+  }
+
   claim.status = status;
   claim.sources = sources;
   if (values.claimNotes) claim.notes = values.claimNotes;
 
+  recordAudit(state, { op: "verifyClaim", target: claim.id, detail: status });
   saveState(state);
   console.log(JSON.stringify({ verified: claim.id, status: claim.status, sources: claim.sources, notes: claim.notes }, null, 2));
   process.exit(0);
@@ -355,6 +378,17 @@ if (!nextThoughtNeeded) {
     const pendingHyps = hypList.filter(h => h.status === "pending");
     if (pendingHyps.length > 0) {
       fail(`Path B requires all hypotheses to be resolved (selected, rejected, or synthesized). ${pendingHyps.length} hypotheses still pending: ${pendingHyps.map(h => h.id).join(", ")}.`);
+    }
+
+    // Gate 4 (Path B): convergence requires at least one decompose + one synthesis round
+    if (state.thoughtHistory.length < 2) {
+      fail(`Path B requires at least 2 prior thoughts before termination (decompose, then synthesize). Current: ${state.thoughtHistory.length}.`);
+    }
+
+    // Gate 5 (Path B): cannot conclude immediately after flagging for depth expansion
+    const previousThought = state.thoughtHistory[state.thoughtHistory.length - 1];
+    if (previousThought.needsMoreThoughts) {
+      fail(`Cannot terminate with --nextThoughtNeeded false: the previous thought (${previousThought.thoughtNumber}) set --needsMoreThoughts, signalling new insight was still being sought. Submit at least one more thought.`);
     }
   }
 }
