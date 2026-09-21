@@ -20,7 +20,7 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 Requires [Bun](https://bun.sh) (tested on 1.4.2) or Node.js ≥ 18 with `npx tsx`.
 
 ```bash
-cp -r claude-reasoning-2.0.0 ~/.claude/skills/claude-reasoning
+cp -r claude-reasoning-2.1.0 ~/.claude/skills/claude-reasoning
 ```
 
 Or use the skill directly from this directory.
@@ -36,7 +36,7 @@ bun install   # installs devDependencies: typescript, @types/node, @types/bun
 ## Usage
 
 ```bash
-cd claude-reasoning-2.0.0
+cd claude-reasoning-2.1.0
 
 # Start a session
 bun scripts/think.ts --reset
