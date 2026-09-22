@@ -2,6 +2,12 @@
 
 All notable changes to this skill are documented here.
 
+## [2.1.3] - 2026-09-22
+
+### Changed
+
+- **Version bump only.** `package.json`, `SKILL.md` frontmatter and H1, `README.md` H1, and `scripts/think.ts` header synchronized to 2.1.3. No code, contract, or test changes.
+
 ## [2.1.2] - 2026-09-22
 
 ### Fixed
