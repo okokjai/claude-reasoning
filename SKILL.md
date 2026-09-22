@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.1.1
+version: 2.1.2
 description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 2.1.1
+# claude-reasoning 2.1.2
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -84,7 +84,7 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
    Registration happens *before* any search call. Formulating a claim after seeing results is post-hoc rationalization and is prohibited by this contract.
 
 2. **Probe the session's real capabilities.**
-   Use only search/fetch tools that are actually present in the current environment (`WebSearch`, `WebFetch`, or an installed MCP fetch tool). If none is available:
+   Use only search/fetch tools that are actually present in the current environment — whatever the session's native web search, URL fetch, browser, or installed MCP fetch tool happens to be (names differ per runtime; probe, don't assume). If none is available:
    ```bash
    bun scripts/think.ts --verifyClaim claim-1 --claimStatus unverified --claimNotes "No search or fetch tool available in this session"
    ```

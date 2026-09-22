@@ -2,6 +2,13 @@
 
 All notable changes to this skill are documented here.
 
+## [2.1.2] - 2026-09-22
+
+### Fixed
+
+- **`SKILL.md` / `references/example-path-b-verify.md`** — External Verification Contract and Path B example no longer name runtime-specific tools (`WebSearch`, `WebFetch`). Wording now directs agents to probe the session's actual search/fetch capability regardless of runtime, removing a portability trap for non-Claude-Code harnesses.
+- **`README.md`** - install/test commands now use the version-agnostic `claude-reasoning-*` directory glob instead of a hardcoded `claude-reasoning-2.1.0` path, eliminating stale version references in usage instructions.
+
 ## [2.1.1] - 2026-09-22
 
 ### Added

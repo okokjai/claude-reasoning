@@ -55,7 +55,7 @@ bun scripts/think.ts \
 ---
 
 ## Thought 3: Verification with Source Tiers & Negative Search
-Now invoke session search tools (e.g. `WebSearch`).
+Now invoke session search tools (whatever search/fetch capability this environment provides).
 
 1. **Verify Claim 1**:
    - Query: `AWS Bedrock Claude 3.5 Sonnet prompt caching support`

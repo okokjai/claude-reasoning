@@ -1,6 +1,6 @@
 {
   "name": "claude-reasoning",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Structurally adaptive reasoning skill with claim-gated external verification and zero MCP dependencies",
   "scripts": {
     "think": "bun scripts/think.ts",
