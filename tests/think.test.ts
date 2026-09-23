@@ -362,6 +362,59 @@ describe("think.ts: claim caveat enforcement", () => {
   });
 });
 
+describe("think.ts: hypothesis merge status", () => {
+  it("rejects merged without --mergedInto", () => {
+    run('--mode path-b --thought "q" --thoughtNumber 1 --totalThoughts 2 --nextThoughtNeeded true');
+    run('--registerHypothesis "A"');
+    run('--registerHypothesis "B, same mechanism as A"');
+    const res = run("--resolveHypothesis hyp-2 --hypothesisStatus merged");
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--mergedInto is required");
+  });
+
+  it("rejects merging a hypothesis into itself", () => {
+    run('--mode path-b --thought "q" --thoughtNumber 1 --totalThoughts 2 --nextThoughtNeeded true');
+    run('--registerHypothesis "A"');
+    const res = run("--resolveHypothesis hyp-1 --hypothesisStatus merged --mergedInto hyp-1");
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("cannot reference the hypothesis being resolved itself");
+  });
+
+  it("rejects merging into a nonexistent target", () => {
+    run('--mode path-b --thought "q" --thoughtNumber 1 --totalThoughts 2 --nextThoughtNeeded true');
+    run('--registerHypothesis "A"');
+    const res = run("--resolveHypothesis hyp-1 --hypothesisStatus merged --mergedInto hyp-99");
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("not found in state");
+  });
+
+  it("accepts a valid merge and records mergedInto", () => {
+    run('--mode path-b --thought "q" --thoughtNumber 1 --totalThoughts 2 --nextThoughtNeeded true');
+    run('--registerHypothesis "A"');
+    run('--registerHypothesis "B, same mechanism as A"');
+    const res = run(
+      '--resolveHypothesis hyp-2 --hypothesisStatus merged --mergedInto hyp-1 --hypothesisNotes "same mechanism, different framing"'
+    );
+    expect(res.code).toBe(0);
+    const parsed = JSON.parse(res.stdout);
+    expect(parsed.status).toBe("merged");
+    expect(parsed.mergedInto).toBe("hyp-1");
+  });
+
+  it("treats a merged hypothesis as resolved for Path B termination", () => {
+    run('--mode path-b --thought "decompose" --thoughtNumber 1 --totalThoughts 3 --nextThoughtNeeded true');
+    run('--registerHypothesis "A"');
+    run('--registerHypothesis "B, same mechanism as A"');
+    run("--resolveHypothesis hyp-2 --hypothesisStatus merged --mergedInto hyp-1");
+    run("--resolveHypothesis hyp-1 --hypothesisStatus selected");
+    run('--thought "synthesize" --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true');
+    const res = run(
+      '--thought "conclusion" --thoughtNumber 3 --totalThoughts 3 --nextThoughtNeeded false'
+    );
+    expect(res.code).toBe(0);
+  });
+});
+
 describe("think.ts: side-command audit trail", () => {
   it("records claim and hypothesis operations in --status auditTrail", () => {
     run("--reset");

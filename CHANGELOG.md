@@ -2,6 +2,13 @@
 
 All notable changes to this skill are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **`merged` hypothesis status** — `--resolveHypothesis` now accepts `merged` (alongside `selected`, `rejected`, `synthesized`), for the case where two registered hypotheses turn out, mid-derivation, to be the same underlying mechanism viewed from different angles rather than genuinely competing explanations. Requires `--mergedInto <hypothesisId>` naming which surviving hypothesis absorbed it; rejects self-references and nonexistent targets. Previously this legitimate outcome had no correct status to record and had to be force-fit into `synthesized`, which conflates "these were never really competing" with "we combined two competing options into a new one." A merged hypothesis counts as resolved for Path B termination, same as the other three terminal statuses.
+- 5 new tests covering the `merged` status guardrails and its interaction with Path B termination (32 tests total, up from 27).
+
 ## [2.1.3] - 2026-09-22
 
 ### Changed

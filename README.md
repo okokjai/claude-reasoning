@@ -63,6 +63,11 @@ bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
 bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected
 bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected
 
+# If two hypotheses turn out to be the same mechanism viewed differently,
+# merge rather than forcing one to "win" — requires --mergedInto
+bun scripts/think.ts --resolveHypothesis hyp-3 --hypothesisStatus merged --mergedInto hyp-1 \
+  --hypothesisNotes "same mechanism as hyp-1, different framing"
+
 # Synthesize at least one more round (Path B requires ≥ 2 prior thoughts; a
 # --needsMoreThoughts flag on the last thought blocks termination too)
 bun scripts/think.ts --thought "Critique + verify against lenses" --thoughtNumber 2 --totalThoughts 5 --nextThoughtNeeded true

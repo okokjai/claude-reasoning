@@ -38,13 +38,14 @@ export interface Claim {
   notes?: string;
 }
 
-export type HypothesisStatus = "pending" | "selected" | "rejected" | "synthesized";
+export type HypothesisStatus = "pending" | "selected" | "rejected" | "synthesized" | "merged";
 
 export interface Hypothesis {
   id: string;
   statement: string;
   status: HypothesisStatus;
   notes?: string;
+  mergedInto?: string;
 }
 
 export type ThinkingMode = "path-a" | "path-b";
@@ -168,6 +169,7 @@ const { values } = parseArgs({
     resolveHypothesis: { type: "string" },
     hypothesisStatus: { type: "string" },
     hypothesisNotes: { type: "string" },
+    mergedInto: { type: "string" },
     status: { type: "boolean", default: false },
     reset: { type: "boolean", default: false },
   },
@@ -270,17 +272,25 @@ if (values.resolveHypothesis) {
   const status = values.hypothesisStatus as HypothesisStatus;
   if (!status) fail("--hypothesisStatus is required when --resolveHypothesis is set");
 
-  const validStatuses: HypothesisStatus[] = ["pending", "selected", "rejected", "synthesized"];
+  const validStatuses: HypothesisStatus[] = ["pending", "selected", "rejected", "synthesized", "merged"];
   if (!validStatuses.includes(status)) {
     fail(`Invalid --hypothesisStatus: ${status}. Must be one of: ${validStatuses.join(", ")}`);
+  }
+
+  if (status === "merged") {
+    const target = values.mergedInto;
+    if (!target) fail("--mergedInto is required when --hypothesisStatus is 'merged' (which surviving hypothesis absorbed this one).");
+    if (target === hyp.id) fail("--mergedInto cannot reference the hypothesis being resolved itself.");
+    if (!state.hypotheses?.[target]) fail(`--mergedInto target '${target}' not found in state.`);
+    hyp.mergedInto = target;
   }
 
   hyp.status = status;
   if (values.hypothesisNotes) hyp.notes = values.hypothesisNotes;
 
-  recordAudit(state, { op: "resolveHypothesis", target: hyp.id, detail: status });
+  recordAudit(state, { op: "resolveHypothesis", target: hyp.id, detail: status === "merged" ? `merged->${values.mergedInto}` : status });
   saveState(state);
-  console.log(JSON.stringify({ resolved: hyp.id, status: hyp.status, notes: hyp.notes }, null, 2));
+  console.log(JSON.stringify({ resolved: hyp.id, status: hyp.status, mergedInto: hyp.mergedInto, notes: hyp.notes }, null, 2));
   process.exit(0);
 }
 
@@ -377,7 +387,7 @@ if (!nextThoughtNeeded) {
     }
     const pendingHyps = hypList.filter(h => h.status === "pending");
     if (pendingHyps.length > 0) {
-      fail(`Path B requires all hypotheses to be resolved (selected, rejected, or synthesized). ${pendingHyps.length} hypotheses still pending: ${pendingHyps.map(h => h.id).join(", ")}.`);
+      fail(`Path B requires all hypotheses to be resolved (selected, rejected, synthesized, or merged). ${pendingHyps.length} hypotheses still pending: ${pendingHyps.map(h => h.id).join(", ")}.`);
     }
 
     // Gate 4 (Path B): convergence requires at least one decompose + one synthesis round

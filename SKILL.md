@@ -47,7 +47,7 @@ Rationale, measured: closed-form logic questions that were run through a fixed 1
 **No fixed round count. Converge when a round yields no new insight.**
 
 1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
-2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis` and resolve each before terminating (`selected`, `rejected`, or `synthesized`); Path B termination is rejected while fewer than 2 hypotheses are registered or any remains `pending`.
+2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis` and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`); Path B termination is rejected while fewer than 2 hypotheses are registered or any remains `pending`. Use `merged` (with `--mergedInto <id>`) when a hypothesis turns out to be the same underlying mechanism as another, viewed from a different angle — this is a decomposition correction, not a competing explanation, and should be recorded as such rather than forced into `synthesized`.
 3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; never enable all by reflex:
    - **First principles & constraint reduction** — reduce to irreducible constraints.
    - **Pre-mortem & active red team** — assume catastrophic failure 12 months out; identify what killed it.
