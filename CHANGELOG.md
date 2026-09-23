@@ -4,10 +4,28 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-09-24
+
+### Fixed
+
+- **`scripts/think.ts`** — `registeredAtThought` now records the number of completed thoughts at registration time (was `length + 1`, a future index with no corresponding thought). A claim registered after Thought 1 now reads `1` instead of `2`; on an empty session it reads `0` instead of `1`.
+- **`SKILL.md`** — added quoting guidance: `--thought`, `--registerClaim`, `--claimNotes`, and `--hypothesisNotes` values containing `$`, a backtick, or `\` must use single quotes; inside double quotes bash silently expands `$<digit>` as a positional parameter (`$53K` → `3K`). Also added a provider-fallback rule to External Verification Contract step 2: when every available search provider fails the same query, switch retrieval tools rather than retrying with rephrased queries.
+
 ### Added
 
-- **`merged` hypothesis status** — `--resolveHypothesis` now accepts `merged` (alongside `selected`, `rejected`, `synthesized`), for the case where two registered hypotheses turn out, mid-derivation, to be the same underlying mechanism viewed from different angles rather than genuinely competing explanations. Requires `--mergedInto <hypothesisId>` naming which surviving hypothesis absorbed it; rejects self-references and nonexistent targets. Previously this legitimate outcome had no correct status to record and had to be force-fit into `synthesized`, which conflates "these were never really competing" with "we combined two competing options into a new one." A merged hypothesis counts as resolved for Path B termination, same as the other three terminal statuses.
-- 5 new tests covering the `merged` status guardrails and its interaction with Path B termination (32 tests total, up from 27).
+- **`merged` hypothesis status** — `--resolveHypothesis` now accepts `merged` (alongside `selected`, `rejected`, `synthesized`), for the case where two registered hypotheses turn out, mid-derivation, to be the same underlying mechanism viewed from different angles rather than genuinely competing explanations. Requires `--mergedInto <hypothesisId>` naming which surviving hypothesis absorbed it; rejects self-references, nonexistent targets, already-merged targets (preventing merge chains), and `--mergedInto` passed with non-`merged` status. Re-resolving a previously merged hypothesis to a non-merged status cleanly clears `mergedInto`. A merged hypothesis counts as resolved for Path B termination, but termination is rejected if merges leave fewer than 2 distinct surviving hypotheses. A hypothesis that already absorbs another merge cannot itself be merged onward — that would strand a `mergedInto` pointer on a merged node (two-hop chain).
+- 7 new tests covering the `merged` status guardrails, merge-chain rejection (forward and backward), stale `mergedInto` cleanup, surviving-hypothesis termination gating, its interaction with Path B termination, and the `registeredAtThought` regression (39 tests total, up from 32).
+- **`$`-storage regression test** — `stores $-containing flag values byte-for-byte` registers a claim and a thought containing `$500K`/`$186K`/`$1.15M`/`$3` and asserts the stored statement/thought text is identical to what was passed. Locks the no-shell-expansion contract.
+
+### Changed
+
+- **`tests/think.test.ts` harness** — `run()` now executes `bun scripts/think.ts` via `execFileSync` with an argv array instead of `execSync` shell-string interpolation. On POSIX shells `$<digit>` inside quoted values was silently expanded as positional parameters (`"$500K"` → `"00K"`), meaning tests could not detect `$`-corruption and would false-pass on Linux. All 134 call sites converted.
+- **`SKILL.md` frontmatter description / `package.json` description** — appended trigger-language sentence ("Use when reasoning through a bug, a decision, a design critique…") so the description surfaces not just what the skill is but when to invoke it, aligning with how users phrase requests during skill retrieval. Both fields kept identical.
+- **`references/example-path-b-verify.md`** — Thought 4's `--thought` value switched to single quotes so its `$3`/`$15` literals survive POSIX shells byte-for-byte, matching the new quoting guidance.
+
+### Breaking Changes
+
+None. All changes are additive or internal; no public API, CLI flag, or state-file contract was removed or altered incompatibly.
 
 ## [2.1.3] - 2026-09-22
 

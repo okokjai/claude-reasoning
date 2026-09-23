@@ -1,4 +1,4 @@
-# claude-reasoning 2.1.3
+# claude-reasoning 2.1.4
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
@@ -96,6 +96,12 @@ These are checked in code, not just documented:
 | `--nextThoughtNeeded false` in `path-b` when the previous thought set `--needsMoreThoughts` | Exit code 1 — cannot flag depth expansion then conclude immediately |
 | `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains | Exit code 1, error names the shortfall |
 | `--claimStatus` of `single_source` / `unverified` / `not_found` without `--claimNotes` | Exit code 1 — negative resolutions require a recorded caveat |
+| `--hypothesisStatus merged` without `--mergedInto` | Exit code 1 |
+| `--mergedInto` referencing the hypothesis being resolved or a nonexistent id | Exit code 1 |
+| `--mergedInto` referencing an already-merged hypothesis (merge chain) | Exit code 1 |
+| `--hypothesisStatus merged` on a hypothesis that already absorbs a merge (two-hop chain) | Exit code 1 |
+| `--mergedInto` passed with `--hypothesisStatus` other than `merged` | Exit code 1 |
+| `--nextThoughtNeeded false` in `path-b` when merges leave fewer than 2 distinct hypotheses | Exit code 1 — Path B requires ≥ 2 distinct hypotheses after merges |
 | `--nextThoughtNeeded false` with any `pending` claim | Exit code 1, lists the pending claim ids |
 | `--isRevision` without `--revisesThought` | Exit code 1 |
 | `--branchFromThought` without `--branchId` | Exit code 1 |
@@ -107,7 +113,7 @@ These are checked in code, not just documented:
 bun test
 ```
 
-27 tests, offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth and claim prohibition, Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration, all guardrails above (including distinct-root-domain rejection for `verified` and `--claimNotes` enforcement for negative resolutions), the `--status` audit trail for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and a blocked premature termination.
+39 tests, offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth and claim prohibition, Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including the `registeredAtThought` index recorded against completed thoughts and byte-exact storage of `$`-containing flag values), all guardrails above (including distinct-root-domain rejection for `verified` and `--claimNotes` enforcement for negative resolutions), the `--status` audit trail for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and a blocked premature termination.
 
 ## Design notes
 

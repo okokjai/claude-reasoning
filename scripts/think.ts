@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 2.1.3 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 2.1.4 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -233,7 +233,7 @@ if (values.registerClaim) {
   const claim: Claim = {
     id: claimId,
     statement: values.registerClaim,
-    registeredAtThought: state.thoughtHistory.length + 1,
+    registeredAtThought: state.thoughtHistory.length,
     sources: [],
     status: "pending",
   };
@@ -277,12 +277,28 @@ if (values.resolveHypothesis) {
     fail(`Invalid --hypothesisStatus: ${status}. Must be one of: ${validStatuses.join(", ")}`);
   }
 
+  if (values.mergedInto && status !== "merged") {
+    fail("--mergedInto is only valid with --hypothesisStatus merged.");
+  }
+
   if (status === "merged") {
     const target = values.mergedInto;
     if (!target) fail("--mergedInto is required when --hypothesisStatus is 'merged' (which surviving hypothesis absorbed this one).");
     if (target === hyp.id) fail("--mergedInto cannot reference the hypothesis being resolved itself.");
     if (!state.hypotheses?.[target]) fail(`--mergedInto target '${target}' not found in state.`);
+    if (state.hypotheses[target].status === "merged") fail(`--mergedInto target '${target}' is already merged into another hypothesis; merge chains are not allowed.`);
+    // Keep merges flat: if another hypothesis already merged INTO this one, this
+    // one must stay put as the survivor — merging it onward would leave that
+    // pointer stranded on a merged node (a two-hop chain).
+    const victim = Object.values(state.hypotheses ?? {}).find(
+      (h) => h.id !== hyp.id && h.mergedInto === hyp.id,
+    );
+    if (victim) {
+      fail(`Hypothesis '${hyp.id}' already absorbs '${victim.id}' and cannot itself be merged onward; merge chains are not allowed. Re-point '${victim.id}' to '${target}' first.`);
+    }
     hyp.mergedInto = target;
+  } else {
+    delete hyp.mergedInto;
   }
 
   hyp.status = status;
@@ -388,6 +404,12 @@ if (!nextThoughtNeeded) {
     const pendingHyps = hypList.filter(h => h.status === "pending");
     if (pendingHyps.length > 0) {
       fail(`Path B requires all hypotheses to be resolved (selected, rejected, synthesized, or merged). ${pendingHyps.length} hypotheses still pending: ${pendingHyps.map(h => h.id).join(", ")}.`);
+    }
+
+    // Gate 3b (Path B): termination requires at least 2 distinct hypotheses after merges
+    const distinctHyps = hypList.filter(h => h.status !== "merged");
+    if (distinctHyps.length < 2) {
+      fail(`Path B termination requires at least 2 distinct hypotheses after merges; currently ${distinctHyps.length} (${distinctHyps.map(h => h.id).join(", ")}).`);
     }
 
     // Gate 4 (Path B): convergence requires at least one decompose + one synthesis round

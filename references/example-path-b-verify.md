@@ -93,7 +93,7 @@ bun scripts/think.ts \
 ## Thought 4: Anti-Hallucination Semantic Gates
 ```bash
 bun scripts/think.ts \
-  --thought "Executing references/hallucination-gates.md P0 audit: (1) Entity & Metric: $3/$15 confirmed via Tier 1 docs; (2) Dual-source: Both claims backed by distinct authoritative endpoints; (3) Temporal: Verified as of late 2024 / current releases; (4) Negative search: Executed and surfaced regional routing constraints; (5) Tool compliance: Real results reported without embellishment. All 5 gates passed." \
+  --thought 'Executing references/hallucination-gates.md P0 audit: (1) Entity & Metric: $3/$15 confirmed via Tier 1 docs; (2) Dual-source: Both claims backed by distinct authoritative endpoints; (3) Temporal: Verified as of late 2024 / current releases; (4) Negative search: Executed and surfaced regional routing constraints; (5) Tool compliance: Real results reported without embellishment. All 5 gates passed.' \
   --thoughtNumber 4 --totalThoughts 6 --nextThoughtNeeded true
 ```
 

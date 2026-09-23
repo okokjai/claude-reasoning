@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.1.3
-description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
+version: 2.1.4
+description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies. Use when reasoning through a bug, a decision, a design critique, an architecture tradeoff, a multi-step analysis, or any open-ended question needing verified external facts — before answering, not after."
 ---
 
-# claude-reasoning 2.1.3
+# claude-reasoning 2.1.4
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -47,7 +47,7 @@ Rationale, measured: closed-form logic questions that were run through a fixed 1
 **No fixed round count. Converge when a round yields no new insight.**
 
 1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
-2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis` and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`); Path B termination is rejected while fewer than 2 hypotheses are registered or any remains `pending`. Use `merged` (with `--mergedInto <id>`) when a hypothesis turns out to be the same underlying mechanism as another, viewed from a different angle — this is a decomposition correction, not a competing explanation, and should be recorded as such rather than forced into `synthesized`.
+2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis` and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`); Path B termination is rejected while fewer than 2 hypotheses are registered, any remains `pending`, or merges leave fewer than 2 distinct surviving hypotheses. Use `merged` (with `--mergedInto <id>`) when a hypothesis turns out to be the same underlying mechanism as another, viewed from a different angle — this is a decomposition correction, not a competing explanation, and should be recorded as such rather than forced into `synthesized`. `--mergedInto` rejects self-references, nonexistent ids, and already-merged targets (no merge chains); a hypothesis that already absorbs another merge likewise cannot be merged onward. Passing it with any status other than `merged` is rejected.
 3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; never enable all by reflex:
    - **First principles & constraint reduction** — reduce to irreducible constraints.
    - **Pre-mortem & active red team** — assume catastrophic failure 12 months out; identify what killed it.
@@ -83,12 +83,16 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
    ```
    Registration happens *before* any search call. Formulating a claim after seeing results is post-hoc rationalization and is prohibited by this contract.
 
+   **Quoting:** any `--thought`, `--registerClaim`, `--claimNotes`, or `--hypothesisNotes` value containing `$`, a backtick, or `\` must use **single quotes** (`'...'`). Inside double quotes, bash silently expands `$<digit>` as a positional parameter — `$53K` arrives as `3K` with no warning and no error. Values without those characters may keep double quotes, as in the examples below.
+
 2. **Probe the session's real capabilities.**
    Use only search/fetch tools that are actually present in the current environment — whatever the session's native web search, URL fetch, browser, or installed MCP fetch tool happens to be (names differ per runtime; probe, don't assume). If none is available:
    ```bash
    bun scripts/think.ts --verifyClaim claim-1 --claimStatus unverified --claimNotes "No search or fetch tool available in this session"
    ```
    Never emit a search call that cannot run, and never describe a source you did not retrieve.
+
+   If every available provider fails on the same query, switch to a different retrieval tool in the session (a second search backend, an MCP fetch/search tool, or a browser). Do not retry the same tool with rephrased queries — a full-provider failure is a tool problem, not a phrasing problem.
 
 3. **Dual independent sources & Source Tiers.**
    - Consult `references/source-tiers.md` to classify sources into Tier 1 (primary/official), Tier 2 (reputable media/papers), Tier 3 (community blogs), or Tier 4 (disallowed AI summaries/farms).
@@ -171,6 +175,7 @@ Status line returned after each thought:
 
 | Flag | Type | Notes |
 |---|---|---|
+| `--mode` | enum | `path-a` \| `path-b` — **required on the first thought**; immutable for the session |
 | `--thought` | string | Thought content |
 | `--thoughtNumber` | int ≥ 1 | Current index |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it |
@@ -178,6 +183,11 @@ Status line returned after each thought:
 | `--isRevision` / `--revisesThought N` | flag / int | Both required together |
 | `--branchFromThought N` / `--branchId label` | int / string | Both required together |
 | `--needsMoreThoughts` | flag | Signals depth expansion |
+| `--registerHypothesis` | string | Registers a competing hypothesis; assigns `hyp-N`, status `pending` |
+| `--resolveHypothesis` | string | Target hypothesis id |
+| `--hypothesisStatus` | enum | `selected` \| `rejected` \| `synthesized` \| `merged` |
+| `--hypothesisNotes` | string | Optional rationale recorded on the hypothesis |
+| `--mergedInto` | string | **Required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, or a resolving hypothesis that already absorbs another merge |
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending` |
 | `--verifyClaim` | string | Target claim id |
 | `--claimStatus` | enum | `verified` \| `single_source` \| `unverified` \| `not_found` |
