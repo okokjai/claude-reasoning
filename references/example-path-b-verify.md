@@ -18,18 +18,24 @@ bun scripts/think.ts \
   --mode path-b \
   --thought "Step 0: Open-ended architecture evaluation. Deconstruct into 3 load-bearing sub-questions: (1) Pricing parity and prompt caching support, (2) Multi-region network latency from Taiwan, (3) Enterprise operational overhead. Pre-registering real-world factual claims before performing any web search." \
   --thoughtNumber 1 --totalThoughts 6 --nextThoughtNeeded true
-# Output: [1/6] mode=path-b history=1 next=true
 ```
+
+*Output (stdout)*:
+```
+[1/6] history=1 mode=path-b next=true
+```
+
+*(stderr also emits a formatted `💭 Thought 1/6` block echoing the thought text)*
 
 ### Pre-Registering Claims Before Search (Mandatory)
 ```bash
 # Claim 1: Bedrock supports prompt caching for Claude 3.5 Sonnet
 bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"
-# Output: [1/6] mode=path-b history=1 claims=claim-1 next=true ... registered claim-1
+# Output (stdout): {"registered": "claim-1", "statement": "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet", "status": "pending"}
 
 # Claim 2: AWS Bedrock pricing for Claude 3.5 Sonnet matches Anthropic direct API pricing ($3/M input, $15/M output)
 bun scripts/think.ts --registerClaim "AWS Bedrock pricing for Claude 3.5 Sonnet has exact base token price parity with Anthropic API"
-# Output: [1/6] mode=path-b history=1 claims=claim-1,claim-2 next=true ... registered claim-2
+# Output (stdout): {"registered": "claim-2", "statement": "AWS Bedrock pricing for Claude 3.5 Sonnet has exact base token price parity with Anthropic API", "status": "pending"}
 ```
 
 ### Registering Competing Hypotheses (Mandatory for Path B)
@@ -60,14 +66,14 @@ Now invoke session search tools (whatever search/fetch capability this environme
 1. **Verify Claim 1**:
    - Query: `AWS Bedrock Claude 3.5 Sonnet prompt caching support`
    - Negative Search Query: `AWS Bedrock Claude prompt caching limitations region availability`
-   - Retrieved Tier 1 docs: `https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html` and `https://aws.amazon.com/about-aws/whats-new/2024/11/prompt-caching-anthropic-claude-amazon-bedrock/`
+   - Retrieved Tier 1 docs: `https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html` and `https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching`
    - Finding: Supported, but initially only in US regions (us-east-1, us-west-2).
 
 ```bash
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimSource "https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html" \
-  --claimSource "https://aws.amazon.com/about-aws/whats-new/2024/11/prompt-caching-anthropic-claude-amazon-bedrock/" \
-  --claimNotes "Tier 1 AWS documentation confirms prompt caching is supported for Claude 3.5 Sonnet; negative search surfaced regional restriction to US East/West."
+  --claimSource "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" \
+  --claimNotes "Tier 1 AWS and Anthropic docs confirm prompt caching support; negative search surfaced regional restriction to US East/West."
 ```
 
 2. **Verify Claim 2**:
@@ -123,7 +129,7 @@ Now terminate with all claims and hypotheses resolved:
 bun scripts/think.ts \
   --thought "Final conclusion formulated following references/conclusion-card.md structure. All claims verified, all hypotheses resolved; closing session." \
   --thoughtNumber 6 --totalThoughts 6 --nextThoughtNeeded false
-# Output: [6/6] mode=path-b history=6 claims=claim-1:verified,claim-2:verified hypotheses=hyp-1:selected,hyp-2:rejected next=false
+# Output (stdout): [6/6] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false
 ```
 
 ---
@@ -145,7 +151,7 @@ bun scripts/think.ts \
 
 - **Key Evidence Sources**:
   - `claim-1`: `https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html` (Tier 1)
-  - `claim-1`: `https://aws.amazon.com/about-aws/whats-new/2024/11/prompt-caching-anthropic-claude-amazon-bedrock/` (Tier 1)
+  - `claim-1`: `https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching` (Tier 1)
   - `claim-2`: `https://www.anthropic.com/pricing` (Tier 1)
   - `claim-2`: `https://aws.amazon.com/bedrock/pricing/` (Tier 1)
 

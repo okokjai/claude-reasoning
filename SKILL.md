@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.1.4
+version: 2.1.5
 description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies. Use when reasoning through a bug, a decision, a design critique, an architecture tradeoff, a multi-step analysis, or any open-ended question needing verified external facts — before answering, not after."
 ---
 
-# claude-reasoning 2.1.4
+# claude-reasoning 2.1.5
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -38,7 +38,7 @@ Announce the classification in Thought 1 so the routing is inspectable. Pass it 
 
 Terminate as soon as the two independent methods agree: `--nextThoughtNeeded false`.
 
-Rationale, measured: closed-form logic questions that were run through a fixed 11-node framework produced 6 of 6 trail entries with zero captured insight. Depth must be earned by disagreement, not scheduled.
+Rationale: closed-form logic questions forced through a fixed multi-node framework tend to generate filler steps with no captured insight. Depth must be earned by disagreement, not scheduled.
 
 ---
 
@@ -96,7 +96,7 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 3. **Dual independent sources & Source Tiers.**
    - Consult `references/source-tiers.md` to classify sources into Tier 1 (primary/official), Tier 2 (reputable media/papers), Tier 3 (community blogs), or Tier 4 (disallowed AI summaries/farms).
-   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated). The state machine rejects `verified` with fewer than 2 `--claimSource` values or with sources sharing the same root domain.
+   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated). The state machine rejects `verified` with fewer than 2 `--claimSource` values or with sources sharing the same root domain. Root domains are computed from the hostname's last two labels (a conservative heuristic): distinct second-level ccTLD registrations (e.g. `a.example.co.uk` vs `b.other.co.uk`) are treated as the same root and rejected.
      ```bash
      bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
        --claimSource "https://docs.aws.amazon.com/bedrock/..." \
@@ -161,14 +161,14 @@ bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
 bun scripts/think.ts --verifyClaim claim-3 --claimStatus not_found --claimNotes "no public record"
 bun scripts/think.ts --verifyClaim claim-4 --claimStatus unverified --claimNotes "no search tool in session"
 
-# Inspect full state (thoughts, branches, claims)
+# Inspect full state (thoughts, branches, hypotheses, claims)
 bun scripts/think.ts --status
 ```
 
 Status line returned after each thought:
 
 ```
-[3/7] history=3 branches=alt-approach claims=claim-1,claim-2 next=true
+[3/7] history=3 mode=path-b branches=alt-approach claims=claim-1,claim-2 next=true
 ```
 
 ### Flag reference
@@ -210,9 +210,9 @@ Status line returned after each thought:
 
 ## Examples
 
-- `references/example-path-a.md` — closed-form kinship trap, 4 thoughts, zero claims.
-- `references/example-path-b-verify.md` — open-ended architecture decision with pre-registration and mixed verification outcomes.
+- `references/example-path-a.md` — closed-form kinship trap, 3 thoughts, zero claims.
+- `references/example-path-b-verify.md` — open-ended architecture decision with pre-registration and dual-source verified outcomes.
 
 ## State file
 
-`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, and `claimDetails`.
+`scripts/.think_state.json` — `mode` (immutable after Step 0), append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, `hypotheses` keyed by hypothesis id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. Running the test suite (`bun test`) leaves a gitignored `.think_state.json` in the work tree. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.

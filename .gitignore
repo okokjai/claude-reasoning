@@ -2,3 +2,8 @@ node_modules/
 scripts/.think_state.json
 *.log
 .DS_Store
+
+.claude/settings.local.json
+*.tsbuildinfo
+Thumbs.db
+desktop.ini

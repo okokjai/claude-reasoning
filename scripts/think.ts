@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 2.1.4 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 2.1.5 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -215,6 +215,7 @@ if (values.status) {
     fullHistory: state.thoughtHistory,
     branchDetails: state.branches,
     claimDetails: state.claims,
+    hypothesisDetails: state.hypotheses,
     auditTrail: state.auditTrail || [],
   };
   console.log(JSON.stringify(response, null, 2));

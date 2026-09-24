@@ -53,6 +53,6 @@ When verifying factual claims, source credibility determines whether a claim can
 
 ## Dual-Source Independence Test
 Before marking `--claimStatus verified`:
-1. **Domain Diversity**: The two `--claimSource` URLs must resolve to distinct root domains owned by different entities.
+1. **Domain Diversity**: The two `--claimSource` URLs must resolve to distinct root domains owned by different entities. Root domain is computed by a last-2-label hostname heuristic; second-level ccTLD registrations (`.co.uk`, `.com.au`) are conservatively treated as one root — a conservative over-rejection, never an unsafe under-rejection.
 2. **Syndication Check**: Ensure Source B is not merely quoting or summarizing a press release from Source A.
 3. If only one independent source exists, you **must** record `--claimStatus single_source`.

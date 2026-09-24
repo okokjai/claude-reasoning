@@ -118,6 +118,14 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
     expect(status.claimDetails["claim-1"].registeredAtThought).toBe(1);
   });
 
+  it("exposes hypothesisDetails in --status alongside claimDetails", () => {
+    run(["--mode", "path-b", "--thought", "Decomposing the open question", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1: Option A"]);
+    const status = JSON.parse(run(["--status"]).stdout);
+    expect(status.hypothesisDetails["hyp-1"].statement).toBe("H1: Option A");
+    expect(status.hypothesisDetails["hyp-1"].status).toBe("pending");
+  });
+
   it("stores $-containing flag values byte-for-byte (no shell expansion)", () => {
     // A shell expanding argv (`"$500K"` under bash → "00K") would corrupt the
     // statement before think.ts sees it; this pins the storage contract and
@@ -155,6 +163,13 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
   it("rejects verified when 2 sources share the same root domain", () => {
     run(["--registerClaim", "Claim backed only by subdomains of one root domain"]);
     const failRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://docs.aws.amazon.com/some/doc", "--claimSource", "https://aws.amazon.com/some/page"]);
+    expect(failRes.code).not.toBe(0);
+    expect(failRes.stderr).toContain("distinct root domains");
+  });
+
+  it("treats two *.co.uk sources as one root domain (conservative last-2-label heuristic)", () => {
+    run(["--registerClaim", "Claim with second-level ccTLD sources"]);
+    const failRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example.co.uk/doc", "--claimSource", "https://b.other.co.uk/page"]);
     expect(failRes.code).not.toBe(0);
     expect(failRes.stderr).toContain("distinct root domains");
   });
@@ -489,6 +504,126 @@ describe("think.ts: hypothesis merge status", () => {
     run(["--thought", "synthesize", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
     const res = run(["--thought", "conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
     expect(res.code).toBe(0);
+  });
+});
+
+describe("docs consistency: docs match think.ts observable behavior", () => {
+  const SKILL = join(CWD, "SKILL.md");
+  const README = join(CWD, "README.md");
+  const EXAMPLE_A = join(CWD, "references", "example-path-a.md");
+
+  it("SKILL.md example index reports the actual executed thought count (3)", () => {
+    const skill = readFileSync(SKILL, "utf-8");
+    // example-path-a.md runs 3 thoughts (T3 sets --nextThoughtNeeded false)
+    expect(skill).toMatch(/example-path-a\.md` — closed-form kinship trap, 3 thoughts/);
+    expect(skill).not.toMatch(/example-path-a\.md` — closed-form kinship trap, 4 thoughts/);
+  });
+
+  it("SKILL.md contains no unbacked quantitative claims", () => {
+    const skill = readFileSync(SKILL, "utf-8");
+    // Ground Rule 5: no unbacked claims in documentation
+    expect(skill).not.toMatch(/measured:/);
+    expect(skill).not.toMatch(/\b\d+\s+of\s+\d+\b/); // "6 of 6" style
+    expect(skill).not.toMatch(/11-node framework produced/);
+  });
+
+  it("SKILL.md state-file paragraph names the hypotheses key", () => {
+    const skill = readFileSync(SKILL, "utf-8");
+    // State file top-level keys are thoughtHistory / branches / claims / hypotheses / auditTrail (+ mode);
+    // the paragraph must enumerate hypotheses, not just thoughtHistory/branches/claims/auditTrail.
+    expect(skill).toMatch(/scripts\/\.think_state\.json`[\s\S]*`hypotheses` keyed by hypothesis id/);
+  });
+
+  it("example-path-a.md status lines match think.ts real stdout format", () => {
+    const doc = readFileSync(EXAMPLE_A, "utf-8");
+    // Real stdout is "[N/M] history=K mode=path-a next=..." — mode comes after history
+    // and persists on every thought. T3 terminates with next=false.
+    expect(doc).toMatch(/\[1\/4\] history=1 mode=path-a next=true/);
+    expect(doc).toMatch(/\[2\/4\] history=2 mode=path-a next=true/);
+    expect(doc).toMatch(/\[3\/4\] history=3 mode=path-a next=false/);
+    // Real run emits Thought N/M to stderr; docs must not silently merge it
+    expect(doc).toMatch(/stderr/i);
+  });
+
+  it("README documents the POSIX single-quote warning for $-containing values", () => {
+    const readme = readFileSync(README, "utf-8");
+    expect(readme).toMatch(/single quotes?/i);
+    expect(readme).toMatch(/\$[0-9]/); // mentions the $digit expansion hazard
+  });
+
+  it("README hard-enforcement paragraph matches the official PreToolUse deny schema and narrowed git exemption", () => {
+    const readme = readFileSync(README, "utf-8");
+    // G1: the gate emits hookSpecificOutput.permissionDecision "deny"; docs must
+    // not quote the deprecated top-level {"decision": "block"} shape (a no-op).
+    expect(readme).toMatch(/permissionDecision: "deny"/);
+    expect(readme).not.toMatch(/\{"decision": "block"\}/);
+    // G5: git is not blanket-exempt; only read-only subcommands are.
+    expect(readme).toMatch(/`git status`, `git diff`/);
+    expect(readme).not.toMatch(/read-only commands \(`bun test`, `git`/);
+  });
+
+  it("example-path-b-verify.md status lines match think.ts real stdout format", () => {
+    const doc = readFileSync(join(CWD, "references", "example-path-b-verify.md"), "utf-8");
+    // Real stdout is "[N/M] history=K mode=path-b ..." — history first, mode second.
+    // The doc must not emit the reversed "mode=path-b history=" order.
+    expect(doc).not.toMatch(/mode=path-b history=/);
+    expect(doc).toMatch(/\[1\/6\] history=1 mode=path-b next=true/);
+    expect(doc).toMatch(/\[6\/6\] history=\d+ mode=path-b .*next=false/);
+  });
+
+  it("example-path-b-verify.md does not fabricate status suffixes in claims/hypotheses lists", () => {
+    const doc = readFileSync(join(CWD, "references", "example-path-b-verify.md"), "utf-8");
+    // think.ts prints bare ids in claims=/hypotheses=/branches= lists, not id:status
+    expect(doc).not.toMatch(/claims=claim-\d+:(verified|pending|single_source|unverified|not_found)/);
+    expect(doc).not.toMatch(/hypotheses=hyp-\d+:(selected|rejected|synthesized|merged|pending)/);
+  });
+
+  it("example-path-b-verify.md verified claims supply at least 2 distinct root domains", () => {
+    const doc = readFileSync(join(CWD, "references", "example-path-b-verify.md"), "utf-8");
+    // Find all --verifyClaim blocks marked --claimStatus verified
+    const blocks = doc.split(/bun scripts\/think\.ts\s+--verifyClaim/g).slice(1);
+    for (const block of blocks) {
+      if (!block.includes("--claimStatus verified")) continue;
+      // Extract all --claimSource arguments
+      const sources = Array.from(block.matchAll(/--claimSource\s+"([^"]+)"/g)).map(m => m[1]);
+      const rootDomains = new Set(sources.map(s => {
+        try {
+          return new URL(s).hostname.split(".").slice(-2).join(".");
+        } catch {
+          return s;
+        }
+      }));
+      expect(rootDomains.size).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("example-path-b-verify.md shows register commands emit JSON, not status lines", () => {
+    const doc = readFileSync(join(CWD, "references", "example-path-b-verify.md"), "utf-8");
+    // --registerClaim and --registerHypothesis print JSON {"registered": ...},
+    // not a "[N/M] ..." status line. Doc must not show them emitting status format.
+    expect(doc).not.toMatch(/#\s*Output:\s*\[\d+\/\d+\].*registered claim-/);
+    expect(doc).not.toMatch(/#\s*Output:\s*\[\d+\/\d+\].*registered hyp-/);
+  });
+
+  it("SKILL.md status-line example includes the mode= field", () => {
+    const skill = readFileSync(SKILL, "utf-8");
+    // Once a session declares --mode, every status line carries mode=path-a|path-b.
+    const statusLines = skill.match(/\[\d+\/\d+\] history=\d+[^\n`]*/g) || [];
+    for (const line of statusLines) {
+      expect(line).toMatch(/mode=path-[ab]/);
+    }
+  });
+
+  it("SKILL.md example index description matches example-path-b-verify.md outcomes", () => {
+    const skill = readFileSync(SKILL, "utf-8");
+    const doc = readFileSync(join(CWD, "references", "example-path-b-verify.md"), "utf-8");
+    // If the index claims "mixed verification outcomes", the doc must show at
+    // least one non-verified claim status (single_source/unverified/not_found).
+    const claimsMixed = /mixed verification outcomes/i.test(skill);
+    const docHasNonVerified = /claimStatus\s+(single_source|unverified|not_found)/.test(doc);
+    if (claimsMixed) {
+      expect(docHasNonVerified).toBe(true);
+    }
   });
 });
 

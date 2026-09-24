@@ -4,6 +4,55 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+**Breaking Changes: None.**
+
+### Fixed
+
+- **`bun.lock` registry** — rewrote all 5 resolved package URLs from `registry.npmmirror.com` to `registry.npmjs.org` (same versions, same integrity hashes). Installers in networks without access to the CN mirror can now `bun install --frozen-lockfile` successfully.
+- **Root-domain heuristic documented** — `--claimStatus verified` computes root domains from the hostname's last two labels (a conservative heuristic). Documented the boundary at `SKILL.md` Contract step 3, `README.md` invariant row, and `references/source-tiers.md` Dual-Source Independence Test: distinct second-level ccTLD registrations (`.co.uk`, `.com.au`) are treated as one root and rejected — a conservative over-rejection, never an unsafe under-rejection. New regression test locks the behavior (`treats two *.co.uk sources as one root domain`).
+- **`SKILL.md` state-file paragraph** — now enumerates `mode` and `hypotheses keyed by hypothesis id` alongside `thoughtHistory` / `branches` / `claims` / `auditTrail`, and notes that `bun test` leaves a gitignored `.think_state.json` in the work tree. New docs-consistency test locks the enumeration. Suite 60 → 62.
+
+### Added
+
+- **PreToolUse reasoning gate** — `.claude/settings.json` + `.claude/hooks/reasoning-gate.mjs`: a hard enforcement hook for Claude Code sessions that blocks `Edit` / `Write` / mutating `Bash` until `scripts/.think_state.json` converges (`nextThoughtNeeded=false`). Previously the "read SKILL.md first" discipline was prompt text only (CLAUDE.md router, `<skills>` block, 35 in-script `fail()` checks) — none of it physically enforced. The hook intercepts at the only point a runtime can block a tool call before execution. Exempts the `think.ts` invocation, state-file writes, `.claude/` self-edits, and read-only commands. 10 new tests (`tests/reasoning-gate.test.ts`); suite 50 → 60.
+- **Gate review fixes (G1–G5)** — `reasoning-gate.mjs` and `.claude/settings.json` brought in line with the official Claude Code PreToolUse contract and hardened:
+  - G1: deny decision now emitted as `hookSpecificOutput.permissionDecision: "deny"` + `hookEventName: "PreToolUse"` + `permissionDecisionReason` (top-level `decision: "block"` is deprecated for PreToolUse; a schema-invalid response is a non-blocking error and the action proceeds — the previous shape was a no-op). README hard-enforcement paragraph synced to the same wording (it still quoted the deprecated shape; `git` exemption narrowed to `git status, git diff`).
+  - G2: the `think.ts` exemption now applies only to a single un-chained invocation (`think.ts … && rm -rf .` is denied).
+  - G3: hook command uses portable `${CLAUDE_PROJECT_DIR}/…` instead of a hardcoded drive path.
+  - G4: project-level scope documented in README (gate registers only when the session root is this repo).
+  - G5: mutation heuristic extended (`touch`, `mkdir`, `curl -o`, `git reset --hard`/`checkout --`/`clean`, installs, `tar -`/`unzip`, Windows `del`/`copy`/`move`/`ren`/`xcopy`) and its conservative boundary documented. Gate tests 10 → 12; plus one README gate-wording lock in `think.test.ts`; suite 62 → 65.
+
+### Fixed
+
+- **`--status` response** — added the missing `hypothesisDetails` field (`state.hypotheses`), symmetric with `branchDetails`/`claimDetails`. The response exposed claim and branch registries but omitted the hypothesis registry. New test (`exposes hypothesisDetails in --status alongside claimDetails`) covers the contract. Also synced the `SKILL.md` `--status` example comment (`# Inspect full state (thoughts, branches, hypotheses, claims)`).
+
+## [2.1.5] - 2026-09-25
+
+### Fixed — documentation accuracy (no code behavior changes)
+
+- **`SKILL.md` Examples index** — corrected the `example-path-a.md` thought count from `4 thoughts` to `3 thoughts`. The example passes `--totalThoughts 4` as the upper bound but converges in 3 thoughts by setting `--nextThoughtNeeded false` on Thought 3 (the bound is the max allowed, not the count executed).
+- **`SKILL.md` Path A rationale** — removed an unbacked quantitative claim (`measured: ... produced 6 of 6 trail entries with zero captured insight` referencing a `fixed 11-node framework`). No benchmark data exists in the repo; the claim violated the skill's own Ground Rules 1 (no pseudo-quantitative scoring) and 5 (no unbacked claims in documentation). Rewritten as a qualitative design rationale consistent with `README.md`'s `Honest scope` note.
+- **`references/example-path-a.md`** — corrected all three recorded `*Output*` blocks to match real `think.ts` output:
+  - Status-line field order fixed to `history=N mode=path-a` (was `mode=path-a history=1` on T1; `mode=` was silently dropped on T2/T3).
+  - T3 status corrected to `next=false` (the example passes `--nextThoughtNeeded false` but had recorded `next=true`, a direct contradiction).
+  - Each output block is now labeled `*Output (stdout)*` with a note that stderr separately emits the formatted `💭 Thought N/M` echo — `think.ts` sends `formatThought()` to stderr via `console.error` and the one-line status to stdout via `console.log`.
+- **`references/example-path-b-verify.md`** — corrected all status-line outputs to match real `think.ts` output (same class of drift as `example-path-a.md`, missed in the first pass):
+  - Field order fixed to `history=N mode=path-b` (was `mode=path-b history=N` on lines 21, 28, 32).
+  - `--registerClaim`/`--registerHypothesis` outputs corrected from fabricated `[N/M] ... registered ...` status lines to the real JSON shape (`{"registered": "claim-N", "statement": ..., "status": "pending"}` / `{"resolved": "hyp-N", "status": ...}`) — side-commands print JSON via `console.log`, not the status line.
+  - Final termination status corrected to `claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2` — `think.ts` prints bare IDs in these lists, never `id:status` suffixes (was `claim-1:verified`, `hyp-1:selected`, etc.).
+  - Claim-1's second `--claimSource` replaced with `https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching` — both previous sources resolved to root domain `amazon.com`, so the recorded `verified` outcome was unreachable: `--claimStatus verified` requires ≥2 distinct root domains and `think.ts` would have failed with `distinct root domains`.
+- **`SKILL.md` status-line example** — added the missing `mode=path-b` field (was `[3/7] history=3 branches=...`; every status line after the mandatory first `--mode` declaration carries `mode=`).
+- **`SKILL.md` Examples index** — `example-path-b-verify.md` description corrected from `mixed verification outcomes` to `dual-source verified outcomes`; both claims in the example resolve `verified`, there are no `single_source`/`unverified`/`not_found` outcomes to call "mixed".
+- **`README.md`** —
+  - Install/`cd` commands: replaced the `claude-reasoning-*` glob with the literal `claude-reasoning` directory name (the glob breaks when the extracted directory is already named `claude-reasoning`).
+  - Added a shell-quoting note at the top of Usage (previously only in `SKILL.md`): values containing `$`, backticks, or `\` must use single quotes — inside double quotes bash silently expands `$<digit>` as a positional parameter (`$50K` → `0K`). README Usage examples all use double quotes, so readers could hit this silently.
+  - Reworded the `Enforced invariants` intro: `think.ts` enforces 35 fail-fast checks total; the 19-row table documents the state-machine rules (several rows consolidate multiple checks), while the remaining checks are upfront argument validation (required flags, integer bounds, enum values, entity lookups, paired-flag requirements).
+  - Tests section: count updated to 49 and the example-path-b description synced to `dual-source verified outcomes`.
+
+### Added
+
+- **10 doc-consistency tests** in `tests/think.test.ts` (`docs consistency: docs match think.ts observable behavior`) that read `SKILL.md`, `README.md`, `references/example-path-a.md`, and `references/example-path-b-verify.md` and assert they match `think.ts` observable behavior: the Path A example's actual thought count, absence of unbacked quantitative claims, the real stdout status-line format (`history=N mode=path-[ab] …`, bare IDs in `claims=`/`hypotheses=`/`branches=` lists, JSON output for register/resolve side-commands, stderr note for `💭 Thought N/M`), the single-quote warning in README, no stale `claude-reasoning-*` glob, the SKILL.md example index matching the referenced files' actual outcomes, and verified claims using sources with distinct root domains. 49 tests total, up from 39.
+
 ## [2.1.4] - 2026-09-24
 
 ### Fixed

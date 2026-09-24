@@ -1,4 +1,4 @@
-# claude-reasoning 2.1.4
+# claude-reasoning 2.1.5
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
@@ -20,7 +20,7 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 Requires [Bun](https://bun.sh) (tested on 1.4.2) or Node.js ≥ 18 with `npx tsx`.
 
 ```bash
-cp -r claude-reasoning-* ~/.claude/skills/claude-reasoning
+cp -r claude-reasoning ~/.claude/skills/claude-reasoning
 ```
 
 Or use the skill directly from this directory.
@@ -35,8 +35,10 @@ bun install   # installs devDependencies: typescript, @types/node, @types/bun
 
 ## Usage
 
+**Note on shell quoting**: Values containing `$`, backticks, or `\` must use **single quotes** (`'...'`). Inside double quotes, bash silently expands `$<digit>` as a positional parameter — `$50K` arrives as `0K` with no warning and no error. Values without those characters may keep double quotes, as in the examples below.
+
 ```bash
-cd claude-reasoning-*
+cd claude-reasoning
 
 # Start a session
 bun scripts/think.ts --reset
@@ -83,7 +85,9 @@ See [`SKILL.md`](SKILL.md) for the full protocol and flag reference.
 
 ## Enforced invariants
 
-These are checked in code, not just documented:
+`think.ts` enforces 35 fail-fast checks (all exit code 1). The table below documents the 19 state-machine rules (several rows consolidate multiple checks). The remaining checks are upfront argument validation: required flags (`--thought`, `--thoughtNumber`, `--totalThoughts`, `--nextThoughtNeeded`), integer bounds, enum values for `--mode`, entity lookups (`--resolveHypothesis`, `--verifyClaim`, `--mergedInto` target must exist), and paired-flag requirements.
+
+### State machine invariants
 
 | Invariant | Behavior on violation |
 |---|---|
@@ -94,7 +98,7 @@ These are checked in code, not just documented:
 | `--nextThoughtNeeded false` in `path-b` with any `pending` hypothesis | Exit code 1, lists the pending hypothesis ids |
 | `--nextThoughtNeeded false` in `path-b` with fewer than 2 prior thoughts | Exit code 1 — Path B requires ≥ 1 decompose + ≥ 1 synthesis round |
 | `--nextThoughtNeeded false` in `path-b` when the previous thought set `--needsMoreThoughts` | Exit code 1 — cannot flag depth expansion then conclude immediately |
-| `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains | Exit code 1, error names the shortfall |
+| `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains | Exit code 1, error names the shortfall (root domain = hostname last-2-label heuristic; second-level ccTLDs like `.co.uk` are conservatively treated as one root) |
 | `--claimStatus` of `single_source` / `unverified` / `not_found` without `--claimNotes` | Exit code 1 — negative resolutions require a recorded caveat |
 | `--hypothesisStatus merged` without `--mergedInto` | Exit code 1 |
 | `--mergedInto` referencing the hypothesis being resolved or a nonexistent id | Exit code 1 |
@@ -107,13 +111,23 @@ These are checked in code, not just documented:
 | `--branchFromThought` without `--branchId` | Exit code 1 |
 | Unknown `--claimStatus` or `--hypothesisStatus` value | Exit code 1 |
 
+## Hard enforcement (Claude Code PreToolUse hook)
+
+`.claude/settings.json` registers a `PreToolUse` hook (`reasoning-gate.mjs`) that blocks `Edit` / `Write` / mutating `Bash` in this repo until `scripts/.think_state.json` has **converged** (the last thought's `nextThoughtNeeded` is `false`). This is not prompt text — Claude Code's runtime enforces the hook's `hookSpecificOutput.permissionDecision: "deny"` before any gated tool call executes, so an agent cannot write code in this repo without first completing a reasoning session.
+
+Exemptions: the `think.ts` invocation itself (single, un-chained commands only — `think.ts … && rm -rf .` is denied), writes to `.think_state.json`, edits under `.claude/`, and read-only commands (`bun test`, `git status`, `git diff`, …). Complete a Path A/B session to convergence to lift the gate; `--reset` clears the session but does not lift it.
+
+Mutation detection is a heuristic (redirects `>`, `tee`, `mv`/`cp`/`rm`/`sd`/`sed -i`, `touch`, `mkdir`, `curl -o`, `git reset --hard`/`checkout --`/`clean`, package installs, `tar -`/`unzip`, Windows `del`/`copy`/`move`/`ren`/`xcopy`); it is conservative — it may over-block (e.g. a redirect to `/dev/null`), never under-blocks.
+
+Scope: project-level `.claude/settings.json` loads only when the Claude Code session root is this repo. Editing this repo from a session rooted elsewhere means the gate is not registered; start the session inside the repo for enforcement.
+
 ## Tests
 
 ```bash
 bun test
 ```
 
-39 tests, offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth and claim prohibition, Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including the `registeredAtThought` index recorded against completed thoughts and byte-exact storage of `$`-containing flag values), all guardrails above (including distinct-root-domain rejection for `verified` and `--claimNotes` enforcement for negative resolutions), the `--status` audit trail for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and a blocked premature termination.
+65 tests, offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth and claim prohibition, Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including the `registeredAtThought` index recorded against completed thoughts and byte-exact storage of `$`-containing flag values), all guardrails above (including distinct-root-domain rejection for `verified` and `--claimNotes` enforcement for negative resolutions), the `--status` audit trail for side-commands, the PreToolUse reasoning-gate block/allow decisions, docs-consistency checks asserting `SKILL.md`/`README.md`/`references/example-path-a.md`/`references/example-path-b-verify.md` match `think.ts` observable output, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, dual-source verified outcomes, and …
 
 ## Design notes
 

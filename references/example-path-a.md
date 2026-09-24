@@ -32,10 +32,12 @@ bun scripts/think.ts \
   --totalThoughts 4 \
   --nextThoughtNeeded true
 ```
-*Output*:
+*Output (stdout)*:
 ```
-[1/4] mode=path-a history=1 next=true
+[1/4] history=1 mode=path-a next=true
 ```
+
+*(stderr also emits a formatted `💭 Thought 1/4` block echoing the thought text)*
 
 ### 3. Thought 2 — Primary Derivation
 ```bash
@@ -48,11 +50,12 @@ bun scripts/think.ts \
   --totalThoughts 4 \
   --nextThoughtNeeded true
 ```
-*Output*:
+*Output (stdout)*:
 ```
-💭 Thought 2/4
-[2/4] history=2 next=true
+[2/4] history=2 mode=path-a next=true
 ```
+
+*(stderr also emits a formatted `💭 Thought 2/4` block)*
 
 ### 4. Thought 3 — Independent Cross-Validation
 ```bash
@@ -68,11 +71,12 @@ bun scripts/think.ts \
   --totalThoughts 4 \
   --nextThoughtNeeded false
 ```
-*Output*:
+*Output (stdout)*:
 ```
-💭 Thought 3/4
-[3/4] history=3 next=true
+[3/4] history=3 mode=path-a next=false
 ```
+
+*(stderr also emits a formatted `💭 Thought 3/4` block)*
 
 *(因兩方法一致，無需 Thought 4/5，直接在 Thought 3 設 `--nextThoughtNeeded false` 結案)*
 
