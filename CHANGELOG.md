@@ -4,6 +4,39 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-28
+
+### Fixed
+
+- **`scripts/think.ts` — Path A now forbids all side-commands** — `--verifyClaim`, `--registerHypothesis`, and `--resolveHypothesis` are rejected while session mode is `path-a`, matching the existing `--registerClaim` prohibition and the documented Path A contract. Previously only claim *registration* was blocked; hypothesis lifecycle commands silently mutated Path A sessions.
+- **`scripts/think.ts` — Path A depth cap** — submitting a 6th thought in `path-a` now exits 1 ("Path A depth exceeds 5 thoughts (X/5); conclude or escalate to Path B via --reset."). Previously Path A had a minimum depth (≥3) but no maximum, contradicting the documented 3–5 bound.
+- **`scripts/think.ts` — side-commands require an established mode** — `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, and `--resolveHypothesis` on an empty state (before any thought has set `--mode`) now exit 1 with "--mode must be established" instead of silently mutating a mode-less session.
+- **`scripts/think.ts` — verified claims cannot be demoted** — `--verifyClaim claim-N --claimStatus <status>` on a claim already `verified` exits 1 ("cannot demote verified claim to <status>; verification results are final.") for any non-`verified` status, preventing evidence-backed resolutions and their source URLs from being quietly erased.
+- **`references/example-path-b-verify.md`** — claim-1 verification example fixed to use distinct root domains (`docs.aws.amazon.com` + `docs.anthropic.com`), resolving an exit 1 under the dual-source distinct-root-domain guardrail. Status lines corrected to real CLI output: Thought 1 matches `[1/6] history=1 mode=path-b next=true` field order, registerClaim outputs replaced with actual JSON returned by the CLI, and Thought 6 status line corrected to `[6/6] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false` (prior sample fabricated `:verified`/`:selected` suffixes).
+- **`references/example-path-a.md`** — Thought status samples corrected to match actual CLI field order (`[N/T] history=N mode=path-a next=...`), and Thought 3 correctly shows `next=false` (was `next=true`).
+- **`SKILL.md`** — status-line sample now includes the `mode=` field that `think.ts` emits on every thought status line.
+- **`scripts/think.ts` — `--status` reports `hypothesisDetails`** — hypothesis statements and metadata are now surfaced alongside `claimDetails`, `branchDetails`, and `auditTrail`; previously hypotheses were only visible as ids/counts.
+- **`scripts/think.ts` — robust `rootDomain()`** — bare IPv4/IPv6 literals compare by full address (previously mangled by label-slicing), and a `MULTI_SEGMENT_SUFFIXES` table (`co.uk`, `com.tw`, `github.io`, etc.) makes eTLD+1-style extraction suffix-aware, so `bbc.co.uk` vs `itv.co.uk` are correctly recognized as distinct roots for the `verified` dual-source check.
+- **`scripts/think.ts` — clean CLI errors** — `parseArgs` failures are caught and reported as `Error: Invalid arguments: …` without a stack trace; unknown flags and malformed values no longer crash with a raw exception dump.
+- **`scripts/think.ts` — integer validation** — `--thoughtNumber`/`--totalThoughts` must be positive safe integers; values exceeding `Number.MAX_SAFE_INTEGER`, non-integers, and `< 1` are rejected with a clean validation error.
+- **`scripts/think.ts` — empty-string flag values** — flag entry points now use `!= null` checks instead of falsy checks, so `--thought ""` and `--registerClaim ""` produce specific validation errors rather than being treated as missing flags.
+- **`scripts/think.ts` — revision/branch integrity** — `--revisesThought N` must reference a thoughtNumber already in `thoughtHistory`; a non-revision submission reusing an existing `--thoughtNumber` is rejected; `--isRevision` and `--branchFromThought` are mutually exclusive.
+- **`bun.lock` / `.bunfig.toml`** — lockfile regenerated and registry pinned to `registry.npmjs.org` via a new `.bunfig.toml`, removing stale registry references.
+
+### Added
+
+- **`tests/issues.test.ts`** — new suite with 24 regression tests covering all guards above: Path A side-command prohibition and depth cap, mode-before-registration, verified→any-non-verified demotion, `hypothesisDetails` in `--status`, IP/multi-segment-suffix root domains, clean CLI errors, safe-integer validation, empty-string values, nonexistent `revisesThought`, duplicate `thoughtNumber`, and `isRevision`/`branchFromThought` mutual exclusion. Total: 63 tests across 2 files (up from 39).
+
+### Changed
+
+- **`tests/think.test.ts`** — side-command tests now establish `--mode` first to satisfy the new registration gate; the Path B early-termination test registers mode at thought 1 and terminates at thought 2 ("requires at least 2 prior thoughts"). All existing test intents preserved.
+- **`SKILL.md`** — version 2.2.0; Path A prohibition now lists all four side-commands; flag reference documents the verified→any-non-verified demotion block (verified claims are final), IP/eTLD+1-style root-domain semantics, `--claimSource` preservation on `pending` transitions, and `hypothesisDetails` in `--status` output.
+- **`README.md`** — version 2.2.0; invariants table expanded with all user-triggerable guards including required-flag validation, empty `--thought`, integer bounds for `revisesThought`/`branchFromThought`, and not-found claim/hypothesis id errors; test count updated to 63 across 2 files.
+
+### Breaking Changes
+
+None. All changes tighten previously unenforced documented invariants; no public flag, output field, or state-file contract was removed.
+
 ## [2.1.4] - 2026-09-24
 
 ### Fixed

@@ -1,11 +1,11 @@
-# claude-reasoning 2.1.4
+# claude-reasoning 2.2.0
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
 ## What it does
 
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
-- **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected.
+- **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected; depth beyond 5 is rejected. Claims and hypotheses are forbidden in Path A.
 - **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis`, resolved via `--resolveHypothesis`) → 2–4 critical lenses chosen for the task → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, or the previous thought flagged `--needsMoreThoughts`.
 - **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search, ≥2 independent sources for `verified`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
 - **Zero MCP.** A single TypeScript state machine (`scripts/think.ts`) persisting to `scripts/.think_state.json`.
@@ -88,13 +88,16 @@ These are checked in code, not just documented:
 | Invariant | Behavior on violation |
 |---|---|
 | `--mode` required on the first thought; immutable thereafter | Exit code 1 |
-| `--registerClaim` while session mode is `path-a` | Exit code 1 — Path A forbids external claims |
+| `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, or `--resolveHypothesis` while session mode is `path-a` | Exit code 1 — Path A forbids claims and hypotheses |
+| Claims or hypotheses registered before the first thought established `--mode` | Exit code 1 — mode must exist first |
+| Submitting a 6th thought in `path-a` | Exit code 1 — Path A depth is capped at 5 |
 | `--nextThoughtNeeded false` in `path-a` before thought 3 | Exit code 1 — Path A requires ≥ 3 thoughts |
 | `--nextThoughtNeeded false` in `path-b` with fewer than 2 registered hypotheses | Exit code 1 |
 | `--nextThoughtNeeded false` in `path-b` with any `pending` hypothesis | Exit code 1, lists the pending hypothesis ids |
 | `--nextThoughtNeeded false` in `path-b` with fewer than 2 prior thoughts | Exit code 1 — Path B requires ≥ 1 decompose + ≥ 1 synthesis round |
 | `--nextThoughtNeeded false` in `path-b` when the previous thought set `--needsMoreThoughts` | Exit code 1 — cannot flag depth expansion then conclude immediately |
-| `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains | Exit code 1, error names the shortfall |
+| `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains (IP-safe, multi-segment-suffix-aware) | Exit code 1, error names the shortfall |
+| `--claimStatus` of any value other than `verified` on a `verified` claim | Exit code 1 — verified claims are final |
 | `--claimStatus` of `single_source` / `unverified` / `not_found` without `--claimNotes` | Exit code 1 — negative resolutions require a recorded caveat |
 | `--hypothesisStatus merged` without `--mergedInto` | Exit code 1 |
 | `--mergedInto` referencing the hypothesis being resolved or a nonexistent id | Exit code 1 |
@@ -104,8 +107,16 @@ These are checked in code, not just documented:
 | `--nextThoughtNeeded false` in `path-b` when merges leave fewer than 2 distinct hypotheses | Exit code 1 — Path B requires ≥ 2 distinct hypotheses after merges |
 | `--nextThoughtNeeded false` with any `pending` claim | Exit code 1, lists the pending claim ids |
 | `--isRevision` without `--revisesThought` | Exit code 1 |
+| `--isRevision` together with `--branchFromThought` | Exit code 1 — mutually exclusive |
+| `--revisesThought` referencing a nonexistent thought | Exit code 1 |
+| A non-revision `--thoughtNumber` that already exists in history | Exit code 1 |
 | `--branchFromThought` without `--branchId` | Exit code 1 |
+| Missing `--thought`, `--thoughtNumber`, `--totalThoughts`, or `--nextThoughtNeeded` on a thought submission | Exit code 1, specifies the missing flag |
+| Empty `--thought` string (`""`) | Exit code 1 — `--thought cannot be empty` |
+| `--revisesThought` or `--branchFromThought` not a positive safe integer | Exit code 1 |
+| Referencing a claim or hypothesis id not present in state | Exit code 1, names the missing target |
 | Unknown `--claimStatus` or `--hypothesisStatus` value | Exit code 1 |
+| Malformed CLI flags or `--thoughtNumber`/`--totalThoughts` that are not positive safe integers | Exit code 1, clean error message |
 
 ## Tests
 
@@ -113,7 +124,7 @@ These are checked in code, not just documented:
 bun test
 ```
 
-39 tests, offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth and claim prohibition, Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including the `registeredAtThought` index recorded against completed thoughts and byte-exact storage of `$`-containing flag values), all guardrails above (including distinct-root-domain rejection for `verified` and `--claimNotes` enforcement for negative resolutions), the `--status` audit trail for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and a blocked premature termination.
+63 tests across 2 files (`tests/think.test.ts` and `tests/issues.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including mode-establishment requirement, byte-exact storage of `$`-containing flag values, and prevention of demoting verified claims to any non-verified status), all guardrails above (including IP-safe, multi-segment public suffix aware distinct-root-domain verification for `verified` and `--claimNotes` enforcement for negative resolutions), clean CLI error handling, the `--status` audit trail and `hypothesisDetails` for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and hypothesis convergence.
 
 ## Design notes
 

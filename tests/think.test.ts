@@ -101,7 +101,7 @@ describe("think.ts: basic thinking loop", () => {
 
 describe("think.ts: claim pre-registration and lifecycle", () => {
   it("pre-registers claims with sequential IDs and pending status", () => {
-    const res1 = run(["--registerClaim", "Claim Alpha statement"]);
+    const res1 = run(["--mode", "path-b", "--registerClaim", "Claim Alpha statement"]);
     expect(res1.code).toBe(0);
     expect(res1.stdout).toContain('"registered": "claim-1"');
     expect(res1.stdout).toContain('"status": "pending"');
@@ -139,28 +139,28 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
   });
 
   it("fails verification with verified status if fewer than 2 sources provided", () => {
-    run(["--registerClaim", "Claim statement requiring dual sources"]);
+    run(["--mode", "path-b", "--registerClaim", "Claim statement requiring dual sources"]);
     const failRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://source1.com"]);
     expect(failRes.code).not.toBe(0);
     expect(failRes.stderr).toContain("requires at least 2 independent --claimSource arguments");
   });
 
   it("succeeds verification with verified status when 2 or more sources provided", () => {
-    run(["--registerClaim", "Claim statement requiring dual sources"]);
+    run(["--mode", "path-b", "--registerClaim", "Claim statement requiring dual sources"]);
     const okRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://source1.com", "--claimSource", "https://source2.com"]);
     expect(okRes.code).toBe(0);
     expect(okRes.stdout).toContain('"status": "verified"');
   });
 
   it("rejects verified when 2 sources share the same root domain", () => {
-    run(["--registerClaim", "Claim backed only by subdomains of one root domain"]);
+    run(["--mode", "path-b", "--registerClaim", "Claim backed only by subdomains of one root domain"]);
     const failRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://docs.aws.amazon.com/some/doc", "--claimSource", "https://aws.amazon.com/some/page"]);
     expect(failRes.code).not.toBe(0);
     expect(failRes.stderr).toContain("distinct root domains");
   });
 
   it("allows single_source, unverified, and not_found with fewer sources", () => {
-    run(["--registerClaim", "Single source claim"]);
+    run(["--mode", "path-b", "--registerClaim", "Single source claim"]);
     const resSingle = run(["--verifyClaim", "claim-1", "--claimStatus", "single_source", "--claimSource", "https://only-one.com", "--claimNotes", "Single tech blog report"]);
     expect(resSingle.code).toBe(0);
     expect(resSingle.stdout).toContain('"status": "single_source"');
@@ -332,7 +332,7 @@ describe("think.ts: Path B Hard Gates", () => {
 
   it("blocks termination on the very first thought in path-b mode", () => {
     run(["--reset"]);
-    run(["--registerHypothesis", "H1: Option A"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H1: Option A"]);
     run(["--registerHypothesis", "H2: Option B"]);
     run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
     run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected"]);
@@ -358,28 +358,28 @@ describe("think.ts: Path B Hard Gates", () => {
 
 describe("think.ts: claim caveat enforcement", () => {
   it("rejects single_source without --claimNotes", () => {
-    run(["--registerClaim", "Single source claim"]);
+    run(["--mode", "path-b", "--registerClaim", "Single source claim"]);
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "single_source", "--claimSource", "https://only-one.com"]);
     expect(res.code).not.toBe(0);
     expect(res.stderr).toContain("requires --claimNotes");
   });
 
   it("rejects unverified without --claimNotes", () => {
-    run(["--registerClaim", "Unverifiable claim"]);
+    run(["--mode", "path-b", "--registerClaim", "Unverifiable claim"]);
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "unverified"]);
     expect(res.code).not.toBe(0);
     expect(res.stderr).toContain("requires --claimNotes");
   });
 
   it("rejects not_found without --claimNotes", () => {
-    run(["--registerClaim", "Unfindable claim"]);
+    run(["--mode", "path-b", "--registerClaim", "Unfindable claim"]);
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "not_found"]);
     expect(res.code).not.toBe(0);
     expect(res.stderr).toContain("requires --claimNotes");
   });
 
   it("still allows verified without --claimNotes", () => {
-    run(["--registerClaim", "Well-sourced claim"]);
+    run(["--mode", "path-b", "--registerClaim", "Well-sourced claim"]);
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example"]);
     expect(res.code).toBe(0);
     expect(res.stdout).toContain('"status": "verified"');

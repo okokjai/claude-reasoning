@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 2.1.4 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 2.2.0 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -146,9 +146,36 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+export interface ParsedArgs {
+  thought?: string;
+  thoughtNumber?: string;
+  totalThoughts?: string;
+  nextThoughtNeeded?: string;
+  isRevision?: boolean;
+  revisesThought?: string;
+  branchFromThought?: string;
+  branchId?: string;
+  needsMoreThoughts?: boolean;
+  registerClaim?: string;
+  verifyClaim?: string;
+  claimStatus?: string;
+  claimSource?: string[];
+  claimNotes?: string;
+  mode?: string;
+  registerHypothesis?: string;
+  resolveHypothesis?: string;
+  hypothesisStatus?: string;
+  hypothesisNotes?: string;
+  mergedInto?: string;
+  status?: boolean;
+  reset?: boolean;
+}
+
 // --- Parse CLI args ---
 
-const { values } = parseArgs({
+let values: ParsedArgs;
+try {
+  ({ values } = parseArgs({
   options: {
     thought: { type: "string" },
     thoughtNumber: { type: "string" },
@@ -174,7 +201,11 @@ const { values } = parseArgs({
     reset: { type: "boolean", default: false },
   },
   strict: true,
-});
+}) as unknown as { values: ParsedArgs });
+} catch (err: unknown) {
+  const e = err as Error;
+  fail(`Invalid arguments: ${e.message}`);
+}
 
 const VALID_MODES: ThinkingMode[] = ["path-a", "path-b"];
 
@@ -197,6 +228,18 @@ function resolveMode(state: State, requested: string | undefined): ThinkingMode 
   return state.mode;
 }
 
+/**
+ * Side-commands operate on a classified session; without one, a pending claim or
+ * hypothesis can be registered and then become unresolvable in Path A.
+ */
+function requireModeEstablished(state: State, requested: string | undefined): ThinkingMode {
+  const mode = resolveMode(state, requested);
+  if (mode == null) {
+    fail("--mode must be established by a first thought before registering claims or hypotheses.");
+  }
+  return mode;
+}
+
 // --- Command: Reset ---
 
 if (values.reset) {
@@ -215,6 +258,7 @@ if (values.status) {
     fullHistory: state.thoughtHistory,
     branchDetails: state.branches,
     claimDetails: state.claims,
+    hypothesisDetails: state.hypotheses,
     auditTrail: state.auditTrail || [],
   };
   console.log(JSON.stringify(response, null, 2));
@@ -223,11 +267,12 @@ if (values.status) {
 
 // --- Command: Register Claim ---
 
-if (values.registerClaim) {
-  resolveMode(state, values.mode);
+if (values.registerClaim != null) {
+  requireModeEstablished(state, values.mode);
   if (state.mode === "path-a") {
     fail("Path A (closed-form) forbids external claims. Use internal derivation.");
   }
+  if (values.registerClaim === "") fail("--registerClaim statement cannot be empty");
   const count = Object.keys(state.claims).length + 1;
   const claimId = `claim-${count}`;
   const claim: Claim = {
@@ -246,8 +291,12 @@ if (values.registerClaim) {
 
 // --- Command: Register Hypothesis ---
 
-if (values.registerHypothesis) {
-  resolveMode(state, values.mode);
+if (values.registerHypothesis != null) {
+  requireModeEstablished(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids hypotheses. Use internal derivation.");
+  }
+  if (values.registerHypothesis === "") fail("--registerHypothesis statement cannot be empty");
   const count = Object.keys(state.hypotheses || {}).length + 1;
   const hypId = `hyp-${count}`;
   const hyp: Hypothesis = {
@@ -265,8 +314,11 @@ if (values.registerHypothesis) {
 
 // --- Command: Resolve Hypothesis ---
 
-if (values.resolveHypothesis) {
-  resolveMode(state, values.mode);
+if (values.resolveHypothesis != null) {
+  requireModeEstablished(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids hypotheses. Use internal derivation.");
+  }
   const hyp = state.hypotheses?.[values.resolveHypothesis];
   if (!hyp) fail(`Hypothesis ${values.resolveHypothesis} not found in state`);
   const status = values.hypothesisStatus as HypothesisStatus;
@@ -310,9 +362,57 @@ if (values.resolveHypothesis) {
   process.exit(0);
 }
 
+/**
+ * Known multi-segment public suffixes. Matches are checked against lowercase hostnames.
+ * Static lookup table as Record<string, true> per rule ts-set-map.
+ */
+const MULTI_SEGMENT_SUFFIXES: Record<string, true> = {
+  "co.uk": true,
+  "gov.uk": true,
+  "ac.uk": true,
+  "org.uk": true,
+  "com.tw": true,
+  "org.tw": true,
+  "edu.tw": true,
+  "gov.tw": true,
+  "com.au": true,
+  "net.au": true,
+  "org.au": true,
+  "co.jp": true,
+  "ne.jp": true,
+  "github.io": true,
+  "gitlab.io": true,
+  "herokuapp.com": true,
+  "pages.dev": true,
+  "vercel.app": true,
+  "azurewebsites.net": true,
+  "cloudfront.net": true,
+};
+
+function rootDomain(urlStr: string): string {
+  try {
+    const hostname = new URL(urlStr).hostname.toLowerCase();
+    // A bare IPv4/IPv6 host is its own domain — never join its "last two labels".
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(":")) return hostname;
+    const parts = hostname.split(".");
+    if (parts.length <= 2) return hostname;
+    // Last two labels forming a known multi-segment public suffix mean the
+    // registrable domain is three labels deep (bbc.co.uk, not co.uk).
+    return MULTI_SEGMENT_SUFFIXES[parts.slice(-2).join(".")]
+      ? parts.slice(-3).join(".")
+      : parts.slice(-2).join(".");
+  } catch {
+    return urlStr; // malformed URL counts as its own bucket -> fails dual-domain check
+  }
+}
+
 // --- Command: Verify Claim ---
 
-if (values.verifyClaim) {
+if (values.verifyClaim != null) {
+  requireModeEstablished(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids claim verification. Use internal derivation.");
+  }
   const claim = state.claims[values.verifyClaim];
   if (!claim) fail(`Claim ${values.verifyClaim} not found in state`);
   const sources = values.claimSource || [];
@@ -326,18 +426,15 @@ if (values.verifyClaim) {
 
   // Guardrail 1: 2-source requirement for verified (count + distinct root domains)
   if (status === "verified") {
-    const rootDomains = new Set(
-      sources.map(s => {
-        try {
-          return new URL(s).hostname.split(".").slice(-2).join(".");
-        } catch {
-          return s; // malformed URL counts as its own bucket -> fails dual-domain check
-        }
-      })
-    );
+    const rootDomains = new Set(sources.map(rootDomain));
     if (sources.length < 2 || rootDomains.size < 2) {
       fail(`--claimStatus verified requires at least 2 independent --claimSource arguments from distinct root domains. Found ${sources.length} source(s), ${rootDomains.size} root domain(s). Use 'single_source' or 'unverified' if fewer.`);
     }
+  }
+
+  // Guardrail 3: a verified claim is final — it may be re-verified, never demoted.
+  if (claim.status === "verified" && status !== "verified") {
+    fail(`Claim ${claim.id} cannot demote verified claim to ${status}; verification results are final.`);
   }
 
   // Guardrail 2: negative resolutions require a recorded caveat
@@ -346,7 +443,8 @@ if (values.verifyClaim) {
   }
 
   claim.status = status;
-  claim.sources = sources;
+  // Re-marking a claim pending must not wipe evidence already attached.
+  if (status !== "pending" || sources.length > 0) claim.sources = sources;
   if (values.claimNotes) claim.notes = values.claimNotes;
 
   recordAudit(state, { op: "verifyClaim", target: claim.id, detail: status });
@@ -357,17 +455,25 @@ if (values.verifyClaim) {
 
 // --- Thought submission flow ---
 
-if (!values.thought) fail("--thought is required");
+// Validate numeric arguments eagerly so malformed values fail fast
+if (values.thoughtNumber != null) {
+  const tn = Number(values.thoughtNumber);
+  if (!Number.isSafeInteger(tn) || tn < 1) fail("--thoughtNumber must be an integer >= 1");
+}
+if (values.totalThoughts != null) {
+  const tt = Number(values.totalThoughts);
+  if (!Number.isSafeInteger(tt) || tt < 1) fail("--totalThoughts must be an integer >= 1");
+}
+
+if (values.thought == null) fail("--thought is required");
+if (values.thought === "") fail("--thought cannot be empty");
 if (!values.thoughtNumber) fail("--thoughtNumber is required");
 if (!values.totalThoughts) fail("--totalThoughts is required");
 if (!values.nextThoughtNeeded) fail("--nextThoughtNeeded is required");
 
-const thoughtNumber = parseInt(values.thoughtNumber, 10);
-let totalThoughts = parseInt(values.totalThoughts, 10);
+const thoughtNumber = Number(values.thoughtNumber);
+let totalThoughts = Number(values.totalThoughts);
 const nextThoughtNeeded = values.nextThoughtNeeded.toLowerCase() === "true";
-
-if (isNaN(thoughtNumber) || thoughtNumber < 1) fail("--thoughtNumber must be an integer >= 1");
-if (isNaN(totalThoughts) || totalThoughts < 1) fail("--totalThoughts must be an integer >= 1");
 
 if (thoughtNumber > totalThoughts) {
   totalThoughts = thoughtNumber;
@@ -377,6 +483,14 @@ if (thoughtNumber > totalThoughts) {
 const resolvedMode = resolveMode(state, values.mode);
 if (resolvedMode == null) {
   fail("--mode is required on the first thought of a session: 'path-a' (closed-form) or 'path-b' (open-ended). Step 0 classification is mandatory.");
+}
+
+// Path A hard cap: depth expansion beyond 5 thoughts is prohibited
+if (state.mode === "path-a") {
+  const currentTotal = state.thoughtHistory.length + 1;
+  if (currentTotal > 5) {
+    fail(`Path A depth exceeds 5 thoughts (${currentTotal}/5); conclude or escalate to Path B via --reset.`);
+  }
 }
 
 // --- Termination Hard Gates (when nextThoughtNeeded is false) ---
@@ -433,9 +547,13 @@ const thoughtData: ThoughtData = {
 };
 
 if (values.isRevision) {
+  if (values.branchFromThought != null) fail("--isRevision and --branchFromThought are mutually exclusive");
   if (!values.revisesThought) fail("--revisesThought is required when --isRevision is set");
   const revisesThought = parseInt(values.revisesThought, 10);
   if (isNaN(revisesThought) || revisesThought < 1) fail("--revisesThought must be an integer >= 1");
+  if (!state.thoughtHistory.some(t => t.thoughtNumber === revisesThought)) {
+    fail(`Cannot revise thought ${revisesThought}: not found in history`);
+  }
   thoughtData.isRevision = true;
   thoughtData.revisesThought = revisesThought;
 }
@@ -450,6 +568,10 @@ if (values.branchFromThought != null) {
 
 if (values.needsMoreThoughts) {
   thoughtData.needsMoreThoughts = true;
+}
+
+if (!thoughtData.isRevision && state.thoughtHistory.some(t => t.thoughtNumber === thoughtNumber)) {
+  fail(`thought ${thoughtNumber} already exists in history`);
 }
 
 state.thoughtHistory.push(thoughtData);

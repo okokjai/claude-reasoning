@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.1.4
+version: 2.2.0
 description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies. Use when reasoning through a bug, a decision, a design critique, an architecture tradeoff, a multi-step analysis, or any open-ended question needing verified external facts — before answering, not after."
 ---
 
-# claude-reasoning 2.1.4
+# claude-reasoning 2.2.0
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -34,7 +34,7 @@ Announce the classification in Thought 1 so the routing is inspectable. Pass it 
 3. **Thought 3** — **Independently cross-validate with a different method**: reverse deduction, extreme-value substitution, set/complement enumeration, or brute-force state space.
 4. **Thoughts 4–5** — Only when Steps 2 and 3 disagree. Resolve the conflict, then terminate immediately.
 
-**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, any external search, depth expansion beyond 5.
+**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, any external search, depth expansion beyond 5. All four side-commands are rejected with a Path A error.
 
 Terminate as soon as the two independent methods agree: `--nextThoughtNeeded false`.
 
@@ -168,7 +168,7 @@ bun scripts/think.ts --status
 Status line returned after each thought:
 
 ```
-[3/7] history=3 branches=alt-approach claims=claim-1,claim-2 next=true
+[3/7] history=3 mode=path-b branches=alt-approach claims=claim-1,claim-2 next=true
 ```
 
 ### Flag reference
@@ -190,8 +190,8 @@ Status line returned after each thought:
 | `--mergedInto` | string | **Required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, or a resolving hypothesis that already absorbs another merge |
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending` |
 | `--verifyClaim` | string | Target claim id |
-| `--claimStatus` | enum | `verified` \| `single_source` \| `unverified` \| `not_found` |
-| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains required **only** for `verified` |
+| `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found` — `verified` claims are final; re-verification to any other status is rejected |
+| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; preserved when supplied on `pending` transitions |
 | `--claimNotes` | string | **Required** for `single_source` / `unverified` / `not_found`; optional for `verified` |
 | `--status` | flag | Full JSON state |
 | `--reset` | flag | Clears state for a new session |
@@ -215,4 +215,4 @@ Status line returned after each thought:
 
 ## State file
 
-`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, and `claimDetails`.
+`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
