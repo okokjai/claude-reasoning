@@ -128,6 +128,7 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
 
     const thought = "Cost delta: $1.15M vs $3 per 1M tokens";
     const t = run([
+      "--mode", "path-b",
       "--thought", thought,
       "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true",
     ]);

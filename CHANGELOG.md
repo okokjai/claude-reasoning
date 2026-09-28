@@ -4,6 +4,33 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-09-28
+
+### Fixed
+
+- **`scripts/think.ts` — `--claimSource` URLs must be parseable** — `rootDomain()` previously returned unparseable strings as their own domain buckets, so two garbage strings or two scheme-less URLs on the same domain (e.g. `example.com/a` vs `example.com/b`) passed the `verified` dual-source check. Missing schemes are now tolerated via `https://` retry (`example.com/x` vs `other.org/y` still counts as two distinct roots), and completely unparseable values exit 1 ("not a parseable URL; sources must name their origin domain.").
+- **`scripts/think.ts` — first thought must declare `--mode`** — `resolveMode()` previously persisted `--mode` supplied on any invocation, so `--mode path-b --registerHypothesis …` established mode on an empty history and the real thought 1 then skipped the mode requirement. Side-commands may still carry `--mode` to pre-establish the session mode (enabling pre-thought registration), but a first thought submitted without `--mode` now exits 1 ("--mode is required on the first thought") even when `state.mode` was already set — the documented invariant is enforced by the flag on the submission itself, not by session state inheritance.
+- **`scripts/think.ts` — expanded multi-segment suffix coverage** — `MULTI_SEGMENT_SUFFIXES` now covers common hosted-platform and ccTLD-style suffixes (`co.nz`, `co.in`, `com.br`, `co.za`, `co.kr`, `com.cn`, `netlify.app`, `web.app`, `onrender.com`, `railway.app`, `fly.dev`, etc.), so e.g. `a.co.nz` vs `b.co.nz` and `foo.netlify.app` vs `bar.netlify.app` are correctly recognized as distinct roots. Whitelist remains finite; `localhost` stays self-bucketing.
+- **`scripts/think.ts` — `totalThoughts` auto-adjust now visible** — when `thoughtNumber` exceeds `totalThoughts`, the adjustment is still applied (upstream sequential-thinking semantics) but now emits `totalThoughts adjusted N->M` on stderr instead of silently rewriting state.
+- **`scripts/think.ts` — `--branchFromThought` existence check** — branching from a `thoughtNumber` not present in `thoughtHistory` now exits 1 ("Cannot branch from thought N: not found in history"), matching the existing `--revisesThought` guard.
+- **`scripts/think.ts` — `--mergedInto` rejected-target guard** — merging a hypothesis into an already-`rejected` hypothesis now exits 1; previously it produced a logically contradictory state. Merging into `pending`, `selected`, or `synthesized` targets remains allowed.
+- **`scripts/think.ts` — `--reset` runs alone** — `--reset` combined with any other flag (`--status`, `--thought`, side-commands, etc.) now exits 1 instead of silently discarding the other operations and clearing the session.
+- **`scripts/think.ts` — strict integer flags** — `--thoughtNumber`, `--totalThoughts`, `--revisesThought`, and `--branchFromThought` now require `^\d+$`; scientific notation (`1e1`), hex (`0x10`), decimals, and whitespace-padded values are rejected.
+
+### Added
+
+- **`tests/issues.test.ts`** — 17 new regression tests covering: unparseable and scheme-less claim sources, mode-on-side-command and undeclared-mode first thoughts, new suffix coverage (positive and negative cases), `totalThoughts` adjust notice, nonexistent `branchFromThought`, rejected `mergedInto` target, `--reset` exclusivity, and non-decimal numeric flags. Total: 80 tests across 2 files (up from 63).
+
+### Changed
+
+- **`SKILL.md`** — version 2.2.1; flag reference documents `--claimSource` parseability + missing-scheme tolerance, `--mode` thought-only restriction, the `totalThoughts adjusted` notice, `--branchFromThought`/`--revisesThought` existence requirements, `--mergedInto` rejected-target block, and `--reset` exclusivity.
+- **`README.md`** — version 2.2.1; invariants table adds the seven new guards; test count updated to 80 across 2 files.
+- **`tests/think.test.ts`** — byte-for-byte output test now declares `--mode path-b` on its first thought (previously relied on the side-command mode bypass).
+
+### Breaking Changes
+
+None. All changes tighten previously unenforced documented invariants; no public flag, output field, or state-file contract was removed.
+
 ## [2.2.0] - 2026-09-28
 
 ### Fixed

@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.2.0
+version: 2.2.1
 description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies. Use when reasoning through a bug, a decision, a design critique, an architecture tradeoff, a multi-step analysis, or any open-ended question needing verified external facts — before answering, not after."
 ---
 
-# claude-reasoning 2.2.0
+# claude-reasoning 2.2.1
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -178,23 +178,23 @@ Status line returned after each thought:
 | `--mode` | enum | `path-a` \| `path-b` — **required on the first thought**; immutable for the session |
 | `--thought` | string | Thought content |
 | `--thoughtNumber` | int ≥ 1 | Current index |
-| `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it |
+| `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
 | `--nextThoughtNeeded` | bool | `false` terminates — blocked while claims are pending |
-| `--isRevision` / `--revisesThought N` | flag / int | Both required together |
-| `--branchFromThought N` / `--branchId label` | int / string | Both required together |
+| `--isRevision` / `--revisesThought N` | flag / int | Both required together; `N` must exist in history |
+| `--branchFromThought N` / `--branchId label` | int / string | Both required together; `N` must exist in history |
 | `--needsMoreThoughts` | flag | Signals depth expansion |
 | `--registerHypothesis` | string | Registers a competing hypothesis; assigns `hyp-N`, status `pending` |
 | `--resolveHypothesis` | string | Target hypothesis id |
 | `--hypothesisStatus` | enum | `selected` \| `rejected` \| `synthesized` \| `merged` |
 | `--hypothesisNotes` | string | Optional rationale recorded on the hypothesis |
-| `--mergedInto` | string | **Required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, or a resolving hypothesis that already absorbs another merge |
+| `--mergedInto` | string | **Required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, already-rejected targets, or a resolving hypothesis that already absorbs another merge |
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending` |
 | `--verifyClaim` | string | Target claim id |
 | `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found` — `verified` claims are final; re-verification to any other status is rejected |
-| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; preserved when supplied on `pending` transitions |
+| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; each value must parse as a URL (missing scheme is tolerated) or the call is rejected; preserved when supplied on `pending` transitions |
 | `--claimNotes` | string | **Required** for `single_source` / `unverified` / `not_found`; optional for `verified` |
 | `--status` | flag | Full JSON state |
-| `--reset` | flag | Clears state for a new session |
+| `--reset` | flag | Clears state for a new session; **must run alone** — combined with any other flag it exits 1 |
 
 ---
 

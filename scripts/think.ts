@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 2.2.0 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 2.2.1 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -243,6 +243,32 @@ function requireModeEstablished(state: State, requested: string | undefined): Th
 // --- Command: Reset ---
 
 if (values.reset) {
+  const combined = [
+    values.status && "--status",
+    values.thought != null && "--thought",
+    values.thoughtNumber != null && "--thoughtNumber",
+    values.totalThoughts != null && "--totalThoughts",
+    values.nextThoughtNeeded != null && "--nextThoughtNeeded",
+    values.isRevision && "--isRevision",
+    values.revisesThought != null && "--revisesThought",
+    values.branchFromThought != null && "--branchFromThought",
+    values.branchId != null && "--branchId",
+    values.needsMoreThoughts && "--needsMoreThoughts",
+    values.mode != null && "--mode",
+    values.registerClaim != null && "--registerClaim",
+    values.verifyClaim != null && "--verifyClaim",
+    values.claimStatus != null && "--claimStatus",
+    values.claimSource != null && "--claimSource",
+    values.claimNotes != null && "--claimNotes",
+    values.registerHypothesis != null && "--registerHypothesis",
+    values.resolveHypothesis != null && "--resolveHypothesis",
+    values.hypothesisStatus != null && "--hypothesisStatus",
+    values.hypothesisNotes != null && "--hypothesisNotes",
+    values.mergedInto != null && "--mergedInto",
+  ].filter(Boolean);
+  if (combined.length > 0) {
+    fail(`--reset cannot be combined with other operations (${combined.join(", ")}); run --reset alone.`);
+  }
   if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
   console.log(JSON.stringify({ status: "reset", message: "Thinking session cleared" }, null, 2));
   process.exit(0);
@@ -339,6 +365,7 @@ if (values.resolveHypothesis != null) {
     if (target === hyp.id) fail("--mergedInto cannot reference the hypothesis being resolved itself.");
     if (!state.hypotheses?.[target]) fail(`--mergedInto target '${target}' not found in state.`);
     if (state.hypotheses[target].status === "merged") fail(`--mergedInto target '${target}' is already merged into another hypothesis; merge chains are not allowed.`);
+    if (state.hypotheses[target].status === "rejected") fail(`--mergedInto target '${target}' is already rejected; cannot merge into a rejected hypothesis.`);
     // Keep merges flat: if another hypothesis already merged INTO this one, this
     // one must stay put as the survivor — merging it onward would leave that
     // pointer stranded on a merged node (a two-hop chain).
@@ -380,30 +407,64 @@ const MULTI_SEGMENT_SUFFIXES: Record<string, true> = {
   "org.au": true,
   "co.jp": true,
   "ne.jp": true,
+  "co.nz": true,
+  "org.nz": true,
+  "ac.nz": true,
+  "co.in": true,
+  "firm.in": true,
+  "net.in": true,
+  "org.in": true,
+  "com.br": true,
+  "net.br": true,
+  "org.br": true,
+  "co.za": true,
+  "org.za": true,
+  "co.kr": true,
+  "or.kr": true,
+  "com.cn": true,
+  "net.cn": true,
+  "org.cn": true,
+  "com.mx": true,
+  "com.sg": true,
+  "com.hk": true,
+  "co.id": true,
   "github.io": true,
   "gitlab.io": true,
   "herokuapp.com": true,
   "pages.dev": true,
   "vercel.app": true,
+  "netlify.app": true,
+  "web.app": true,
+  "firebaseapp.com": true,
+  "onrender.com": true,
+  "railway.app": true,
+  "fly.dev": true,
+  "workers.dev": true,
   "azurewebsites.net": true,
   "cloudfront.net": true,
 };
 
 function rootDomain(urlStr: string): string {
+  let hostname: string;
   try {
-    const hostname = new URL(urlStr).hostname.toLowerCase();
-    // A bare IPv4/IPv6 host is its own domain — never join its "last two labels".
-    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(":")) return hostname;
-    const parts = hostname.split(".");
-    if (parts.length <= 2) return hostname;
-    // Last two labels forming a known multi-segment public suffix mean the
-    // registrable domain is three labels deep (bbc.co.uk, not co.uk).
-    return MULTI_SEGMENT_SUFFIXES[parts.slice(-2).join(".")]
-      ? parts.slice(-3).join(".")
-      : parts.slice(-2).join(".");
+    hostname = new URL(urlStr).hostname.toLowerCase();
   } catch {
-    return urlStr; // malformed URL counts as its own bucket -> fails dual-domain check
+    try {
+      // Tolerate a missing scheme so "example.com/page" still buckets under example.com.
+      hostname = new URL(`https://${urlStr}`).hostname.toLowerCase();
+    } catch {
+      fail(`--claimSource '${urlStr}' is not a parseable URL; sources must name their origin domain.`);
+    }
   }
+  // A bare IPv4/IPv6 host is its own domain — never join its "last two labels".
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(":")) return hostname;
+  const parts = hostname.split(".");
+  if (parts.length <= 2) return hostname;
+  // Last two labels forming a known multi-segment public suffix mean the
+  // registrable domain is three labels deep (bbc.co.uk, not co.uk).
+  return MULTI_SEGMENT_SUFFIXES[parts.slice(-2).join(".")]
+    ? parts.slice(-3).join(".")
+    : parts.slice(-2).join(".");
 }
 
 // --- Command: Verify Claim ---
@@ -455,14 +516,15 @@ if (values.verifyClaim != null) {
 
 // --- Thought submission flow ---
 
-// Validate numeric arguments eagerly so malformed values fail fast
+// Validate numeric arguments eagerly so malformed values fail fast.
+// Decimal digits only: rejects "1e1", "0x10", " 5", "+5", "5.0".
 if (values.thoughtNumber != null) {
   const tn = Number(values.thoughtNumber);
-  if (!Number.isSafeInteger(tn) || tn < 1) fail("--thoughtNumber must be an integer >= 1");
+  if (!/^\d+$/.test(values.thoughtNumber) || !Number.isSafeInteger(tn) || tn < 1) fail("--thoughtNumber must be an integer >= 1");
 }
 if (values.totalThoughts != null) {
   const tt = Number(values.totalThoughts);
-  if (!Number.isSafeInteger(tt) || tt < 1) fail("--totalThoughts must be an integer >= 1");
+  if (!/^\d+$/.test(values.totalThoughts) || !Number.isSafeInteger(tt) || tt < 1) fail("--totalThoughts must be an integer >= 1");
 }
 
 if (values.thought == null) fail("--thought is required");
@@ -476,10 +538,16 @@ let totalThoughts = Number(values.totalThoughts);
 const nextThoughtNeeded = values.nextThoughtNeeded.toLowerCase() === "true";
 
 if (thoughtNumber > totalThoughts) {
+  console.error(`Note: totalThoughts adjusted ${totalThoughts}->${thoughtNumber} (--thoughtNumber exceeded the declared estimate).`);
   totalThoughts = thoughtNumber;
 }
 
-// Track mode (Step 0 classification is mandatory on the first thought of a session)
+// Track mode (Step 0 classification is mandatory on the first thought of a session).
+// History must be empty AND the flag present — a side-command setting state.mode
+// earlier does not waive the documented first-thought requirement.
+if (state.thoughtHistory.length === 0 && values.mode == null) {
+  fail("--mode is required on the first thought of a session: 'path-a' (closed-form) or 'path-b' (open-ended). Step 0 classification is mandatory.");
+}
 const resolvedMode = resolveMode(state, values.mode);
 if (resolvedMode == null) {
   fail("--mode is required on the first thought of a session: 'path-a' (closed-form) or 'path-b' (open-ended). Step 0 classification is mandatory.");
@@ -549,6 +617,7 @@ const thoughtData: ThoughtData = {
 if (values.isRevision) {
   if (values.branchFromThought != null) fail("--isRevision and --branchFromThought are mutually exclusive");
   if (!values.revisesThought) fail("--revisesThought is required when --isRevision is set");
+  if (!/^\d+$/.test(values.revisesThought)) fail("--revisesThought must be an integer >= 1");
   const revisesThought = parseInt(values.revisesThought, 10);
   if (isNaN(revisesThought) || revisesThought < 1) fail("--revisesThought must be an integer >= 1");
   if (!state.thoughtHistory.some(t => t.thoughtNumber === revisesThought)) {
@@ -560,8 +629,12 @@ if (values.isRevision) {
 
 if (values.branchFromThought != null) {
   if (!values.branchId) fail("--branchId is required when --branchFromThought is set");
+  if (!/^\d+$/.test(values.branchFromThought)) fail("--branchFromThought must be an integer >= 1");
   const branchFrom = parseInt(values.branchFromThought, 10);
   if (isNaN(branchFrom) || branchFrom < 1) fail("--branchFromThought must be an integer >= 1");
+  if (!state.thoughtHistory.some(t => t.thoughtNumber === branchFrom)) {
+    fail(`Cannot branch from thought ${branchFrom}: not found in history`);
+  }
   thoughtData.branchFromThought = branchFrom;
   thoughtData.branchId = values.branchId;
 }
