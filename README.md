@@ -25,6 +25,15 @@ cp -r claude-reasoning-* ~/.claude/skills/claude-reasoning
 
 Or use the skill directly from this directory.
 
+### Update an existing install
+
+If installed via git, pull updates directly into the skills directory:
+
+```bash
+cd ~/.claude/skills/claude-reasoning
+git pull
+```
+
 ## Dev tooling
 
 ```bash
