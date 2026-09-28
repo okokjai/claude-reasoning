@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.2.1
+version: 2.2.2
 description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies. Use when reasoning through a bug, a decision, a design critique, an architecture tradeoff, a multi-step analysis, or any open-ended question needing verified external facts — before answering, not after."
 ---
 
-# claude-reasoning 2.2.1
+# claude-reasoning 2.2.2
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 

@@ -4,6 +4,12 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-09-28
+
+### Changed
+
+- **`README.md`** — added `### Update an existing install` instructions for git-clone deployments.
+
 ## [2.2.1] - 2026-09-28
 
 ### Fixed
