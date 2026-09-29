@@ -4,6 +4,12 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-09-30
+
+### Changed
+
+- **`SKILL.md` / `package.json` frontmatter description** — removed `a bug` from the trigger list. The skill is for open-ended reasoning and verified external facts; routing it onto local-code debugging sessions caused Path A/B ceremony (thought caps, hypothesis registration, claim gates) to crowd out actual debugging. Debugging belongs to the systematic-debugging workflow, not this skill.
+
 ## [2.2.2] - 2026-09-28
 
 ### Changed
