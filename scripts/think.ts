@@ -13,7 +13,7 @@ import { fileURLToPath } from "url";
 import { parseArgs } from "util";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const STATE_FILE = join(__dirname, ".think_state.json");
+const STATE_FILE = process.env.THINK_STATE_FILE || join(__dirname, ".think_state.json");
 
 export interface ThoughtData {
   thought: string;
@@ -146,6 +146,123 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+// --- Conclusion card (--export) ---
+
+type CalibratedTag = "[Confirmed]" | "[Probable]" | "[Plausible]" | "[Contested]" | "[Unverified]";
+
+const TAG_BY_CLAIM_STATUS: Record<ClaimStatus, CalibratedTag> = {
+  verified: "[Confirmed]",
+  single_source: "[Probable]",
+  unverified: "[Unverified]",
+  not_found: "[Unverified]",
+  pending: "[Unverified]",
+};
+
+/**
+ * Derive a markdown conclusion card purely from persisted state — no invented
+ * content. Aggregation only (decision-matrix level, not full trace).
+ */
+function buildConclusionCard(state: State): string {
+  const claims = Object.values(state.claims);
+  const hypotheses = Object.values(state.hypotheses || {});
+  const history = state.thoughtHistory;
+  const terminated = history.length > 0 && history[history.length - 1].nextThoughtNeeded === false;
+
+  const selected = hypotheses.find(h => h.status === "selected" || h.status === "synthesized");
+  const rejected = hypotheses.filter(h => h.status === "rejected");
+  const openHyp = hypotheses.filter(h => h.status === "pending");
+
+  const allVerified = claims.length > 0 && claims.every(c => c.status === "verified");
+  const anyVerified = claims.some(c => c.status === "verified");
+
+  const primaryTag: CalibratedTag = allVerified ? "[Confirmed]" : anyVerified ? "[Probable]" : "[Unverified]";
+  const primaryText = selected
+    ? selected.statement
+    : history.length > 0
+      ? history[history.length - 1].thought
+      : "No thoughts recorded yet.";
+
+  const findingLines = claims.map(c => `- ${TAG_BY_CLAIM_STATUS[c.status]} ${c.statement} (${c.id})`);
+
+  let confidenceLevel: string;
+  let confidenceRationale: string;
+  if (claims.length === 0) {
+    confidenceLevel = "Low";
+    confidenceRationale = "No registered claims; conclusions rest on reasoning alone.";
+  } else if (allVerified) {
+    confidenceLevel = "High";
+    confidenceRationale = `All ${claims.length} registered claims verified.`;
+  } else if (anyVerified) {
+    confidenceLevel = "Medium";
+    const unverifiedCount = claims.filter(c => c.status !== "verified").length;
+    confidenceRationale = `${claims.length - unverifiedCount}/${claims.length} claims verified; ${unverifiedCount} unresolved.`;
+  } else {
+    confidenceLevel = "Low";
+    confidenceRationale = "No claims verified; all findings below [Probable].";
+  }
+
+  const evidenceUrls = [...new Set(claims.flatMap(c => c.sources))];
+
+  const residualLines: string[] = [];
+  for (const c of claims) {
+    if (c.status !== "verified") {
+      residualLines.push(`- [Unverified] Re-verify ${c.id} (${c.status})${c.notes ? `: ${c.notes}` : ""}`);
+    }
+  }
+  for (const h of openHyp) {
+    residualLines.push(`- [Unverified] Hypothesis ${h.id} still pending resolution`);
+  }
+  if (residualLines.length === 0 && claims.length > 0) {
+    residualLines.push("- All claims verified.");
+  }
+  if (claims.length === 0) {
+    residualLines.push("- No claims were registered; consider --registerClaim to track verifiable statements.");
+  }
+
+  const nextSteps: string[] = [];
+  if (!terminated) {
+    nextSteps.push("- Session still open; continue thinking or submit a terminating thought with --nextThoughtNeeded false.");
+  }
+  if (residualLines.some(l => l.includes("Re-verify"))) {
+    nextSteps.push("- Re-verify unresolved claims via --verifyClaim with independent sources.");
+  }
+  if (openHyp.length > 0) {
+    nextSteps.push("- Resolve pending hypotheses via --resolveHypothesis.");
+  }
+  if (nextSteps.length === 0) {
+    nextSteps.push("- None. All gates satisfied; this card is the session exit artifact.");
+  }
+
+  const sections = [
+    `# Conclusion Card${state.mode ? ` (${state.mode})` : ""}`,
+    "",
+    "## Primary Finding",
+    `${primaryTag} ${primaryText}`,
+    "",
+    "## Calibrated Findings",
+    findingLines.length > 0 ? findingLines.join("\n") : "- No claims registered.",
+    "",
+    "## Confidence Assessment",
+    `- Level: ${confidenceLevel}`,
+    `- Rationale: ${confidenceRationale}`,
+    "",
+    "## Decision Matrix",
+    ...(selected ? [`- Selected: ${selected.id} — ${selected.statement}`] : ["- Selected: none"]),
+    ...(rejected.length > 0 ? rejected.map(h => `- Rejected: ${h.id} — ${h.statement}`) : []),
+    ...(openHyp.length > 0 ? openHyp.map(h => `- Pending: ${h.id} — ${h.statement}`) : []),
+    "",
+    "## Key Evidence Sources",
+    evidenceUrls.length > 0 ? evidenceUrls.map(u => `- ${u}`).join("\n") : "- None recorded.",
+    "",
+    "## Residual Uncertainty & Blind Spots",
+    residualLines.join("\n"),
+    "",
+    "## Actionable Next Steps / Exit Conditions",
+    nextSteps.join("\n"),
+  ];
+  return sections.join("\n");
+}
+
 export interface ParsedArgs {
   thought?: string;
   thoughtNumber?: string;
@@ -169,6 +286,7 @@ export interface ParsedArgs {
   mergedInto?: string;
   status?: boolean;
   reset?: boolean;
+  export?: boolean;
 }
 
 // --- Parse CLI args ---
@@ -199,6 +317,7 @@ try {
     mergedInto: { type: "string" },
     status: { type: "boolean", default: false },
     reset: { type: "boolean", default: false },
+    export: { type: "boolean", default: false },
   },
   strict: true,
 }) as unknown as { values: ParsedArgs });
@@ -288,6 +407,13 @@ if (values.status) {
     auditTrail: state.auditTrail || [],
   };
   console.log(JSON.stringify(response, null, 2));
+  process.exit(0);
+}
+
+// --- Command: Export ---
+
+if (values.export) {
+  console.log(buildConclusionCard(state));
   process.exit(0);
 }
 
@@ -667,3 +793,8 @@ const claimList = status.claims.length > 0 ? ` claims=${status.claims.join(",")}
 const hypList = status.hypotheses.length > 0 ? ` hypotheses=${status.hypotheses.join(",")}` : "";
 const modeStr = status.mode ? ` mode=${status.mode}` : "";
 console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.thoughtHistoryLength}${modeStr}${branchList}${claimList}${hypList} next=${status.nextThoughtNeeded}`);
+
+if (!nextThoughtNeeded) {
+  console.log("");
+  console.log(buildConclusionCard(state));
+}

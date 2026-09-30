@@ -86,6 +86,9 @@ bun scripts/think.ts --thought "Synthesize into Conclusion Card" --thoughtNumber
 
 # Inspect state
 bun scripts/think.ts --status
+
+# Emit a markdown conclusion card (also auto-printed on session termination)
+bun scripts/think.ts --export
 ```
 
 See [`SKILL.md`](SKILL.md) for the full protocol and flag reference.
@@ -137,7 +140,7 @@ These are checked in code, not just documented:
 bun test
 ```
 
-80 tests across 2 files (`tests/think.test.ts` and `tests/issues.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including mode-establishment requirement, byte-exact storage of `$`-containing flag values, and prevention of demoting verified claims to any non-verified status), all guardrails above (including IP-safe, multi-segment public suffix aware distinct-root-domain verification for `verified` and `--claimNotes` enforcement for negative resolutions), clean CLI error handling, the `--status` audit trail and `hypothesisDetails` for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and hypothesis convergence.
+84 tests across 2 files (`tests/think.test.ts` and `tests/issues.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including mode-establishment requirement, byte-exact storage of `$`-containing flag values, and prevention of demoting verified claims to any non-verified status), all guardrails above (including IP-safe, multi-segment public suffix aware distinct-root-domain verification for `verified` and `--claimNotes` enforcement for negative resolutions), clean CLI error handling, the `--status` audit trail and `hypothesisDetails` for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and hypothesis convergence.
 
 ## Design notes
 

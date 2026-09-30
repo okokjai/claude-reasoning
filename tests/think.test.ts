@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import { unlinkSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -517,5 +517,77 @@ describe("think.ts: side-command audit trail", () => {
       "resolveHypothesis",
       "verifyClaim",
     ]);
+  });
+});
+
+describe("think.ts: --export conclusion card", () => {
+  it("emits a markdown conclusion card on demand for a terminated Path B session", () => {
+    run(["--reset"]);
+    run(["--mode", "path-b", "--thought", "Decompose the question", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--registerClaim", "Claim that is verified"]);
+    run(["--registerClaim", "Claim with one source"]);
+    run(["--registerHypothesis", "Hypothesis A"]);
+    run(["--registerHypothesis", "Hypothesis B"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example"]);
+    run(["--verifyClaim", "claim-2", "--claimStatus", "single_source", "--claimSource", "https://c.example", "--claimNotes", "only one outlet"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--thought", "Synthesize findings", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "Conclusion reached", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+
+    const res = run(["--export"]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("#");
+    expect(res.stdout).toContain("[Confirmed]");
+    expect(res.stdout).toContain("[Probable]");
+    expect(res.stdout).toContain("Hypothesis A");
+    expect(res.stdout).toContain("claim-2");
+  });
+
+  it("auto-emits the card after the status line when nextThoughtNeeded=false", () => {
+    run(["--reset"]);
+    run(["--mode", "path-b", "--thought", "Decompose", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1"]);
+    run(["--registerHypothesis", "H2"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--thought", "Synthesize", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    const res = run(["--thought", "Final conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("[3/3]");
+    expect(res.stdout).toContain("next=false");
+    // Zero claims registered → honest tag is [Unverified], not [Probable].
+    expect(res.stdout).toContain("[Unverified]");
+  });
+
+  it("emits a card mid-session marking unverified claims as residual uncertainty", () => {
+    run(["--reset"]);
+    run(["--mode", "path-b", "--thought", "Exploring", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--registerClaim", "Unresolved claim"]);
+    const res = run(["--export"]);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain("[Unverified]");
+    expect(res.stdout).toContain("claim-1");
+  });
+});
+
+describe("think.ts: THINK_STATE_FILE env isolation", () => {
+  it("redirects state writes to THINK_STATE_FILE when set, leaving the default file untouched", () => {
+    // Remove any leftover real state so we can prove the env override worked.
+    if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
+    const altState = join(CWD, "tests", ".think_state.envtest.json");
+    if (existsSync(altState)) unlinkSync(altState);
+    try {
+      const res = spawnSync("bun", [SCRIPT, "--mode", "path-a", "--thought", "isolated", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"], {
+        cwd: CWD,
+        encoding: "utf-8",
+        env: { ...process.env, THINK_STATE_FILE: altState },
+      });
+      expect(res.status).toBe(0);
+      expect(existsSync(altState)).toBe(true);
+      expect(existsSync(STATE_FILE)).toBe(false);
+    } finally {
+      if (existsSync(altState)) unlinkSync(altState);
+    }
   });
 });

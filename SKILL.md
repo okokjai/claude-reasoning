@@ -194,6 +194,7 @@ Status line returned after each thought:
 | `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; each value must parse as a URL (missing scheme is tolerated) or the call is rejected; preserved when supplied on `pending` transitions |
 | `--claimNotes` | string | **Required** for `single_source` / `unverified` / `not_found`; optional for `verified` |
 | `--status` | flag | Full JSON state |
+| `--export` | flag | Prints a markdown conclusion card derived from persisted state (selected hypothesis, calibrated findings, confidence level, evidence sources, residual uncertainty); also auto-emitted after the status line when a thought terminates the session (`--nextThoughtNeeded false`) |
 | `--reset` | flag | Clears state for a new session; **must run alone** — combined with any other flag it exits 1 |
 
 ---

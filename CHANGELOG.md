@@ -4,6 +4,15 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`scripts/think.ts` — `--export` conclusion card** — a new side-command prints a markdown conclusion card derived purely from persisted state (no invented content): primary finding = the `selected`/`synthesized` hypothesis statement (else last thought), per-claim calibrated findings (`[Confirmed]`=verified, `[Probable]`=single_source, `[Unverified]`=pending/unverified/not_found), a High/Medium/Low confidence level driven by verified-claim ratio, the decision matrix (selected/rejected/pending hypotheses), deduplicated evidence source URLs, residual uncertainty (unverified claims + pending hypotheses + notes), and actionable next steps. The same card is auto-printed after the status line whenever a submitted thought sets `--nextThoughtNeeded false`, closing the "reasoning lives in `.think_state.json` but nothing exports it" gap. Implements `references/conclusion-card.md`.
+- **`tests/think.test.ts`** — 3 new tests: `--export` card content on a terminated Path B session, auto-emission after the status line on termination, and mid-session `[Unverified]` residual marking. Total: 84 across 2 files (43 in think.test.ts, 41 in issues.test.ts).
+
+### Breaking Changes
+
+- **None.** `--export` is a new opt-in flag; termination output gains a trailing markdown block on stdout after the status line. Scripts that parse only the final stdout line of a terminating thought must read the first line instead.
+
 ## [2.2.3] - 2026-09-30
 
 ### Changed
