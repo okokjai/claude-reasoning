@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.2.4
-description: "Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies. Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or any open-ended question needing verified external facts — before answering, not after."
+version: 2.2.5
+description: "Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or an open-ended question needing verified external facts — before answering, not after. Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 2.2.4
+# claude-reasoning 2.2.5
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -179,7 +179,7 @@ Status line returned after each thought:
 | `--thought` | string | Thought content |
 | `--thoughtNumber` | int ≥ 1 | Current index |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
-| `--nextThoughtNeeded` | bool | `false` terminates — blocked while claims are pending |
+| `--nextThoughtNeeded` | `true`\|`false` | `false` terminates — blocked while claims are pending; any other value (e.g. `ture`, `yes`) exits 1 |
 | `--isRevision` / `--revisesThought N` | flag / int | Both required together; `N` must exist in history |
 | `--branchFromThought N` / `--branchId label` | int / string | Both required together; `N` must exist in history |
 | `--needsMoreThoughts` | flag | Signals depth expansion |
@@ -191,10 +191,10 @@ Status line returned after each thought:
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending` |
 | `--verifyClaim` | string | Target claim id |
 | `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found` — `verified` claims are final; re-verification to any other status is rejected |
-| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; each value must parse as a URL (missing scheme is tolerated) or the call is rejected; preserved when supplied on `pending` transitions |
+| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; a trailing root dot is normalised (`example.com.` = `example.com`); each value must parse as a URL (missing scheme is tolerated) or the call is rejected; preserved when supplied on `pending` transitions |
 | `--claimNotes` | string | **Required** for `single_source` / `unverified` / `not_found`; optional for `verified` |
 | `--status` | flag | Full JSON state |
-| `--export` | flag | Prints a markdown conclusion card derived from persisted state (selected hypothesis, calibrated findings, confidence level, evidence sources, residual uncertainty); also auto-emitted after the status line when a thought terminates the session (`--nextThoughtNeeded false`) |
+| `--export` | flag | Prints a **fact sheet** derived from persisted state (selected/rejected/merged hypotheses with rationale, claim outcomes, trace shape, final thought, evidence sources). Must run alone. It does **not** rate the reasoning: claim statistics are labelled "fact-check coverage only". Also auto-emitted after the status line on termination. The final answer is still the model-written card per `references/conclusion-card.md`; the script card is input to it, never a substitute |
 | `--reset` | flag | Clears state for a new session; **must run alone** — combined with any other flag it exits 1 |
 
 ---

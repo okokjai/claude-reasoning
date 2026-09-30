@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 2.2.4 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 2.2.5 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -158,108 +158,143 @@ const TAG_BY_CLAIM_STATUS: Record<ClaimStatus, CalibratedTag> = {
   pending: "[Unverified]",
 };
 
+/** Quote multi-line free text so user content can never forge card headings. */
+function quoteBlock(text: string): string {
+  return text.split("\n").map(l => `> ${l}`).join("\n");
+}
+
 /**
  * Derive a markdown conclusion card purely from persisted state — no invented
- * content. Aggregation only (decision-matrix level, not full trace).
+ * content. It is a FACT SHEET: it reports what was recorded (selected
+ * hypotheses with their rationale, claim outcomes, the final thought, the
+ * trace shape) and deliberately does NOT rate the reasoning itself. The
+ * calibrated final answer is still written by the model per
+ * references/conclusion-card.md.
+ *
+ * Design rules (2.2.5):
+ *  - Claims are not linked to hypotheses, so claim statistics are reported as
+ *    "fact-check coverage" and never promote the primary finding to [Confirmed].
+ *  - Path A has no claims by contract; it is never penalised for that.
+ *  - Free text is block-quoted; every selected/merged hypothesis is listed.
  */
 function buildConclusionCard(state: State): string {
   const claims = Object.values(state.claims);
   const hypotheses = Object.values(state.hypotheses || {});
   const history = state.thoughtHistory;
+  const isPathA = state.mode === "path-a";
   const terminated = history.length > 0 && history[history.length - 1].nextThoughtNeeded === false;
 
-  const selected = hypotheses.find(h => h.status === "selected" || h.status === "synthesized");
+  const selected = hypotheses.filter(h => h.status === "selected" || h.status === "synthesized");
   const rejected = hypotheses.filter(h => h.status === "rejected");
+  const merged = hypotheses.filter(h => h.status === "merged");
   const openHyp = hypotheses.filter(h => h.status === "pending");
+  const lastThought = history.length > 0 ? history[history.length - 1].thought : null;
 
-  const allVerified = claims.length > 0 && claims.every(c => c.status === "verified");
-  const anyVerified = claims.some(c => c.status === "verified");
+  const verifiedN = claims.filter(c => c.status === "verified").length;
+  const singleN = claims.filter(c => c.status === "single_source").length;
+  const unresolvedN = claims.length - verifiedN;
 
-  const primaryTag: CalibratedTag = allVerified ? "[Confirmed]" : anyVerified ? "[Probable]" : "[Unverified]";
-  const primaryText = selected
-    ? selected.statement
-    : history.length > 0
-      ? history[history.length - 1].thought
-      : "No thoughts recorded yet.";
-
-  const findingLines = claims.map(c => `- ${TAG_BY_CLAIM_STATUS[c.status]} ${c.statement} (${c.id})`);
-
-  let confidenceLevel: string;
-  let confidenceRationale: string;
-  if (claims.length === 0) {
-    confidenceLevel = "Low";
-    confidenceRationale = "No registered claims; conclusions rest on reasoning alone.";
-  } else if (allVerified) {
-    confidenceLevel = "High";
-    confidenceRationale = `All ${claims.length} registered claims verified.`;
-  } else if (anyVerified) {
-    confidenceLevel = "Medium";
-    const unverifiedCount = claims.filter(c => c.status !== "verified").length;
-    confidenceRationale = `${claims.length - unverifiedCount}/${claims.length} claims verified; ${unverifiedCount} unresolved.`;
+  // Primary finding: a reasoning-derived conclusion is [Plausible] by definition;
+  // external facts are calibrated separately in "Calibrated Findings".
+  let primary: string;
+  if (selected.length > 0) {
+    primary = selected
+      .map(h => `[Plausible] ${h.statement}${h.notes ? ` — why: ${h.notes}` : ""} (${h.id})`)
+      .join("\n");
+  } else if (isPathA && lastThought != null) {
+    primary = `[Plausible] See final thought below (closed-form; correctness rests on independent cross-validation).`;
+  } else if (hypotheses.length > 0) {
+    primary = "No hypothesis was selected or synthesized; see final thought below.";
   } else {
-    confidenceLevel = "Low";
-    confidenceRationale = "No claims verified; all findings below [Probable].";
+    primary = "No hypothesis registered; see final thought below.";
+  }
+
+  const findingLines = claims.map(c => {
+    const note = c.notes ? ` — ${c.notes}` : "";
+    return `- ${TAG_BY_CLAIM_STATUS[c.status]} ${c.statement} (${c.id})${note}`;
+  });
+
+  let confidence: string[];
+  if (isPathA) {
+    confidence = [
+      "- Level: n/a (closed-form)",
+      "- Rationale: no external claims by contract; correctness rests on the independent cross-validation recorded in the thoughts.",
+    ];
+  } else if (claims.length === 0) {
+    confidence = [
+      "- Level: not rated by script",
+      "- Rationale: no external claims registered (correct when the question is purely internal); rate the reasoning in the final answer.",
+    ];
+  } else {
+    const level = verifiedN === claims.length ? "High" : verifiedN > 0 || singleN > 0 ? "Medium" : "Low";
+    confidence = [
+      `- Level (fact-check coverage only): ${level}`,
+      `- Rationale: ${verifiedN}/${claims.length} claims verified, ${singleN} single-source, ${claims.length - verifiedN - singleN} unverified/not found. Claims are not linked to hypotheses, so this does not rate the reasoning itself.`,
+    ];
   }
 
   const evidenceUrls = [...new Set(claims.flatMap(c => c.sources))];
 
-  const residualLines: string[] = [];
+  const residual: string[] = [];
   for (const c of claims) {
     if (c.status !== "verified") {
-      residualLines.push(`- [Unverified] Re-verify ${c.id} (${c.status})${c.notes ? `: ${c.notes}` : ""}`);
+      residual.push(`- [Unverified] Re-verify ${c.id} (${c.status})${c.notes ? `: ${c.notes}` : ""}`);
     }
   }
-  for (const h of openHyp) {
-    residualLines.push(`- [Unverified] Hypothesis ${h.id} still pending resolution`);
-  }
-  if (residualLines.length === 0 && claims.length > 0) {
-    residualLines.push("- All claims verified.");
-  }
-  if (claims.length === 0) {
-    residualLines.push("- No claims were registered; consider --registerClaim to track verifiable statements.");
+  for (const h of openHyp) residual.push(`- [Unverified] Hypothesis ${h.id} still pending resolution`);
+  if (residual.length === 0) {
+    residual.push(claims.length > 0 ? "- All registered claims verified (blind spots outside the registered claims are not tracked)." : "- None recorded by script.");
   }
 
   const nextSteps: string[] = [];
-  if (!terminated) {
-    nextSteps.push("- Session still open; continue thinking or submit a terminating thought with --nextThoughtNeeded false.");
-  }
-  if (residualLines.some(l => l.includes("Re-verify"))) {
-    nextSteps.push("- Re-verify unresolved claims via --verifyClaim with independent sources.");
-  }
-  if (openHyp.length > 0) {
-    nextSteps.push("- Resolve pending hypotheses via --resolveHypothesis.");
-  }
-  if (nextSteps.length === 0) {
-    nextSteps.push("- None. All gates satisfied; this card is the session exit artifact.");
-  }
+  if (!terminated) nextSteps.push("- Session still open; continue thinking or submit a terminating thought with --nextThoughtNeeded false.");
+  if (unresolvedN > 0) nextSteps.push("- Re-verify unresolved claims via --verifyClaim with independent sources.");
+  if (openHyp.length > 0) nextSteps.push("- Resolve pending hypotheses via --resolveHypothesis.");
+  if (nextSteps.length === 0) nextSteps.push("- None from script gates. The final answer must still be written by the model per references/conclusion-card.md.");
 
-  const sections = [
+  const revisions = history.filter(t => t.isRevision).length;
+  const branchIds = Object.keys(state.branches);
+  const trace = `- Thoughts: ${history.length} (revisions: ${revisions}, branches: ${branchIds.length > 0 ? branchIds.join(", ") : "none"})`;
+
+  const sections: string[] = [
     `# Conclusion Card${state.mode ? ` (${state.mode})` : ""}`,
     "",
     "## Primary Finding",
-    `${primaryTag} ${primaryText}`,
+    primary,
     "",
     "## Calibrated Findings",
-    findingLines.length > 0 ? findingLines.join("\n") : "- No claims registered.",
+    findingLines.length > 0 ? findingLines.join("\n") : isPathA ? "- No external claims (Path A)." : "- No claims registered.",
     "",
     "## Confidence Assessment",
-    `- Level: ${confidenceLevel}`,
-    `- Rationale: ${confidenceRationale}`,
-    "",
-    "## Decision Matrix",
-    ...(selected ? [`- Selected: ${selected.id} — ${selected.statement}`] : ["- Selected: none"]),
-    ...(rejected.length > 0 ? rejected.map(h => `- Rejected: ${h.id} — ${h.statement}`) : []),
-    ...(openHyp.length > 0 ? openHyp.map(h => `- Pending: ${h.id} — ${h.statement}`) : []),
+    ...confidence,
+  ];
+  if (!isPathA) {
+    sections.push(
+      "",
+      "## Decision Matrix",
+      ...(selected.length > 0 ? selected.map(h => `- Selected: ${h.id} — ${h.statement}`) : ["- Selected: none"]),
+      ...rejected.map(h => `- Rejected: ${h.id} — ${h.statement}${h.notes ? ` (why: ${h.notes})` : ""}`),
+      ...merged.map(h => `- Merged: ${h.id} → ${h.mergedInto ?? "?"} — ${h.statement}${h.notes ? ` (${h.notes})` : ""}`),
+      ...openHyp.map(h => `- Pending: ${h.id} — ${h.statement}`),
+    );
+  }
+  sections.push(
     "",
     "## Key Evidence Sources",
     evidenceUrls.length > 0 ? evidenceUrls.map(u => `- ${u}`).join("\n") : "- None recorded.",
     "",
+    "## Reasoning Trace",
+    trace,
+    "",
+    "## Final Thought",
+    lastThought != null ? quoteBlock(lastThought) : "> (no thoughts recorded yet)",
+    "",
     "## Residual Uncertainty & Blind Spots",
-    residualLines.join("\n"),
+    residual.join("\n"),
     "",
     "## Actionable Next Steps / Exit Conditions",
     nextSteps.join("\n"),
-  ];
+  );
   return sections.join("\n");
 }
 
@@ -361,30 +396,35 @@ function requireModeEstablished(state: State, requested: string | undefined): Th
 
 // --- Command: Reset ---
 
+/** Names of every operation flag that is set, excluding --reset/--export themselves. */
+function otherOps(v: ParsedArgs): string[] {
+  return [
+    v.status && "--status",
+    v.thought != null && "--thought",
+    v.thoughtNumber != null && "--thoughtNumber",
+    v.totalThoughts != null && "--totalThoughts",
+    v.nextThoughtNeeded != null && "--nextThoughtNeeded",
+    v.isRevision && "--isRevision",
+    v.revisesThought != null && "--revisesThought",
+    v.branchFromThought != null && "--branchFromThought",
+    v.branchId != null && "--branchId",
+    v.needsMoreThoughts && "--needsMoreThoughts",
+    v.mode != null && "--mode",
+    v.registerClaim != null && "--registerClaim",
+    v.verifyClaim != null && "--verifyClaim",
+    v.claimStatus != null && "--claimStatus",
+    v.claimSource != null && "--claimSource",
+    v.claimNotes != null && "--claimNotes",
+    v.registerHypothesis != null && "--registerHypothesis",
+    v.resolveHypothesis != null && "--resolveHypothesis",
+    v.hypothesisStatus != null && "--hypothesisStatus",
+    v.hypothesisNotes != null && "--hypothesisNotes",
+    v.mergedInto != null && "--mergedInto",
+  ].filter((x): x is string => typeof x === "string");
+}
+
 if (values.reset) {
-  const combined = [
-    values.status && "--status",
-    values.thought != null && "--thought",
-    values.thoughtNumber != null && "--thoughtNumber",
-    values.totalThoughts != null && "--totalThoughts",
-    values.nextThoughtNeeded != null && "--nextThoughtNeeded",
-    values.isRevision && "--isRevision",
-    values.revisesThought != null && "--revisesThought",
-    values.branchFromThought != null && "--branchFromThought",
-    values.branchId != null && "--branchId",
-    values.needsMoreThoughts && "--needsMoreThoughts",
-    values.mode != null && "--mode",
-    values.registerClaim != null && "--registerClaim",
-    values.verifyClaim != null && "--verifyClaim",
-    values.claimStatus != null && "--claimStatus",
-    values.claimSource != null && "--claimSource",
-    values.claimNotes != null && "--claimNotes",
-    values.registerHypothesis != null && "--registerHypothesis",
-    values.resolveHypothesis != null && "--resolveHypothesis",
-    values.hypothesisStatus != null && "--hypothesisStatus",
-    values.hypothesisNotes != null && "--hypothesisNotes",
-    values.mergedInto != null && "--mergedInto",
-  ].filter(Boolean);
+  const combined = [...otherOps(values), ...(values.export ? ["--export"] : [])];
   if (combined.length > 0) {
     fail(`--reset cannot be combined with other operations (${combined.join(", ")}); run --reset alone.`);
   }
@@ -396,6 +436,10 @@ if (values.reset) {
 const state = loadState();
 
 // --- Command: Status ---
+
+if (values.status && values.export) {
+  fail("--export cannot be combined with other operations (--status); run --export alone.");
+}
 
 if (values.status) {
   const response = {
@@ -413,6 +457,10 @@ if (values.status) {
 // --- Command: Export ---
 
 if (values.export) {
+  const combinedExport = otherOps(values);
+  if (combinedExport.length > 0) {
+    fail(`--export cannot be combined with other operations (${combinedExport.join(", ")}); run --export alone.`);
+  }
   console.log(buildConclusionCard(state));
   process.exit(0);
 }
@@ -582,6 +630,8 @@ function rootDomain(urlStr: string): string {
       fail(`--claimSource '${urlStr}' is not a parseable URL; sources must name their origin domain.`);
     }
   }
+  // "example.com." (FQDN root dot) is the same host as "example.com".
+  hostname = hostname.replace(/\.+$/, "");
   // A bare IPv4/IPv6 host is its own domain — never join its "last two labels".
   if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(":")) return hostname;
   const parts = hostname.split(".");
@@ -661,7 +711,11 @@ if (!values.nextThoughtNeeded) fail("--nextThoughtNeeded is required");
 
 const thoughtNumber = Number(values.thoughtNumber);
 let totalThoughts = Number(values.totalThoughts);
-const nextThoughtNeeded = values.nextThoughtNeeded.toLowerCase() === "true";
+const nextRaw = values.nextThoughtNeeded.toLowerCase();
+if (nextRaw !== "true" && nextRaw !== "false") {
+  fail(`--nextThoughtNeeded must be 'true' or 'false' (got '${values.nextThoughtNeeded}'); any other value would silently terminate the session.`);
+}
+const nextThoughtNeeded = nextRaw === "true";
 
 if (thoughtNumber > totalThoughts) {
   console.error(`Note: totalThoughts adjusted ${totalThoughts}->${thoughtNumber} (--thoughtNumber exceeded the declared estimate).`);

@@ -556,8 +556,9 @@ describe("think.ts: --export conclusion card", () => {
     expect(res.code).toBe(0);
     expect(res.stdout).toContain("[3/3]");
     expect(res.stdout).toContain("next=false");
-    // Zero claims registered → honest tag is [Unverified], not [Probable].
-    expect(res.stdout).toContain("[Unverified]");
+    // Zero claims in Path B → the script does not rate the reasoning, and never invents [Unverified]/Low.
+    expect(res.stdout).toContain("not rated by script");
+    expect(res.stdout).not.toContain("Level: Low");
   });
 
   it("emits a card mid-session marking unverified claims as residual uncertainty", () => {
@@ -589,5 +590,107 @@ describe("think.ts: THINK_STATE_FILE env isolation", () => {
     } finally {
       if (existsSync(altState)) unlinkSync(altState);
     }
+  });
+});
+
+describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () => {
+  const T = (n: number, total: number, next: string, text: string, extra: string[] = []) =>
+    run(["--thought", text, "--thoughtNumber", String(n), "--totalThoughts", String(total), "--nextThoughtNeeded", next, ...extra]);
+  const startB = () => {
+    run(["--reset"]);
+    run(["--mode", "path-b", "--thought", "T1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "Option A"]);
+    run(["--registerHypothesis", "Option B"]);
+  };
+
+  it("an unrelated verified claim does not promote the primary finding to [Confirmed]", () => {
+    startB();
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--registerClaim", "Unrelated fact"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example"]);
+    const out = run(["--export"]).stdout;
+    expect(out).toMatch(/## Primary Finding\n\[Plausible\] Option A/);
+    expect(out).toContain("fact-check coverage only");
+    expect(out).toContain("does not rate the reasoning");
+  });
+
+  it("Path A card is not penalised and never suggests forbidden --registerClaim", () => {
+    run(["--reset"]);
+    run(["--mode", "path-a", "--thought", "restate", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    T(2, 3, "true", "derive");
+    const res = T(3, 3, "false", "cross-validated: x=4");
+    expect(res.stdout).not.toContain("registerClaim");
+    expect(res.stdout).not.toContain("Level: Low");
+    expect(res.stdout).toContain("n/a (closed-form)");
+    expect(res.stdout).toContain("> cross-validated: x=4");
+  });
+
+  it("single_source-only sessions no longer contradict themselves", () => {
+    startB();
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--registerClaim", "c"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "single_source", "--claimSource", "https://blog.example/x", "--claimNotes", "one blog"]);
+    const out = run(["--export"]).stdout;
+    expect(out).not.toContain("[Unverified] Option A");
+    expect(out).toContain("[Probable] c (claim-1) — one blog");
+    expect(out).toContain("Level (fact-check coverage only): Medium");
+  });
+
+  it("carries hypothesis rationale, all selected, merged targets, trace, and the final thought", () => {
+    startB();
+    run(["--registerHypothesis", "Option C"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "WHY-A"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected"]);
+    run(["--resolveHypothesis", "hyp-3", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
+    T(2, 4, "true", "branch", ["--branchFromThought", "1", "--branchId", "alt"]);
+    T(3, 4, "true", "revise", ["--isRevision", "--revisesThought", "1"]);
+    const out = run(["--export"]).stdout;
+    expect(out).toContain("WHY-A");
+    expect(out).toContain("hyp-2");
+    expect(out).toContain("Merged: hyp-3 → hyp-1");
+    expect(out).toContain("revisions: 1, branches: alt");
+    expect(out).toContain("> revise");
+  });
+
+  it("block-quotes a multi-line final thought so it cannot forge card headings", () => {
+    startB();
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    T(2, 4, "true", "T2");
+    const res = T(3, 4, "false", "verdict\n## Fake Heading\n- x");
+    expect(res.stdout).toContain("No hypothesis was selected");
+    expect(res.stdout).toContain("> ## Fake Heading");
+    expect(res.stdout).not.toMatch(/^## Fake Heading/m);
+  });
+
+  it("--export refuses to combine with other operations instead of silently dropping them", () => {
+    startB();
+    const a = run(["--export", "--thought", "lost?", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    expect(a.code).toBe(1);
+    expect(a.stderr).toContain("--export cannot be combined");
+    expect(run(["--export", "--registerClaim", "x"]).code).toBe(1);
+    expect(run(["--export", "--status"]).code).toBe(1);
+    const b = run(["--reset", "--export"]);
+    expect(b.code).toBe(1);
+    expect(b.stderr).toContain("--export");
+    expect(existsSync(STATE_FILE)).toBe(true); // reset did not run
+  });
+
+  it("--nextThoughtNeeded rejects typos instead of silently terminating", () => {
+    startB();
+    for (const bad of ["ture", "yes", "1"]) {
+      const res = T(2, 4, bad, "x");
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain("must be 'true' or 'false'");
+    }
+    expect(T(2, 4, "TRUE", "x").code).toBe(0);
+  });
+
+  it("verified dual-source check treats a trailing-dot FQDN as the same host", () => {
+    startB();
+    run(["--registerClaim", "c"]);
+    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://example.com./a", "--claimSource", "https://example.com/b"]);
+    expect(res.code).toBe(1);
   });
 });

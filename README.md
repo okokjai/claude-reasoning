@@ -1,4 +1,4 @@
-# claude-reasoning 2.2.4
+# claude-reasoning 2.2.5
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
@@ -87,7 +87,8 @@ bun scripts/think.ts --thought "Synthesize into Conclusion Card" --thoughtNumber
 # Inspect state
 bun scripts/think.ts --status
 
-# Emit a markdown conclusion card (also auto-printed on session termination)
+# Emit a markdown fact sheet (also auto-printed on session termination)
+# Must run alone — combined with any other flag it exits 1
 bun scripts/think.ts --export
 ```
 
@@ -108,7 +109,7 @@ These are checked in code, not just documented:
 | `--nextThoughtNeeded false` in `path-b` with any `pending` hypothesis | Exit code 1, lists the pending hypothesis ids |
 | `--nextThoughtNeeded false` in `path-b` with fewer than 2 prior thoughts | Exit code 1 — Path B requires ≥ 1 decompose + ≥ 1 synthesis round |
 | `--nextThoughtNeeded false` in `path-b` when the previous thought set `--needsMoreThoughts` | Exit code 1 — cannot flag depth expansion then conclude immediately |
-| `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains (IP-safe, multi-segment-suffix-aware) | Exit code 1, error names the shortfall |
+| `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains (IP-safe, multi-segment-suffix-aware, trailing root dot normalised) | Exit code 1, error names the shortfall |
 | `--claimStatus` of any value other than `verified` on a `verified` claim | Exit code 1 — verified claims are final |
 | `--claimStatus` of `single_source` / `unverified` / `not_found` without `--claimNotes` | Exit code 1 — negative resolutions require a recorded caveat |
 | `--hypothesisStatus merged` without `--mergedInto` | Exit code 1 |
@@ -128,6 +129,8 @@ These are checked in code, not just documented:
 | `--reset` combined with any other operation | Exit code 1 |
 | Malformed or unparseable URL in `--claimSource` | Exit code 1 |
 | Missing `--thought`, `--thoughtNumber`, `--totalThoughts`, or `--nextThoughtNeeded` on a thought submission | Exit code 1, specifies the missing flag |
+| `--nextThoughtNeeded` not literally `true`/`false` (e.g. `ture`, `yes`, `1`) | Exit code 1 — any other value would silently terminate the session |
+| `--export` combined with any other flag | Exit code 1 — must run alone |
 | Empty `--thought` string (`""`) | Exit code 1 — `--thought cannot be empty` |
 | `--revisesThought` or `--branchFromThought` not a positive safe integer | Exit code 1 |
 | Referencing a claim or hypothesis id not present in state | Exit code 1, names the missing target |
@@ -140,7 +143,7 @@ These are checked in code, not just documented:
 bun test
 ```
 
-84 tests across 2 files (`tests/think.test.ts` and `tests/issues.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including mode-establishment requirement, byte-exact storage of `$`-containing flag values, and prevention of demoting verified claims to any non-verified status), all guardrails above (including IP-safe, multi-segment public suffix aware distinct-root-domain verification for `verified` and `--claimNotes` enforcement for negative resolutions), clean CLI error handling, the `--status` audit trail and `hypothesisDetails` for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and hypothesis convergence.
+94 tests across 3 files (`tests/think.test.ts`, `tests/issues.test.ts`, and `tests/skill-frontmatter.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including mode-establishment requirement, byte-exact storage of `$`-containing flag values, and prevention of demoting verified claims to any non-verified status), all guardrails above (including IP-safe, multi-segment public suffix aware distinct-root-domain verification for `verified` and `--claimNotes` enforcement for negative resolutions), skill selection-surface invariants (`Use when` trigger inside the ~100-char selector window and SKILL.md/package.json description parity), clean CLI error handling, the `--status` audit trail and `hypothesisDetails` for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and hypothesis convergence. 2.2.5 adds fact-sheet guarantees: an unrelated verified claim never promotes the primary finding to `[Confirmed]`, Path A is not penalised for having no claims, free text is block-quoted against heading forgery, `--export` refuses to run combined with other flags, `--nextThoughtNeeded` rejects non-boolean values, and a trailing-dot FQDN counts as the same source host.
 
 ## Design notes
 

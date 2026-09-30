@@ -4,6 +4,36 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.2.5] - 2026-09-30
+
+### Fixed
+
+- **Skill-selection invisibility: `description` frontmatter reordered.** The harness truncates skill descriptions to ~100 chars when rendering the skills list; the `Use when …` use-condition previously began at char ~425, so the selector saw only a self-description and the skill was never invoked. `Use when` now opens the description (SKILL.md:4 and the identical `package.json` copy). New regression suite `tests/skill-frontmatter.test.ts` asserts the trigger stays inside the window and the two copies remain byte-identical.
+- **`--export` no longer issues a confidence verdict it cannot support.** Claims are not linked to hypotheses, so an unrelated verified fact previously produced `[Confirmed]` + High on a judgment call. The primary finding is now `[Plausible]` (reasoning-derived); claim statistics are labelled "fact-check coverage only".
+- **`--export` Path A / zero-claim handling.** Path A no longer gets `[Unverified]`/Low or a `--registerClaim` suggestion (which Path A forbids); Path B with no claims reports "not rated by script".
+- **`--export` completeness.** Card now carries `--hypothesisNotes` rationale, claim notes (including verified), every selected/synthesized hypothesis, merged hypotheses with targets, a trace line (thoughts/revisions/branches) and the final thought.
+- **`--export` injection.** Free text (final thought) is block-quoted so multi-line thoughts cannot forge card headings.
+- **`--export` single_source consistency** (primary tag no longer contradicts the rationale).
+- **`--export` must run alone**; combining it with `--thought`, `--registerClaim`, `--status`, etc. exits 1 instead of silently dropping them, and `--reset --export` no longer wipes state silently.
+- **`--nextThoughtNeeded` is strict** (`true`/`false`); typos such as `ture`/`yes`/`1` previously terminated the session.
+- **`rootDomain()`** strips the trailing root dot so `example.com.` and `example.com` count as one source.
+
+### Changed
+
+- **`--export` is documented as a fact sheet**; the final answer remains the model-written card.
+
+### Known gaps (not addressed)
+
+`verified` is still self-attested (sources are never fetched); corrupt state file is silently reset; terminated sessions accept further thoughts; `--thought` values starting with `-` need `--thought=...`; single global state file.
+
+### Breaking Changes
+
+None to state or flags. Callers passing non-boolean `--nextThoughtNeeded` values, or combining `--export` with other flags, now get exit 1.
+
+### Files
+
+`scripts/think.ts` (fact-sheet `--export`, `quoteBlock()` injection guard, strict `--nextThoughtNeeded`, `--export` exclusivity, trailing-dot root domain) · `tests/think.test.ts` (+8 cases) · `tests/skill-frontmatter.test.ts` (new, +2 cases) · `SKILL.md` + `package.json` (description reorder, version 2.2.5) · `README.md` (fact-sheet docs, 2 invariant rows, trailing-dot note, 94 tests / 3 files) · `CHANGELOG.md`.
+
 ## [2.2.4] - 2026-09-30
 
 ### Added
