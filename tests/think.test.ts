@@ -1,17 +1,11 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { execFileSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 import { unlinkSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
 const SCRIPT = join(CWD, "scripts", "think.ts");
 const STATE_FILE = join(CWD, "scripts", ".think_state.json");
-
-interface ExecError extends Error {
-  stdout?: Buffer | string;
-  stderr?: Buffer | string;
-  status?: number;
-}
 
 /** Minimal state shape consumed by tests. */
 interface StateShape {
@@ -27,21 +21,18 @@ interface StateShape {
  * inside flag values reach think.ts intact on every platform.
  */
 function run(argv: string[]): { stdout: string; stderr: string; code: number } {
-  try {
-    const stdout = execFileSync("bun", [SCRIPT, ...argv], {
-      cwd: CWD,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", code: 0 };
-  } catch (err: unknown) {
-    const e = err as ExecError;
-    return {
-      stdout: e.stdout ? e.stdout.toString() : "",
-      stderr: e.stderr ? e.stderr.toString() : e.message,
-      code: e.status || 1,
-    };
-  }
+  // spawnSync captures stderr on success too — execFileSync drops it when
+  // the process exits 0, which would hide warnings (e.g. corrupt-state notice).
+  const res = spawnSync("bun", [SCRIPT, ...argv], {
+    cwd: CWD,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  return {
+    stdout: res.stdout ?? "",
+    stderr: res.stderr ?? "",
+    code: res.status ?? 1,
+  };
 }
 
 function readState(): StateShape {
@@ -49,11 +40,64 @@ function readState(): StateShape {
 }
 
 beforeEach(() => {
-  if (existsSync(STATE_FILE)) {
-    try {
-      unlinkSync(STATE_FILE);
-    } catch {}
+  for (const f of [STATE_FILE, STATE_FILE + ".bak"]) {
+    if (existsSync(f)) {
+      try {
+        unlinkSync(f);
+      } catch {}
+    }
   }
+});
+
+describe("think.ts: termination gate (failure point 3)", () => {
+  it("marks session terminated on nextThoughtNeeded=false and rejects further thoughts", () => {
+    // Path A: 3 thoughts, the last with nextThoughtNeeded=false → session ends
+    run(["--mode", "path-a", "--thought", "restate", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "derive", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "cross-validate", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    // A further thought must be rejected — session is over; --reset is required
+    const res = run(["--thought", "afterthought", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/terminat/i);
+  });
+
+  it("rejects side-commands on a terminated Path B session", () => {
+    // Build a terminating Path B session: 2+ thoughts, 2 hypotheses resolved.
+    run(["--mode", "path-b", "--thought", "decompose", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "option A"]);
+    run(["--registerHypothesis", "option B"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--thought", "second round", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    const done = run(["--thought", "synthesize and conclude", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    expect(done.code).toBe(0);
+    // Session terminated — every side-command must now exit 1.
+    const reg = run(["--registerHypothesis", "late hypothesis"]);
+    expect(reg.code).toBe(1);
+    expect(reg.stderr).toMatch(/terminat/i);
+    const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/terminat/i);
+    const cl = run(["--registerClaim", "late claim"]);
+    expect(cl.code).toBe(1);
+    expect(cl.stderr).toMatch(/terminat/i);
+    const ver = run(["--verifyClaim", "claim-1", "--claimStatus", "unverified", "--claimNotes", "x"]);
+    expect(ver.code).toBe(1);
+    expect(ver.stderr).toMatch(/terminat/i);
+  });
+});
+
+describe("think.ts: corrupt state file (failure point 2)", () => {
+  it("warns to stderr and backs up corrupt state to .bak instead of silent reset", () => {
+    // Write garbage directly into the state file
+    const { writeFileSync } = require("fs");
+    writeFileSync(STATE_FILE, "{ this is not json !!!");
+    const res = run(["--status"]);
+    // Must NOT silently swallow: warn on stderr and preserve the corrupt file
+    expect(res.stderr).toMatch(/corrupt|invalid|parse/i);
+    expect(existsSync(STATE_FILE + ".bak")).toBe(true);
+    expect(res.code).toBe(0);
+  });
 });
 
 describe("think.ts: basic thinking loop", () => {

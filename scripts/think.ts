@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 2.2.5 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 2.2.6 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
  * Enhanced with Claim Pre-registration, Dual-Source Verification, and Guardrails.
  */
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { parseArgs } from "util";
@@ -78,6 +78,12 @@ function loadState(): State {
         auditTrail: data.auditTrail || [],
       };
     } catch {
+      // Corrupt state: never silently swallow. Preserve the original for
+      // forensics and start clean — same contract as "no state file".
+      console.error(`Warning: ${STATE_FILE} is corrupt or not valid JSON; backing up to ${STATE_FILE}.bak and starting a fresh session.`);
+      try {
+        renameSync(STATE_FILE, STATE_FILE + ".bak");
+      } catch { /* backup best-effort; proceed anyway */ }
       return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, auditTrail: [] };
     }
   }
@@ -390,6 +396,11 @@ function requireModeEstablished(state: State, requested: string | undefined): Th
   const mode = resolveMode(state, requested);
   if (mode == null) {
     fail("--mode must be established by a first thought before registering claims or hypotheses.");
+  }
+  // A terminated session is immutable — no side-command may mutate it either.
+  const last = state.thoughtHistory[state.thoughtHistory.length - 1];
+  if (last != null && last.nextThoughtNeeded === false) {
+    fail(`Session already terminated at thought ${last.thoughtNumber} (nextThoughtNeeded=false). A terminated session is immutable; start a new one with --reset.`);
   }
   return mode;
 }
@@ -716,6 +727,13 @@ if (nextRaw !== "true" && nextRaw !== "false") {
   fail(`--nextThoughtNeeded must be 'true' or 'false' (got '${values.nextThoughtNeeded}'); any other value would silently terminate the session.`);
 }
 const nextThoughtNeeded = nextRaw === "true";
+
+// Session immutability: a concluded session (last recorded thought had
+// nextThoughtNeeded=false) must not accept further thoughts. Restart with --reset.
+const lastRecorded = state.thoughtHistory[state.thoughtHistory.length - 1];
+if (lastRecorded != null && lastRecorded.nextThoughtNeeded === false) {
+  fail(`Session already terminated at thought ${lastRecorded.thoughtNumber} (nextThoughtNeeded=false). A terminated session is immutable; start a new one with --reset.`);
+}
 
 if (thoughtNumber > totalThoughts) {
   console.error(`Note: totalThoughts adjusted ${totalThoughts}->${thoughtNumber} (--thoughtNumber exceeded the declared estimate).`);

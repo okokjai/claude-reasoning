@@ -4,6 +4,26 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.2.6] - 2026-09-30
+
+### Fixed
+
+- **Terminated sessions are now immutable.** A session whose last recorded thought carried `--nextThoughtNeeded false` accepted further thoughts, silently extending a concluded run. `think.ts` now exits 1 with the thought number and a `--reset` hint (`scripts/think.ts`, termination guard). This covers side-commands too: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, and `--resolveHypothesis` run before the thought-submission gate, so each of the four now hits the same terminated check (shared `requireModeEstablished` entry) and exits 1 instead of mutating a concluded session.
+- **Corrupt state file no longer resets silently.** A non-JSON `scripts/.think_state.json` was caught and replaced with an empty state, destroying the previous session with no trace. The machine now warns on stderr, renames the corrupt file to `scripts/.think_state.json.bak` for forensics (best-effort) and starts a fresh session — the same contract as "no state file".
+
+### Tests
+
+- `tests/think.test.ts`: 3 new regression tests — corrupt state warns and backs up to `.bak`; a thought submitted after termination exits 1; side-commands on a terminated session exit 1. Suite now 97 tests across 3 files.
+
+### Breaking Changes
+
+- A `--thought` or side-command (`--registerClaim` / `--verifyClaim` / `--registerHypothesis` / `--resolveHypothesis`) submitted after `--nextThoughtNeeded false` now exits 1. Sessions that previously continued past a conclusion must `--reset` first. Flag and state schema unchanged.
+- A corrupt `scripts/.think_state.json` now emits a stderr warning and is renamed to `scripts/.think_state.json.bak` instead of being silently replaced; the fresh-session behavior is unchanged.
+
+### Files
+
+`scripts/think.ts` (termination guard incl. side-commands, corrupt-state backup) · `tests/think.test.ts` (+3 cases) · `SKILL.md` (guards, `--thought=` leading-dash convention, single global state + `THINK_STATE_FILE`, `verified` self-attested) · `package.json` + `SKILL.md` (version 2.2.6) · `README.md` (invariant rows, 97 tests / 3 files) · `CHANGELOG.md`.
+
 ## [2.2.5] - 2026-09-30
 
 ### Fixed

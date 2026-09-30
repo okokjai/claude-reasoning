@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.2.5
+version: 2.2.6
 description: "Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or an open-ended question needing verified external facts — before answering, not after. Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 2.2.5
+# claude-reasoning 2.2.6
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -85,6 +85,8 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
    **Quoting:** any `--thought`, `--registerClaim`, `--claimNotes`, or `--hypothesisNotes` value containing `$`, a backtick, or `\` must use **single quotes** (`'...'`). Inside double quotes, bash silently expands `$<digit>` as a positional parameter — `$53K` arrives as `3K` with no warning and no error. Values without those characters may keep double quotes, as in the examples below.
 
+   **Leading dash:** a value that starts with `-` must be bound with `=`. `--thought "--reset wipes state"` is rejected with `Option '--thought' argument is ambiguous` (exit 1); `--thought="--reset wipes state"` is accepted. The same applies to every string flag.
+
 2. **Probe the session's real capabilities.**
    Use only search/fetch tools that are actually present in the current environment — whatever the session's native web search, URL fetch, browser, or installed MCP fetch tool happens to be (names differ per runtime; probe, don't assume). If none is available:
    ```bash
@@ -107,6 +109,8 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
      bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
        --claimSource "https://example.com/blog/..." --claimNotes "Only one third-party blog; no official confirmation"
      ```
+
+   **`verified` is self-attested.** `think.ts` never fetches a source. It enforces source *count* and root-domain independence and nothing else — whether a URL actually supports the claim it is attached to is the model's assertion, unverifiable from state.
 
 4. **Negative Search Query (Active Falsification).**
    Before confirming a major factual proposition, perform at least one search query targeting counter-evidence or known failure modes (e.g. `"<subject> limitations known bugs issue"`). Record any discovered caveats.
@@ -176,7 +180,7 @@ Status line returned after each thought:
 | Flag | Type | Notes |
 |---|---|---|
 | `--mode` | enum | `path-a` \| `path-b` — **required on the first thought**; immutable for the session |
-| `--thought` | string | Thought content |
+| `--thought` | string | Thought content; a value starting with `-` needs `--thought=<value>` |
 | `--thoughtNumber` | int ≥ 1 | Current index |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
 | `--nextThoughtNeeded` | `true`\|`false` | `false` terminates — blocked while claims are pending; any other value (e.g. `ture`, `yes`) exits 1 |
@@ -217,3 +221,10 @@ Status line returned after each thought:
 ## State file
 
 `scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
+
+Two guards protect the file itself:
+
+- **Terminated sessions are immutable.** Once a thought is recorded with `--nextThoughtNeeded false`, any further thought submission or side-command (`--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`) exits 1 — restart with `--reset`. The machine cannot be driven past its own conclusion.
+- **Corrupt state is never silently swallowed.** If the file is not valid JSON, the machine warns on stderr, renames it to `scripts/.think_state.json.bak` (forensics, best-effort) and starts a fresh session — the same contract as "no state file".
+
+One path, shared by everything: the state file lives at one fixed location next to the script — it is not per-task or per-session. Concurrent reasoning tasks (or two sessions working in the same checkout) interleave into the same file, so `--reset` before each new task. `THINK_STATE_FILE` overrides the path when a session needs isolation.
