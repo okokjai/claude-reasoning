@@ -1,4 +1,4 @@
-# claude-reasoning 2.2.3
+# claude-reasoning 2.2.4
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 

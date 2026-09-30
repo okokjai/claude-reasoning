@@ -4,6 +4,8 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-09-30
+
 ### Added
 
 - **`scripts/think.ts` — `--export` conclusion card** — a new side-command prints a markdown conclusion card derived purely from persisted state (no invented content): primary finding = the `selected`/`synthesized` hypothesis statement (else last thought), per-claim calibrated findings (`[Confirmed]`=verified, `[Probable]`=single_source, `[Unverified]`=pending/unverified/not_found), a High/Medium/Low confidence level driven by verified-claim ratio, the decision matrix (selected/rejected/pending hypotheses), deduplicated evidence source URLs, residual uncertainty (unverified claims + pending hypotheses + notes), and actionable next steps. The same card is auto-printed after the status line whenever a submitted thought sets `--nextThoughtNeeded false`, closing the "reasoning lives in `.think_state.json` but nothing exports it" gap. Implements `references/conclusion-card.md`.
