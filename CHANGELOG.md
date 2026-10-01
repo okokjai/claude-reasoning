@@ -2,7 +2,15 @@
 
 All notable changes to this skill are documented here.
 
-## [Unreleased]
+## [3.0.1] - 2026-10-01
+
+### Fixed
+
+- **Gate 9 convergence declaration**: require non-empty `--newInsightNotes` when `--newInsight false` is declared in absence of branch/revision exploration history.
+- **Merged hypothesis notes**: `--hypothesisNotes` is now strictly required on all terminal statuses including `merged` (while keeping `falsificationResult` exempt).
+- **Lint report (§7)**: emit `[WARN]` when verified claims have a single-line `negativeFinding` lacking recorded command/output execution evidence.
+- **Audit trail (§3.4)**: `recordAudit` now records `atThought`, correctly isolating state change counting to the final thought round.
+- **Documentation truthfulness**: corrected `SKILL.md` and `CHANGELOG.md` to specify `falsificationResult` as free-text evidence rather than a restrictive `held|broken` enum.
 
 ## [3.0.0] - 2026-10-01
 

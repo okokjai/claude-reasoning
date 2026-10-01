@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.0.0 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.0.1 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
