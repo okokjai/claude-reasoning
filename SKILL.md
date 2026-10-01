@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 2.2.6
+version: 3.0.0
 description: "Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or an open-ended question needing verified external facts — before answering, not after. Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 2.2.6
+# claude-reasoning 3.0.0
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -47,8 +47,8 @@ Rationale, measured: closed-form logic questions that were run through a fixed 1
 **No fixed round count. Converge when a round yields no new insight.**
 
 1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
-2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis` and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`); Path B termination is rejected while fewer than 2 hypotheses are registered, any remains `pending`, or merges leave fewer than 2 distinct surviving hypotheses. Use `merged` (with `--mergedInto <id>`) when a hypothesis turns out to be the same underlying mechanism as another, viewed from a different angle — this is a decomposition correction, not a competing explanation, and should be recorded as such rather than forced into `synthesized`. `--mergedInto` rejects self-references, nonexistent ids, and already-merged targets (no merge chains); a hypothesis that already absorbs another merge likewise cannot be merged onward. Passing it with any status other than `merged` is rejected.
-3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; never enable all by reflex:
+2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis "<statement>" --falsification "<condition>"` (both flags required) and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`). Path B termination is rejected while fewer than 2 hypotheses are registered, any remains `pending`, or merges leave fewer than 2 distinct surviving hypotheses. Terminal resolutions (`selected`/`rejected`/`synthesized`) **require `--hypothesisNotes <why>` and `--falsificationResult held|broken`**. Use `merged` (with `--mergedInto <id>`) when a hypothesis turns out to be the same underlying mechanism as another, viewed from a different angle — this is a decomposition correction, not a competing explanation, and should be recorded as such rather than forced into `synthesized`. `--mergedInto` rejects self-references, nonexistent ids, already-merged targets, already-rejected targets, or merge chains.
+3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; record via `--recordLens --lens "<name>" --finding "<residual uncertainty>"`. Path B termination blocks with fewer than 2 distinct lens names recorded (Gate 8):
    - **First principles & constraint reduction** — reduce to irreducible constraints.
    - **Pre-mortem & active red team** — assume catastrophic failure 12 months out; identify what killed it.
    - **Sensitivity analysis (±20% perturbation)** — perturb key numerical or capacity assumptions; check if rankings flip.
@@ -56,13 +56,14 @@ Rationale, measured: closed-form logic questions that were run through a fixed 1
    - **Pareto frontier & trade-off explicitization** — make sacrifice explicit; identify non-dominated options.
    - **Differential elimination** — systematically rule out hypotheses contradicted by verified facts.
    - **External verification** — **condition-gated, see below.**
-4. **Anti-Hallucination Semantic Gates** — Before concluding, audit findings against the 5 P0 gates in `references/hallucination-gates.md`:
+4. **Acceptance criteria** — Add target requirements via `--addCriterion "<text>"`. Check them as met or unmet via `--checkCriterion crit-N --met true|false [--criterionNotes "..."]`. Gate 6 blocks termination with no criterion registered or any unchecked criterion; Gate 7 blocks termination with an unmet criterion unless followed by a revision thought or explicit `--newInsightNotes` justification.
+5. **Anti-Hallucination Semantic Gates** — Before concluding, audit findings against the 5 P0 gates in `references/hallucination-gates.md`:
    - Entity & metric grounding (no unsourced prices or numbers).
    - Dual-source independence (no syndicated echo-chambers).
    - Temporal currency (verify version and recency).
-   - **Negative search & disconfirmation** (actively query for counter-evidence, e.g. limitations or issues).
+   - **Negative search & disconfirmation** (actively query for counter-evidence via `--negativeQuery` and `--negativeFinding`).
    - Honest tool absence reporting.
-5. **Standardized Conclusion Card** — Output final delivery using the calibrated structure from `references/conclusion-card.md` with explicit tags (`[Confirmed]`, `[Probable]`, `[Plausible]`, `[Contested]`, `[Unverified]`), qualitative confidence, and residual uncertainty. Never emit numeric scores.
+6. **Standardized Conclusion Card** — Output final delivery using the calibrated structure from `references/conclusion-card.md` with explicit tags (`[Confirmed]`, `[Probable]`, `[Plausible]`, `[Contested]`, `[Unverified]`), qualitative confidence, and residual uncertainty. Never emit numeric scores. Session termination auto-emits the `buildLintReport` card summary.
 
 ---
 
@@ -79,9 +80,9 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 1. **Pre-register before searching.**
    ```bash
-   bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"
+   bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-1
    ```
-   Registration happens *before* any search call. Formulating a claim after seeing results is post-hoc rationalization and is prohibited by this contract.
+   `--supports <hyp-id>` links the claim to the hypothesis it bears on; registering without it (or naming a nonexistent hypothesis) exits 1. Registration happens *before* any search call. Formulating a claim after seeing results is post-hoc rationalization and is prohibited by this contract.
 
    **Quoting:** any `--thought`, `--registerClaim`, `--claimNotes`, or `--hypothesisNotes` value containing `$`, a backtick, or `\` must use **single quotes** (`'...'`). Inside double quotes, bash silently expands `$<digit>` as a positional parameter — `$53K` arrives as `3K` with no warning and no error. Values without those characters may keep double quotes, as in the examples below.
 
@@ -98,11 +99,14 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 3. **Dual independent sources & Source Tiers.**
    - Consult `references/source-tiers.md` to classify sources into Tier 1 (primary/official), Tier 2 (reputable media/papers), Tier 3 (community blogs), or Tier 4 (disallowed AI summaries/farms).
-   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated). The state machine rejects `verified` with fewer than 2 `--claimSource` values or with sources sharing the same root domain.
+   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated), plus the evidence trio: a verbatim `--claimQuote`, the `--negativeQuery` you ran against the claim, and its `--negativeFinding`. The state machine rejects `verified` with fewer than 2 `--claimSource` values, with sources sharing the same root domain, or with any trio field missing.
      ```bash
      bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
        --claimSource "https://docs.aws.amazon.com/bedrock/..." \
-       --claimSource "https://docs.anthropic.com/en/docs/..."
+       --claimSource "https://docs.anthropic.com/en/docs/..." \
+       --claimQuote "Prompt caching is available on Amazon Bedrock" \
+       --negativeQuery "bedrock prompt caching unsupported" \
+       --negativeFinding "None found; docs confirm support."
      ```
    - `single_source` — exactly one reliable source. Must be carried into the final answer with its uncertainty intact. `--claimNotes` is **required** for `single_source`, `unverified`, and `not_found` — the state machine rejects negative resolutions without a recorded caveat.
      ```bash
@@ -123,6 +127,18 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 6. **Termination is gated.**
    `--nextThoughtNeeded false` fails while any claim is still `pending`. Every pre-registered claim must reach an explicit resolution before the session can close. In Path B, termination additionally requires **≥ 2 prior thoughts** (at least one decompose and one synthesis round) and is rejected if the immediately preceding thought set `--needsMoreThoughts` — you cannot flag depth expansion and then conclude without another round.
+
+   ### Termination gates 6–10 (Path B)
+
+   | # | Gate name | Blocks termination while… |
+   |---|---|---|
+   | 6 | `criteria` | no `--addCriterion` entry exists, or any criterion is unchecked |
+   | 7 | `criteriaRevision` | a criterion is `met=false` with no later `--isRevision` thought and the terminating thought carries no `--newInsightNotes` |
+   | 8 | `lenses` | fewer than 2 distinct `--lens` names recorded via `--recordLens` |
+   | 9 | `convergence` | the terminating thought does not declare `--newInsight false` and history has no revision/branch |
+   | 10 | `falsificationResult` | any resolved (non-`merged`) hypothesis lacks a non-empty `--falsificationResult` |
+
+   These five gates are switchable for evaluation ablation: `THINK_GATES_OFF` accepts a comma-separated list of gate names or `all`. A disabled gate's would-be violation is recorded and surfaced as a `[WARN]` line in the lint report instead of failing. The earlier gates (pending claims/hypotheses, minimum thought count, `--needsMoreThoughts`) are always on and cannot be disabled.
 
 ---
 
@@ -153,17 +169,31 @@ bun scripts/think.ts --thought "scope is larger than estimated" \
   --thoughtNumber 6 --totalThoughts 8 --nextThoughtNeeded true --needsMoreThoughts
 
 # Hypothesis lifecycle (Path B)
-bun scripts/think.ts --registerHypothesis "<competing option or hypothesis>"
-bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected --hypothesisNotes "wins on latency and ops cost"
+bun scripts/think.ts --registerHypothesis "<competing option or hypothesis>" --falsification "<condition that would falsify it>"
+bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected \
+  --hypothesisNotes "wins on latency and ops cost" --falsificationResult broken
 
-# Claim lifecycle
-bun scripts/think.ts --registerClaim "<pre-registered factual statement>"
+# Acceptance criteria and lenses (termination gates 6-8)
+bun scripts/think.ts --addCriterion "<target requirement>"
+bun scripts/think.ts --checkCriterion crit-1 --met true --criterionNotes "backed by two sources"
+bun scripts/think.ts --recordLens --lens "<lens name>" --finding "<residual uncertainty>"
+
+# Claim lifecycle — --supports links each claim to a hypothesis
+bun scripts/think.ts --registerClaim "<pre-registered factual statement>" --supports hyp-1
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
-  --claimSource "https://a.example" --claimSource "https://b.example"
+  --claimSource "https://a.example" --claimSource "https://b.example" \
+  --claimQuote "<verbatim quote>" --negativeQuery "<counter-evidence query>" \
+  --negativeFinding "<caveats found, or 'none'>"
 bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
   --claimSource "https://c.example" --claimNotes "only one source"
 bun scripts/think.ts --verifyClaim claim-3 --claimStatus not_found --claimNotes "no public record"
 bun scripts/think.ts --verifyClaim claim-4 --claimStatus unverified --claimNotes "no search tool in session"
+
+# Converge and terminate (gate 9: declare --newInsight false, optional notes)
+bun scripts/think.ts --thought "<synthesis>" --thoughtNumber 5 --totalThoughts 5 \
+  --nextThoughtNeeded false --newInsight false --newInsightNotes "<why exploration is complete>"
+# Ablation: disable gates 6-10 for evaluation runs
+# THINK_GATES_OFF=criteria,lenses  or  THINK_GATES_OFF=all
 
 # Inspect full state (thoughts, branches, claims)
 bun scripts/think.ts --status
@@ -183,22 +213,37 @@ Status line returned after each thought:
 | `--thought` | string | Thought content; a value starting with `-` needs `--thought=<value>` |
 | `--thoughtNumber` | int ≥ 1 | Current index |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
-| `--nextThoughtNeeded` | `true`\|`false` | `false` terminates — blocked while claims are pending; any other value (e.g. `ture`, `yes`) exits 1 |
+| `--nextThoughtNeeded` | `true`\|`false` | `false` terminates — blocked while claims are pending or termination gates fail; any other value (e.g. `ture`, `yes`) exits 1 |
 | `--isRevision` / `--revisesThought N` | flag / int | Both required together; `N` must exist in history |
 | `--branchFromThought N` / `--branchId label` | int / string | Both required together; `N` must exist in history |
 | `--needsMoreThoughts` | flag | Signals depth expansion |
-| `--registerHypothesis` | string | Registers a competing hypothesis; assigns `hyp-N`, status `pending` |
+| `--newInsight` | `true`\|`false` | Path B convergence gate 9: declaring `false` signals convergence; can include `--newInsightNotes` |
+| `--newInsightNotes` | string | Rationale for convergence or absence of new insight |
+| `--registerHypothesis` | string | Registers a competing hypothesis; assigns `hyp-N`, status `pending`; **requires `--falsification`** |
+| `--falsification` | string | Concrete condition that would falsify the hypothesis (required on registration) |
 | `--resolveHypothesis` | string | Target hypothesis id |
 | `--hypothesisStatus` | enum | `selected` \| `rejected` \| `synthesized` \| `merged` |
-| `--hypothesisNotes` | string | Optional rationale recorded on the hypothesis |
+| `--hypothesisNotes` | string | Rationale recorded on the hypothesis; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`) |
+| `--falsificationResult` | string | Outcome of falsification test (`held`/`broken`); **required** for terminal resolutions (`selected`/`rejected`/`synthesized`) |
 | `--mergedInto` | string | **Required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, already-rejected targets, or a resolving hypothesis that already absorbs another merge |
-| `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending` |
+| `--addCriterion` | string | Registers an acceptance criterion for the session (assigns `crit-N`) |
+| `--checkCriterion` | string | Criterion id to mark |
+| `--met` | `true`\|`false` | Mark criterion as met or unmet; requires `--checkCriterion` |
+| `--criterionNotes` | string | Context/notes for the criterion check |
+| `--recordLens` | flag | Records a critical evaluation lens; requires `--lens` and `--finding` |
+| `--lens` | string | Lens name (e.g. `pre-mortem`, `devil's advocate`) |
+| `--finding` | string | Key finding/residual uncertainty from applying the lens |
+| `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending`; **requires `--supports <hyp-id>`** in Path B |
+| `--supports` | string | Target hypothesis id this claim provides evidence for (required on registration in Path B) |
 | `--verifyClaim` | string | Target claim id |
 | `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found` — `verified` claims are final; re-verification to any other status is rejected |
 | `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; a trailing root dot is normalised (`example.com.` = `example.com`); each value must parse as a URL (missing scheme is tolerated) or the call is rejected; preserved when supplied on `pending` transitions |
+| `--claimQuote` | string | Verbatim quote from source (required for `verified`) |
+| `--negativeQuery` | string | Search query targeting counter-evidence (required for `verified`) |
+| `--negativeFinding` | string | Caveats/contradictions found or statement of none (required for `verified`) |
 | `--claimNotes` | string | **Required** for `single_source` / `unverified` / `not_found`; optional for `verified` |
 | `--status` | flag | Full JSON state |
-| `--export` | flag | Prints a **fact sheet** derived from persisted state (selected/rejected/merged hypotheses with rationale, claim outcomes, trace shape, final thought, evidence sources). Must run alone. It does **not** rate the reasoning: claim statistics are labelled "fact-check coverage only". Also auto-emitted after the status line on termination. The final answer is still the model-written card per `references/conclusion-card.md`; the script card is input to it, never a substitute |
+| `--export` | flag | Prints a **lint report / fact sheet** (`buildLintReport`) derived from persisted state (CRIT/WARN/INFO sections, residuals, trace shape, evidence). Must run alone. Also auto-emitted after status line on termination |
 | `--reset` | flag | Clears state for a new session; **must run alone** — combined with any other flag it exits 1 |
 
 ---

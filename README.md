@@ -1,4 +1,4 @@
-# claude-reasoning 2.2.6
+# claude-reasoning 3.0.0
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
@@ -6,8 +6,9 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
 - **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected; depth beyond 5 is rejected. Claims and hypotheses are forbidden in Path A.
-- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis`, resolved via `--resolveHypothesis`) → 2–4 critical lenses chosen for the task → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, or the previous thought flagged `--needsMoreThoughts`.
-- **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search, ≥2 independent sources for `verified`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
+- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes` and `--falsificationResult`) → 2–4 critical lenses chosen for the task, recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, or any of gates 6–10 fails (unchecked acceptance criteria, unmet criterion without a revision, fewer than 2 lens names, no convergence declaration, resolved hypothesis without a falsification result). Gates 6–10 are switchable via `THINK_GATES_OFF` for ablation studies; disabled-gate violations surface as `[WARN]` lines in the lint report instead of failing.
+- **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search (with a required `--supports <hyp-id>` link), ≥2 independent sources for `verified` plus a recorded `--claimQuote`, `--negativeQuery`, and `--negativeFinding`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
+- **Lint-report card.** `--export` (and session termination) prints a `buildLintReport` fact sheet: CRIT residuals that an active gate should have blocked, WARN entries (missing rationale, disabled gates, thin lens coverage), INFO escape surfaces, acceptance-criterion status, lens findings, and the block-quoted final thought — headed by the standing warning that this is the script's view of state, not the final answer.
 - **Zero MCP.** A single TypeScript state machine (`scripts/think.ts`) persisting to `scripts/.think_state.json`.
 - **Integrated High-Value References (ported & cleaned from 1.2.0):**
   - `references/source-tiers.md`: 4-tier credibility hierarchy (Tier 1 Primary to Tier 4 AI Summaries) with 2-source corroboration rule.
@@ -58,22 +59,34 @@ bun scripts/think.ts --thought "Independent cross-validation"   --thoughtNumber 
 # Path B: declare --mode path-b on the first thought
 bun scripts/think.ts --mode path-b --thought "Deconstruct open-ended problem" --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true
 
-# Register ≥2 competing hypotheses (required before Path B termination)
-bun scripts/think.ts --registerHypothesis "Direct API is superior for developer agility"
-bun scripts/think.ts --registerHypothesis "Managed service is superior for enterprise governance"
+# Register ≥2 competing hypotheses with a falsification clause (required before Path B termination)
+bun scripts/think.ts --registerHypothesis "Direct API is superior for developer agility" \
+  --falsification "Managed-service egress costs stay under $100/mo at our volume"
+bun scripts/think.ts --registerHypothesis "Managed service is superior for enterprise governance" \
+  --falsification "Direct API passes the SOC 2 evidence audit without added controls"
 
-# Pre-register a claim BEFORE searching
-bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"
+# Acceptance criteria and lenses (Path B termination gates 6 and 8)
+bun scripts/think.ts --addCriterion "Cost delta backed by two independent sources"
+bun scripts/think.ts --checkCriterion crit-1 --met true
+bun scripts/think.ts --recordLens --lens "first-principles" --finding "egress is 40% of the delta"
+
+# Pre-register a claim BEFORE searching — --supports links it to a hypothesis
+bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-1
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimSource "https://aws.amazon.com/bedrock/pricing/" \
-  --claimSource "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+  --claimSource "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" \
+  --claimQuote "Prompt caching is supported on Amazon Bedrock" \
+  --negativeQuery "bedrock prompt caching unsupported regions" \
+  --negativeFinding "None found; docs confirm support in all commercial regions."
 
-# Resolve hypotheses before concluding
-bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected
-bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected
+# Resolve hypotheses before concluding — terminal statuses need notes + falsificationResult
+bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected \
+  --hypothesisNotes "latency + feature parity" --falsificationResult broken
+bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected \
+  --hypothesisNotes "governance edge does not offset lock-in" --falsificationResult held
 
 # If two hypotheses turn out to be the same mechanism viewed differently,
-# merge rather than forcing one to "win" — requires --mergedInto
+# merge rather than forcing one to "win" — requires --mergedInto + --hypothesisNotes
 bun scripts/think.ts --resolveHypothesis hyp-3 --hypothesisStatus merged --mergedInto hyp-1 \
   --hypothesisNotes "same mechanism as hyp-1, different framing"
 
@@ -81,8 +94,10 @@ bun scripts/think.ts --resolveHypothesis hyp-3 --hypothesisStatus merged --merge
 # --needsMoreThoughts flag on the last thought blocks termination too)
 bun scripts/think.ts --thought "Critique + verify against lenses" --thoughtNumber 2 --totalThoughts 5 --nextThoughtNeeded true
 
-# Conclude
-bun scripts/think.ts --thought "Synthesize into Conclusion Card" --thoughtNumber 5 --totalThoughts 5 --nextThoughtNeeded false
+# Conclude — declare convergence; gates 6-10 are checked here
+# (THINK_GATES_OFF=criteria,lenses disables individual gates for ablation)
+bun scripts/think.ts --thought "Synthesize into Conclusion Card" --thoughtNumber 5 --totalThoughts 5 \
+  --nextThoughtNeeded false --newInsight false --newInsightNotes "first synthesis round surfaced no new insight"
 
 # Inspect state
 bun scripts/think.ts --status
@@ -119,6 +134,15 @@ These are checked in code, not just documented:
 | `--mergedInto` passed with `--hypothesisStatus` other than `merged` | Exit code 1 |
 | `--nextThoughtNeeded false` in `path-b` when merges leave fewer than 2 distinct hypotheses | Exit code 1 — Path B requires ≥ 2 distinct hypotheses after merges |
 | `--nextThoughtNeeded false` with any `pending` claim | Exit code 1, lists the pending claim ids |
+| `--registerHypothesis` without a non-empty `--falsification` | Exit code 1 — a hypothesis without a falsification clause cannot be tested |
+| `--resolveHypothesis` to `selected` / `rejected` / `synthesized` without `--hypothesisNotes` or without `--falsificationResult` | Exit code 1 — terminal resolutions carry the falsification audit trail (`merged` is exempt: the surviving hypothesis keeps its own) |
+| `--registerClaim` without `--supports <hyp-id>`, or with a nonexistent target | Exit code 1 |
+| `--claimStatus verified` without `--claimQuote`, `--negativeQuery`, or `--negativeFinding` | Exit code 1 — verified claims record verbatim evidence and the counter-evidence search |
+| `--checkCriterion` with an unknown id, or without `--met true`/`--met false` | Exit code 1 |
+| `--recordLens` without `--lens` or without `--finding` | Exit code 1 |
+| `--newInsight` set to anything other than `false` | Exit code 1 — `true` would duplicate `--nextThoughtNeeded` and silently skip the convergence gate |
+| `--nextThoughtNeeded false` in `path-b` failing termination gate 6 (≥ 1 acceptance criterion, all checked), 7 (unmet criterion without later revision or `--newInsightNotes`), 8 (< 2 distinct lens names), 9 (no `--newInsight false` and no revision/branch in history), or 10 (resolved non-merged hypothesis without `falsificationResult`) | Exit code 1 — gates 6–10 are switchable via `THINK_GATES_OFF` (names or `all`); a disabled gate's violation surfaces as `[WARN]` in the lint report instead |
+| Side-commands (`--addCriterion` / `--checkCriterion` / `--recordLens` included) submitted after the session terminated | Exit code 1 — terminated sessions are immutable; `--reset` starts a new one |
 | `--isRevision` without `--revisesThought` | Exit code 1 |
 | `--isRevision` together with `--branchFromThought` | Exit code 1 — mutually exclusive |
 | `--revisesThought` referencing a nonexistent thought | Exit code 1 |
@@ -130,7 +154,7 @@ These are checked in code, not just documented:
 | Malformed or unparseable URL in `--claimSource` | Exit code 1 |
 | Missing `--thought`, `--thoughtNumber`, `--totalThoughts`, or `--nextThoughtNeeded` on a thought submission | Exit code 1, specifies the missing flag |
 | `--nextThoughtNeeded` not literally `true`/`false` (e.g. `ture`, `yes`, `1`) | Exit code 1 — any other value would silently terminate the session |
-| A thought or side-command (`--registerClaim` / `--verifyClaim` / `--registerHypothesis` / `--resolveHypothesis`) submitted after the session terminated (last recorded thought had `--nextThoughtNeeded false`) | Exit code 1 — terminated sessions are immutable; `--reset` starts a new one |
+| A thought or side-command (`--registerClaim` / `--verifyClaim` / `--registerHypothesis` / `--resolveHypothesis` / `--addCriterion` / `--checkCriterion` / `--recordLens`) submitted after the session terminated (last recorded thought had `--nextThoughtNeeded false`) | Exit code 1 — terminated sessions are immutable; `--reset` starts a new one |
 | `scripts/.think_state.json` corrupt or not valid JSON | Not fatal: warns on stderr, renames the file to `.think_state.json.bak`, starts a fresh session |
 | `--export` combined with any other flag | Exit code 1 — must run alone |
 | Empty `--thought` string (`""`) | Exit code 1 — `--thought cannot be empty` |
@@ -145,7 +169,7 @@ These are checked in code, not just documented:
 bun test
 ```
 
-97 tests across 3 files (`tests/think.test.ts`, `tests/issues.test.ts`, and `tests/skill-frontmatter.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, claim lifecycle and pre-registration (including mode-establishment requirement, byte-exact storage of `$`-containing flag values, and prevention of demoting verified claims to any non-verified status), all guardrails above (including IP-safe, multi-segment public suffix aware distinct-root-domain verification for `verified` and `--claimNotes` enforcement for negative resolutions), skill selection-surface invariants (`Use when` trigger inside the ~100-char selector window and SKILL.md/package.json description parity), clean CLI error handling, the `--status` audit trail and `hypothesisDetails` for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and hypothesis convergence. 2.2.5 adds fact-sheet guarantees: an unrelated verified claim never promotes the primary finding to `[Confirmed]`, Path A is not penalised for having no claims, free text is block-quoted against heading forgery, `--export` refuses to run combined with other flags, `--nextThoughtNeeded` rejects non-boolean values, and a trailing-dot FQDN counts as the same source host. 2.2.6 closes the last two state-machine holes: a corrupt `scripts/.think_state.json` is no longer silently reset (it is preserved as `.bak` with a stderr warning), and a terminated session (last thought `--nextThoughtNeeded false`) now rejects any further thought or side-command instead of silently accepting it.
+129 tests across 3 files (`tests/think.test.ts`, `tests/issues.test.ts`, and `tests/skill-frontmatter.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, falsification-driven hypothesis registration/resolution (including merge semantics and disabled-gate warnings), acceptance-criterion checks, lens records, quote/negative-finding claim verification, claim lifecycle and pre-registration (including mode-establishment requirement, byte-exact storage of `$`-containing flag values, and prevention of demoting verified claims to any non-verified status), all guardrails above (including IP-safe, multi-segment public suffix aware distinct-root-domain verification for `verified` and `--claimNotes` enforcement for negative resolutions), skill selection-surface invariants (`Use when` trigger inside the ~100-char selector window and SKILL.md/package.json description parity), clean CLI error handling, the `--status` audit trail and `hypothesisDetails` for side-commands, and two end-to-end scenarios: a closed-form kinship logic trap (3 thoughts, 0 claims) and an open-ended architecture decision with pre-registration, mixed verification outcomes, and hypothesis convergence. 2.2.5 adds fact-sheet guarantees: an unrelated verified claim never promotes the primary finding to `[Confirmed]`, Path A is not penalised for having no claims, free text is block-quoted against heading forgery, `--export` refuses to run combined with other flags, `--nextThoughtNeeded` rejects non-boolean values, and a trailing-dot FQDN counts as the same source host. 2.2.6 closes the last two state-machine holes: a corrupt `scripts/.think_state.json` is no longer silently reset (it is preserved as `.bak` with a stderr warning), and a terminated session (last thought `--nextThoughtNeeded false`) now rejects any further thought or side-command instead of silently accepting it.
 
 ## Design notes
 

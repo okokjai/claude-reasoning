@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { spawnSync } from "child_process";
-import { unlinkSync, existsSync } from "fs";
+import { unlinkSync, existsSync, writeFileSync, readFileSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
 const SCRIPT = join(CWD, "scripts", "think.ts");
 const STATE_FILE = join(CWD, "scripts", ".think_state.json");
 
-function run(argv: string[]): { stdout: string; stderr: string; code: number } {
-  const res = spawnSync("bun", [SCRIPT, ...argv], { cwd: CWD, encoding: "utf-8" });
+function run(argv: string[], env?: Record<string, string>): { stdout: string; stderr: string; code: number } {
+  const res = spawnSync("bun", [SCRIPT, ...argv], {
+    cwd: CWD,
+    encoding: "utf-8",
+    env: { ...process.env, ...env },
+  });
   return {
     stdout: res.stdout ?? "",
     stderr: res.stderr ?? "",
@@ -17,10 +21,12 @@ function run(argv: string[]): { stdout: string; stderr: string; code: number } {
 }
 
 beforeEach(() => {
-  if (existsSync(STATE_FILE)) {
-    try {
-      unlinkSync(STATE_FILE);
-    } catch {}
+  for (const f of [STATE_FILE, STATE_FILE + ".bak"]) {
+    if (existsSync(f)) {
+      try {
+        unlinkSync(f);
+      } catch {}
+    }
   }
 });
 
@@ -88,12 +94,14 @@ describe("Issue 4: side-commands require mode to be established", () => {
 describe("Issue 5: cannot demote a verified claim to any non-verified status", () => {
   function setupVerifiedClaim() {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "verified fact"]);
+    run(["--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "verified fact", "--supports", "hyp-1"]);
     const ok = run([
       "--verifyClaim", "claim-1",
       "--claimStatus", "verified",
       "--claimSource", "https://aws.amazon.com/page",
       "--claimSource", "https://anthropic.com/page",
+      "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf",
     ]);
     expect(ok.code).toBe(0);
   }
@@ -137,7 +145,7 @@ describe("Issue 5: cannot demote a verified claim to any non-verified status", (
 describe("Issue 6: --status exposes hypothesisDetails", () => {
   it("includes statement and metadata for registered hypotheses in --status", () => {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "Detailed hypothesis statement"]);
+    run(["--registerHypothesis", "Detailed hypothesis statement", "--falsification", "f"]);
     const statusRes = run(["--status"]);
     expect(statusRes.code).toBe(0);
     const parsed = JSON.parse(statusRes.stdout);
@@ -150,24 +158,28 @@ describe("Issue 6: --status exposes hypothesisDetails", () => {
 describe("Issue 7: robust root domain determination", () => {
   it("recognizes distinct root domains across common multi-segment public suffixes (bbc.co.uk vs itv.co.uk)", () => {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "UK news claim"]);
+    run(["--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "UK news claim", "--supports", "hyp-1"]);
     const res = run([
       "--verifyClaim", "claim-1",
       "--claimStatus", "verified",
       "--claimSource", "https://www.bbc.co.uk/news/123",
       "--claimSource", "https://www.itv.co.uk/news/456",
+      "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf",
     ]);
     expect(res.code).toBe(0);
   });
 
   it("recognizes distinct IP addresses as distinct root domains", () => {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "Internal network claim"]);
+    run(["--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Internal network claim", "--supports", "hyp-1"]);
     const res = run([
       "--verifyClaim", "claim-1",
       "--claimStatus", "verified",
       "--claimSource", "https://192.168.1.1/metrics",
       "--claimSource", "https://10.0.1.1/metrics",
+      "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf",
     ]);
     expect(res.code).toBe(0);
   });
@@ -279,7 +291,8 @@ describe("Issue 14: --isRevision and --branchFromThought are mutually exclusive"
 describe("Audit 1: unparseable claim sources cannot bypass the dual-domain check", () => {
   function setupClaim() {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "test claim"]);
+    run(["--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "test claim", "--supports", "hyp-1"]);
   }
 
   it("rejects sources that are not parseable URLs", () => {
@@ -298,14 +311,14 @@ describe("Audit 1: unparseable claim sources cannot bypass the dual-domain check
 
   it("still accepts distinct scheme-less domains", () => {
     setupClaim();
-    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "example.com/x", "--claimSource", "other.org/y"]);
+    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "example.com/x", "--claimSource", "other.org/y", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(res.code).toBe(0);
   });
 });
 
 describe("Audit 2: the first thought must carry --mode", () => {
   it("rejects a first thought without --mode even if mode was set via a side-command", () => {
-    const reg = run(["--mode", "path-b", "--registerHypothesis", "H1"]);
+    const reg = run(["--mode", "path-b", "--registerHypothesis", "H1", "--falsification", "f"]);
     expect(reg.code).toBe(0);
     const res = run(["--thought", "first", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
     expect(res.code).toBe(1);
@@ -316,18 +329,19 @@ describe("Audit 2: the first thought must carry --mode", () => {
 describe("Audit 3: multi-segment suffix coverage", () => {
   function setupClaim() {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "test claim"]);
+    run(["--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "test claim", "--supports", "hyp-1"]);
   }
 
   it("recognizes distinct registrable domains under co.nz", () => {
     setupClaim();
-    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.co.nz/x", "--claimSource", "https://b.co.nz/y"]);
+    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.co.nz/x", "--claimSource", "https://b.co.nz/y", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(res.code).toBe(0);
   });
 
   it("recognizes distinct registrable domains under netlify.app", () => {
     setupClaim();
-    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://foo.netlify.app/a", "--claimSource", "https://bar.netlify.app/b"]);
+    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://foo.netlify.app/a", "--claimSource", "https://bar.netlify.app/b", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(res.code).toBe(0);
   });
 
@@ -361,9 +375,9 @@ describe("Audit 5: --branchFromThought must reference an existing thought", () =
 describe("Audit 6: --mergedInto cannot target a rejected hypothesis", () => {
   it("rejects merging into a rejected hypothesis", () => {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("already rejected");
@@ -371,9 +385,9 @@ describe("Audit 6: --mergedInto cannot target a rejected hypothesis", () => {
 
   it("still allows merging into a pending or selected hypothesis", () => {
     run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
     expect(res.code).toBe(0);
   });
@@ -417,3 +431,440 @@ describe("Audit 8: numeric flags reject non-decimal notation", () => {
     expect(res.stderr).toContain("--thoughtNumber must be an integer >= 1");
   });
 });
+
+// ---------- v3.0.0 reasoning-depth upgrade (plan v3.4 §4-§7) ----------
+
+function T(n: number, total: number, next: string, text: string, extra: string[] = [], env?: Record<string, string>) {
+  return run(["--thought", text, "--thoughtNumber", String(n), "--totalThoughts", String(total), "--nextThoughtNeeded", next, ...extra], env);
+}
+
+function startPathB() {
+  run(["--reset"]);
+  T(1, 4, "true", "decompose", ["--mode", "path-b"]);
+}
+
+function addHyps() {
+  run(["--registerHypothesis", "A", "--falsification", "falsify condition for A"]);
+  run(["--registerHypothesis", "B", "--falsification", "falsify condition for B"]);
+}
+
+function resolveBoth() {
+  run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+  run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+}
+
+function addLenses() {
+  run(["--recordLens", "--lens", "premortem", "--finding", "f1"]);
+  run(["--recordLens", "--lens", "devil", "--finding", "f2"]);
+}
+
+function checkCrit(id: string, met: string) {
+  return run(["--checkCriterion", id, "--met", met]);
+}
+
+function converge(env?: Record<string, string>) {
+  return T(4, 4, "false", "conclusion", ["--newInsight", "false", "--newInsightNotes", "stable"], env);
+}
+
+describe("v3.0.0 side-command required fields (definition layer, always on)", () => {
+  it("rejects --registerHypothesis without --falsification", () => {
+    startPathB();
+    const res = run(["--registerHypothesis", "no falsification"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--falsification");
+  });
+
+  it("rejects --registerHypothesis with empty --falsification", () => {
+    startPathB();
+    const res = run(["--registerHypothesis", "empty falsification", "--falsification", "   "]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--falsification");
+  });
+
+  it("rejects --resolveHypothesis without --hypothesisNotes", () => {
+    startPathB();
+    addHyps();
+    const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--falsificationResult", "held"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--hypothesisNotes");
+  });
+
+  it("rejects --resolveHypothesis without --falsificationResult", () => {
+    startPathB();
+    addHyps();
+    const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--falsificationResult");
+  });
+
+  it("rejects --registerClaim without --supports", () => {
+    startPathB();
+    addHyps();
+    const res = run(["--registerClaim", "claim without support"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--supports");
+  });
+
+  it("rejects --registerClaim with a --supports target that does not exist", () => {
+    startPathB();
+    addHyps();
+    const res = run(["--registerClaim", "claim pointing nowhere", "--supports", "hyp-99"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/hyp-99.*not (found|exist)/i);
+  });
+
+  it("rejects --verifyClaim verified without the evidence trio", () => {
+    startPathB();
+    addHyps();
+    run(["--registerClaim", "c", "--supports", "hyp-1"]);
+    for (const missing of ["--claimQuote", "--negativeQuery", "--negativeFinding"]) {
+      const full = ["--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"];
+      const idx = full.indexOf(missing);
+      const kept = full.filter((_, i) => i !== idx && i !== idx + 1);
+      const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", ...kept]);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain(missing);
+    }
+  });
+
+  it("rejects --recordLens with missing --lens or --finding", () => {
+    startPathB();
+    const a = run(["--recordLens", "--finding", "x"]);
+    expect(a.code).toBe(1);
+    const b = run(["--recordLens", "--lens", "premortem"]);
+    expect(b.code).toBe(1);
+    const c = run(["--recordLens", "--lens", " ", "--finding", "x"]);
+    expect(c.code).toBe(1);
+  });
+
+  it("rejects --addCriterion with empty text", () => {
+    startPathB();
+    const res = run(["--addCriterion", "   "]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--addCriterion");
+  });
+
+  it("rejects --checkCriterion for an unknown criterion id", () => {
+    startPathB();
+    run(["--addCriterion", "must cover X"]);
+    const res = checkCrit("crit-9", "true");
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("crit-9");
+  });
+
+  it("rejects --met values other than 'true'/'false'", () => {
+    startPathB();
+    run(["--addCriterion", "must cover X"]);
+    for (const bad of ["yes", "1", "maybe"]) {
+      const res = checkCrit("crit-1", bad);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain("--met");
+    }
+    expect(checkCrit("crit-1", "true").code).toBe(0);
+  });
+
+  it("rejects --newInsight true on a thought (duplicates --nextThoughtNeeded true)", () => {
+    startPathB();
+    const res = T(2, 4, "true", "thinking", ["--newInsight", "true"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toContain("--newInsight");
+  });
+});
+
+describe("v3.0.0 state layer: schema migration and atomic save", () => {
+  it("migrates a pre-3.0.0 state file by filling new fields with defaults", () => {
+    writeFileSync(STATE_FILE, JSON.stringify({
+      mode: "path-b",
+      thoughtHistory: [{ thought: "t", thoughtNumber: 1, totalThoughts: 3, nextThoughtNeeded: true }],
+      branches: {},
+      claims: {},
+      hypotheses: {},
+      auditTrail: [],
+    }));
+    const res = run(["--status"]);
+    expect(res.code).toBe(0);
+    const parsed = JSON.parse(res.stdout);
+    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.acceptanceCriteria).toEqual([]);
+    expect(parsed.lenses).toEqual([]);
+    const onDisk = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(onDisk.schemaVersion).toBe(2);
+    expect(onDisk.acceptanceCriteria).toEqual([]);
+    expect(onDisk.lenses).toEqual([]);
+  });
+});
+
+describe("v3.0.0 termination gates 6-10", () => {
+  it("Gate 6 (criteria): blocks termination with no acceptance criteria", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = converge();
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/criterion|criteria/i);
+  });
+
+  it("Gate 6 (criteria): blocks termination while a criterion is unchecked; passes once all are checked", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "covers the divergence"]);
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const blocked = converge();
+    expect(blocked.code).toBe(1);
+    checkCrit("crit-1", "true");
+    const ok = converge();
+    expect(ok.code).toBe(0);
+  });
+
+  it("Gate 6 disabled via THINK_GATES_OFF=criteria does not block and reports a WARN in lint", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = converge({ THINK_GATES_OFF: "criteria" });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[WARN\].*gate.*criteria.*disabled/i);
+  });
+
+  it("Gate 7 (criteriaRevision): met=false without a later revision blocks; newInsightNotes exempts with a WARN", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "covers the divergence"]);
+    // Revision at thought 2 lands BEFORE the check -> cannot satisfy gate 7
+    // (needs thoughtNumber > checkedAtThought), but does satisfy gate 9.
+    T(2, 4, "true", "work", ["--isRevision", "--revisesThought", "1"]);
+    checkCrit("crit-1", "false"); // checkedAtThought = 2
+    T(3, 4, "true", "more");
+    const blocked = T(4, 4, "false", "conclusion");
+    expect(blocked.code).toBe(1);
+    expect(blocked.stderr).toMatch(/met=false|revision/i);
+    const exempt = converge();
+    expect(exempt.code).toBe(0);
+    expect(exempt.stdout).toMatch(/\[WARN\].*newInsightNotes/);
+  });
+
+  it("Gate 7: a revision thought after checkedAtThought satisfies the gate", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "covers the divergence"]);
+    checkCrit("crit-1", "false");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "fix", ["--isRevision", "--revisesThought", "1"]);
+    const res = T(4, 4, "false", "conclusion");
+    expect(res.code).toBe(0);
+  });
+
+  it("Gate 7 disabled via THINK_GATES_OFF=criteriaRevision does not block and warns in lint", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "covers the divergence"]);
+    checkCrit("crit-1", "false");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = T(4, 4, "false", "conclusion", ["--newInsight", "false"], { THINK_GATES_OFF: "criteriaRevision" });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[WARN\].*gate.*criteriaRevision.*disabled/i);
+  });
+
+  it("Gate 8 (lenses): blocks termination with fewer than 2 distinct lens names; duplicate names do not count", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    run(["--recordLens", "--lens", "premortem", "--finding", "f1"]);
+    run(["--recordLens", "--lens", "premortem", "--finding", "f2"]);
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = converge();
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/lens/i);
+  });
+
+  it("Gate 8 disabled via THINK_GATES_OFF=lenses does not block and warns in lint", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = converge({ THINK_GATES_OFF: "lenses" });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[WARN\].*gate.*lenses.*disabled/i);
+  });
+
+  it("Gate 9 (convergence): blocks termination without convergence declaration; branch history satisfies it", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const blocked = T(4, 4, "false", "conclusion");
+    expect(blocked.code).toBe(1);
+    expect(blocked.stderr).toMatch(/convergen|newInsight|revision|branch/i);
+    // History containing a branch satisfies gate 9 even without --newInsight false.
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 5, "true", "work", ["--branchFromThought", "1", "--branchId", "alt"]);
+    T(3, 5, "true", "more");
+    const ok = T(4, 5, "false", "conclusion");
+    expect(ok.code).toBe(0);
+  });
+
+  it("Gate 9 disabled via THINK_GATES_OFF=convergence does not block and warns in lint", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = T(4, 4, "false", "conclusion", [], { THINK_GATES_OFF: "convergence" });
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[WARN\].*gate.*convergence.*disabled/i);
+  });
+
+  it("Gate 10 (falsificationResult): termination passes when every resolved hypothesis has falsificationResult", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = converge();
+    expect(res.code).toBe(0);
+  });
+
+  it("Gate 10 (falsificationResult): blocks when resolved hypothesis lacks falsificationResult in state, bypassed via THINK_GATES_OFF", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    // Manually strip falsificationResult from hyp-1 in state to test Gate 10 assertion
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    delete s.hypotheses["hyp-1"].falsificationResult;
+    writeFileSync(STATE_FILE, JSON.stringify(s));
+
+    const blocked = converge();
+    expect(blocked.code).toBe(1);
+    expect(blocked.stderr).toMatch(/falsificationResult/i);
+
+    const bypassed = converge({ THINK_GATES_OFF: "falsificationResult" });
+    expect(bypassed.code).toBe(0);
+    expect(bypassed.stdout).toMatch(/\[WARN\].*gate.*falsificationResult.*disabled/i);
+  });
+
+  it("THINK_GATES_OFF=all disables all new gates", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = T(4, 4, "false", "conclusion", [], { THINK_GATES_OFF: "all" });
+    expect(res.code).toBe(0);
+  });
+});
+
+describe("v3.0.0 lint report additions (buildLintReport §7)", () => {
+  function setup() {
+    startPathB();
+    addHyps();
+    run(["--registerClaim", "claim one", "--supports", "hyp-1"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "a sufficiently long quote from the source text", "--negativeQuery", "counter example query", "--negativeFinding", "no counter evidence found in search results"]);
+    resolveBoth();
+  }
+
+  it("prints an INFO question when claims=0 on Path B termination", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = converge();
+    expect(res.code).toBe(0);
+    const out = run(["--export"]).stdout;
+    expect(out).toMatch(/\[INFO\].*claims=0.*purely internal/i);
+  });
+
+  it("warns on short falsification (<20 chars), short quote, and duplicate negativeFinding texts", () => {
+    startPathB();
+    run(["--registerHypothesis", "A", "--falsification", "short"]); // <20 chars
+    run(["--registerHypothesis", "B", "--falsification", "a long enough falsification clause"]);
+    run(["--registerClaim", "c1", "--supports", "hyp-1"]);
+    run(["--registerClaim", "c2", "--supports", "hyp-1"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "short q", "--negativeQuery", "nq", "--negativeFinding", "identical finding text here"]);
+    run(["--verifyClaim", "claim-2", "--claimStatus", "verified", "--claimSource", "https://c.example", "--claimSource", "https://d.example", "--claimQuote", "a much longer quote that clears the threshold", "--negativeQuery", "nq2", "--negativeFinding", "identical finding text here"]);
+    const out = run(["--export"]).stdout;
+    expect(out).toMatch(/\[WARN\].*hyp-1.*falsification/i);
+    expect(out).toMatch(/\[WARN\].*claim-1.*quote/i);
+    expect(out).toMatch(/\[WARN\].*claim-1.*claim-2|claim-2.*claim-1/i);
+  });
+
+  it("derives link-status per rule K: Fragile on unverified claim, Plausible on no claims, Linked-verified on verified+quote", () => {
+    setup();
+    const out = run(["--export"]).stdout;
+    expect(out).toContain("link-status: Linked-verified");
+    expect(out).toMatch(/hyp-2[\s\S]*link-status: Plausible/);
+    // Now make claim-2 unverified -> Fragile on hyp-1... claim-2 doesn't exist; add one:
+  });
+
+  it("marks hypothesis Fragile when a linked claim is unverified", () => {
+    startPathB();
+    addHyps();
+    run(["--registerClaim", "c", "--supports", "hyp-1"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "unverified", "--claimNotes", "could not confirm"]);
+    resolveBoth();
+    const out = run(["--export"]).stdout;
+    expect(out).toMatch(/hyp-1[\s\S]*link-status: Fragile/);
+  });
+
+  it("prints an INFO auditTrail last-round state-change count", () => {
+    setup();
+    const out = run(["--export"]).stdout;
+    expect(out).toMatch(/\[INFO\].*auditTrail/);
+  });
+
+  it("prints the Acceptance Checklist with met/unmet/un-checked markers", () => {
+    startPathB();
+    run(["--addCriterion", "criterion one"]);
+    checkCrit("crit-1", "true");
+    run(["--addCriterion", "criterion two"]);
+    const out = run(["--export"]).stdout;
+    expect(out).toContain("Acceptance Checklist");
+    expect(out).toMatch(/crit-1/);
+    expect(out).toMatch(/crit-2/);
+  });
+});
+

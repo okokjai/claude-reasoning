@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { spawnSync } from "child_process";
-import { unlinkSync, existsSync, readFileSync } from "fs";
+import { unlinkSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
@@ -9,9 +9,12 @@ const STATE_FILE = join(CWD, "scripts", ".think_state.json");
 
 /** Minimal state shape consumed by tests. */
 interface StateShape {
+  schemaVersion?: number;
   thoughtHistory: Array<{ thought: string; [k: string]: unknown }>;
-  claims: Record<string, { status: string; statement?: string; registeredAtThought?: number }>;
-  hypotheses?: Record<string, { status: string; mergedInto?: string }>;
+  claims: Record<string, { status: string; statement?: string; registeredAtThought?: number; supports?: string; quote?: string; negativeQuery?: string; negativeFinding?: string }>;
+  hypotheses?: Record<string, { status: string; mergedInto?: string; falsification?: string; falsificationResult?: string }>;
+  acceptanceCriteria?: Array<{ id: string; criterion: string; met?: boolean; notes?: string; checkedAtThought?: number }>;
+  lenses?: Array<{ lens: string; finding: string; atThought?: number }>;
   auditTrail?: Array<{ op: string }>;
   [k: string]: unknown;
 }
@@ -20,13 +23,14 @@ interface StateShape {
  * Execute think.ts with an argv array — no shell, so `$`/backtick/`\`
  * inside flag values reach think.ts intact on every platform.
  */
-function run(argv: string[]): { stdout: string; stderr: string; code: number } {
+function run(argv: string[], env?: Record<string, string>): { stdout: string; stderr: string; code: number } {
   // spawnSync captures stderr on success too — execFileSync drops it when
   // the process exits 0, which would hide warnings (e.g. corrupt-state notice).
   const res = spawnSync("bun", [SCRIPT, ...argv], {
     cwd: CWD,
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, ...env },
   });
   return {
     stdout: res.stdout ?? "",
@@ -64,12 +68,12 @@ describe("think.ts: termination gate (failure point 3)", () => {
   it("rejects side-commands on a terminated Path B session", () => {
     // Build a terminating Path B session: 2+ thoughts, 2 hypotheses resolved.
     run(["--mode", "path-b", "--thought", "decompose", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "option A"]);
-    run(["--registerHypothesis", "option B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "option A", "--falsification", "f"]);
+    run(["--registerHypothesis", "option B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     run(["--thought", "second round", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    const done = run(["--thought", "synthesize and conclude", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    const done = run(["--thought", "synthesize and conclude", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
     expect(done.code).toBe(0);
     // Session terminated — every side-command must now exit 1.
     const reg = run(["--registerHypothesis", "late hypothesis"]);
@@ -145,19 +149,21 @@ describe("think.ts: basic thinking loop", () => {
 
 describe("think.ts: claim pre-registration and lifecycle", () => {
   it("pre-registers claims with sequential IDs and pending status", () => {
-    const res1 = run(["--mode", "path-b", "--registerClaim", "Claim Alpha statement"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    const res1 = run(["--registerClaim", "Claim Alpha statement", "--supports", "hyp-1"]);
     expect(res1.code).toBe(0);
     expect(res1.stdout).toContain('"registered": "claim-1"');
     expect(res1.stdout).toContain('"status": "pending"');
 
-    const res2 = run(["--registerClaim", "Claim Beta statement"]);
+    const res2 = run(["--registerClaim", "Claim Beta statement", "--supports", "hyp-1"]);
     expect(res2.code).toBe(0);
     expect(res2.stdout).toContain('"registered": "claim-2"');
   });
 
   it("records registeredAtThought as the last completed thought index", () => {
     run(["--mode", "path-b", "--thought", "First thought", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "Registered after thought 1"]);
+    run(["--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Registered after thought 1", "--supports", "hyp-1"]);
     const status = JSON.parse(run(["--status"]).stdout);
     expect(status.claimDetails["claim-1"].registeredAtThought).toBe(1);
   });
@@ -167,7 +173,8 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
     // statement before think.ts sees it; this pins the storage contract and
     // fails if run() ever regresses to shell-string execution on POSIX.
     const statement = "Direct API price is $500K/yr vs $186K/yr self-hosted";
-    const reg = run(["--mode", "path-b", "--registerClaim", statement]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    const reg = run(["--registerClaim", statement, "--supports", "hyp-1"]);
     expect(reg.code).toBe(0);
 
     const thought = "Cost delta: $1.15M vs $3 per 1M tokens";
@@ -184,33 +191,37 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
   });
 
   it("fails verification with verified status if fewer than 2 sources provided", () => {
-    run(["--mode", "path-b", "--registerClaim", "Claim statement requiring dual sources"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Claim statement requiring dual sources", "--supports", "hyp-1"]);
     const failRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://source1.com"]);
     expect(failRes.code).not.toBe(0);
     expect(failRes.stderr).toContain("requires at least 2 independent --claimSource arguments");
   });
 
   it("succeeds verification with verified status when 2 or more sources provided", () => {
-    run(["--mode", "path-b", "--registerClaim", "Claim statement requiring dual sources"]);
-    const okRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://source1.com", "--claimSource", "https://source2.com"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Claim statement requiring dual sources", "--supports", "hyp-1"]);
+    const okRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://source1.com", "--claimSource", "https://source2.com", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(okRes.code).toBe(0);
     expect(okRes.stdout).toContain('"status": "verified"');
   });
 
   it("rejects verified when 2 sources share the same root domain", () => {
-    run(["--mode", "path-b", "--registerClaim", "Claim backed only by subdomains of one root domain"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Claim backed only by subdomains of one root domain", "--supports", "hyp-1"]);
     const failRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://docs.aws.amazon.com/some/doc", "--claimSource", "https://aws.amazon.com/some/page"]);
     expect(failRes.code).not.toBe(0);
     expect(failRes.stderr).toContain("distinct root domains");
   });
 
   it("allows single_source, unverified, and not_found with fewer sources", () => {
-    run(["--mode", "path-b", "--registerClaim", "Single source claim"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Single source claim", "--supports", "hyp-1"]);
     const resSingle = run(["--verifyClaim", "claim-1", "--claimStatus", "single_source", "--claimSource", "https://only-one.com", "--claimNotes", "Single tech blog report"]);
     expect(resSingle.code).toBe(0);
     expect(resSingle.stdout).toContain('"status": "single_source"');
 
-    run(["--registerClaim", "Unfound claim"]);
+    run(["--registerClaim", "Unfound claim", "--supports", "hyp-1"]);
     const resNotFound = run(["--verifyClaim", "claim-2", "--claimStatus", "not_found", "--claimNotes", "Searched 3 queries; no relevant public records"]);
     expect(resNotFound.code).toBe(0);
     expect(resNotFound.stdout).toContain('"status": "not_found"');
@@ -218,7 +229,8 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
 
   it("blocks termination when any claim is still pending", () => {
     run(["--mode", "path-b", "--thought", "Decomposing the open question", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "Pending claim"]);
+    run(["--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Pending claim", "--supports", "hyp-1"]);
     const failTerm = run(["--thought", "Conclusion step", "--thoughtNumber", "2", "--totalThoughts", "2", "--nextThoughtNeeded", "false"]);
     expect(failTerm.code).not.toBe(0);
     expect(failTerm.stderr).toContain("Cannot terminate with --nextThoughtNeeded false: 1 claim(s) still pending");
@@ -226,14 +238,14 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
 
   it("allows termination when all claims are resolved", () => {
     run(["--mode", "path-b", "--thought", "Decomposing the open question", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "H1: Option A"]);
-    run(["--registerHypothesis", "H2: Option B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected"]);
-    run(["--registerClaim", "Test claim"]);
+    run(["--registerHypothesis", "H1: Option A", "--falsification", "f"]);
+    run(["--registerHypothesis", "H2: Option B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--registerClaim", "Test claim", "--supports", "hyp-2"]);
     run(["--verifyClaim", "claim-1", "--claimStatus", "unverified", "--claimNotes", "No search tool available"]);
     run(["--thought", "Synthesizing after verification", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    const okTerm = run(["--thought", "Clean conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    const okTerm = run(["--thought", "Clean conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
     expect(okTerm.code).toBe(0);
     expect(okTerm.stdout).toContain("[3/3]");
     expect(okTerm.stdout).toContain("next=false");
@@ -271,17 +283,17 @@ describe("integration: Scenario 2 - Path B Open-ended with External Verification
     expect(t1.code).toBe(0);
 
     // 2. Competing hypotheses required by Path B
-    run(["--registerHypothesis", "H1: Bedrock wins on enterprise IAM + verified feature parity"]);
-    run(["--registerHypothesis", "H2: Direct API wins on SDK feature velocity"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "H1: Bedrock wins on enterprise IAM + verified feature parity", "--falsification", "f"]);
+    run(["--registerHypothesis", "H2: Direct API wins on SDK feature velocity", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
 
     // 3. Pre-registration of claims before search
-    const reg1 = run(["--registerClaim", "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"]);
+    const reg1 = run(["--registerClaim", "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet", "--supports", "hyp-1"]);
     expect(reg1.code).toBe(0);
     expect(reg1.stdout).toContain('"registered": "claim-1"');
 
-    const reg2 = run(["--registerClaim", "Claude 3.5 Sonnet base token price is $3 input / $15 output per 1M tokens across both platforms"]);
+    const reg2 = run(["--registerClaim", "Claude 3.5 Sonnet base token price is $3 input / $15 output per 1M tokens across both platforms", "--supports", "hyp-1"]);
     expect(reg2.code).toBe(0);
     expect(reg2.stdout).toContain('"registered": "claim-2"');
 
@@ -291,7 +303,7 @@ describe("integration: Scenario 2 - Path B Open-ended with External Verification
     expect(premature.stderr).toContain("Cannot terminate with --nextThoughtNeeded false: 2 claim(s) still pending");
 
     // 4. Resolve claim 1 with 2 independent sources
-    const v1 = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://aws.amazon.com/bedrock/pricing/", "--claimSource", "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"]);
+    const v1 = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://aws.amazon.com/bedrock/pricing/", "--claimSource", "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(v1.code).toBe(0);
     expect(v1.stdout).toContain('"status": "verified"');
 
@@ -305,7 +317,7 @@ describe("integration: Scenario 2 - Path B Open-ended with External Verification
     expect(t2.code).toBe(0);
 
     // 7. Converge and terminate
-    const t3 = run(["--thought", "Conclusion: Recommend Bedrock for enterprise environments with AWS compliance commitments; Direct API for nimble dev teams. All claims resolved. Terminating.", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    const t3 = run(["--thought", "Conclusion: Recommend Bedrock for enterprise environments with AWS compliance commitments; Direct API for nimble dev teams. All claims resolved. Terminating.", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
     expect(t3.code).toBe(0);
     expect(t3.stdout).toContain("[3/3]");
     expect(t3.stdout).toContain("claims=claim-1,claim-2");
@@ -325,7 +337,7 @@ describe("think.ts: Path A Hard Gates", () => {
   it("forbids external claims in path-a mode", () => {
     run(["--reset"]);
     run(["--mode", "path-a", "--thought", "Restating problem", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    const failClaim = run(["--registerClaim", "External claim"]);
+    const failClaim = run(["--registerClaim", "External claim", "--supports", "hyp-1"]);
     expect(failClaim.code).not.toBe(0);
     expect(failClaim.stderr).toContain("Path A (closed-form) forbids external claims");
   });
@@ -344,7 +356,7 @@ describe("think.ts: Path B Hard Gates", () => {
   it("blocks termination with fewer than 2 hypotheses in path-b mode", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Decomposing", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "H1: Option A is better"]);
+    run(["--registerHypothesis", "H1: Option A is better", "--falsification", "f"]);
     const failTerm = run(["--thought", "Conclusion", "--thoughtNumber", "2", "--totalThoughts", "2", "--nextThoughtNeeded", "false"]);
     expect(failTerm.code).not.toBe(0);
     expect(failTerm.stderr).toContain("requires at least 2 hypotheses");
@@ -353,9 +365,9 @@ describe("think.ts: Path B Hard Gates", () => {
   it("blocks termination if any hypothesis is pending in path-b mode", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Decomposing", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "H1: Option A"]);
-    run(["--registerHypothesis", "H2: Option B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--registerHypothesis", "H1: Option A", "--falsification", "f"]);
+    run(["--registerHypothesis", "H2: Option B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     const failTerm = run(["--thought", "Conclusion", "--thoughtNumber", "2", "--totalThoughts", "2", "--nextThoughtNeeded", "false"]);
     expect(failTerm.code).not.toBe(0);
     expect(failTerm.stderr).toContain("hypotheses still pending");
@@ -364,23 +376,23 @@ describe("think.ts: Path B Hard Gates", () => {
   it("allows termination when Path B requirements are met", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Decomposing", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "H1: Option A"]);
-    run(["--registerHypothesis", "H2: Option B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected"]);
+    run(["--registerHypothesis", "H1: Option A", "--falsification", "f"]);
+    run(["--registerHypothesis", "H2: Option B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     run(["--thought", "Critiquing", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
     run(["--thought", "Synthesizing", "--thoughtNumber", "3", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
-    const okTerm = run(["--thought", "Conclusion", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false"]);
+    const okTerm = run(["--thought", "Conclusion", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
     expect(okTerm.code).toBe(0);
     expect(okTerm.stdout).toContain("next=false");
   });
 
   it("blocks termination on the very first thought in path-b mode", () => {
     run(["--reset"]);
-    run(["--mode", "path-b", "--registerHypothesis", "H1: Option A"]);
-    run(["--registerHypothesis", "H2: Option B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H1: Option A", "--falsification", "f"]);
+    run(["--registerHypothesis", "H2: Option B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     const failTerm = run(["--mode", "path-b", "--thought", "Instant conclusion with no prior reasoning", "--thoughtNumber", "1", "--totalThoughts", "1", "--nextThoughtNeeded", "false"]);
     expect(failTerm.code).not.toBe(0);
     expect(failTerm.stderr).toContain("Path B requires at least 2 prior thoughts");
@@ -389,10 +401,10 @@ describe("think.ts: Path B Hard Gates", () => {
   it("blocks termination when the previous thought flagged needsMoreThoughts", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Decomposing", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "H1: Option A"]);
-    run(["--registerHypothesis", "H2: Option B"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "H1: Option A", "--falsification", "f"]);
+    run(["--registerHypothesis", "H2: Option B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     const expand = run(["--thought", "Scope expanded mid-analysis", "--thoughtNumber", "2", "--totalThoughts", "6", "--nextThoughtNeeded", "true", "--needsMoreThoughts"]);
     expect(expand.code).toBe(0);
     const failTerm = run(["--thought", "Trying to conclude right after expansion flag", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
@@ -403,29 +415,33 @@ describe("think.ts: Path B Hard Gates", () => {
 
 describe("think.ts: claim caveat enforcement", () => {
   it("rejects single_source without --claimNotes", () => {
-    run(["--mode", "path-b", "--registerClaim", "Single source claim"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Single source claim", "--supports", "hyp-1"]);
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "single_source", "--claimSource", "https://only-one.com"]);
     expect(res.code).not.toBe(0);
     expect(res.stderr).toContain("requires --claimNotes");
   });
 
   it("rejects unverified without --claimNotes", () => {
-    run(["--mode", "path-b", "--registerClaim", "Unverifiable claim"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Unverifiable claim", "--supports", "hyp-1"]);
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "unverified"]);
     expect(res.code).not.toBe(0);
     expect(res.stderr).toContain("requires --claimNotes");
   });
 
   it("rejects not_found without --claimNotes", () => {
-    run(["--mode", "path-b", "--registerClaim", "Unfindable claim"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Unfindable claim", "--supports", "hyp-1"]);
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "not_found"]);
     expect(res.code).not.toBe(0);
     expect(res.stderr).toContain("requires --claimNotes");
   });
 
   it("still allows verified without --claimNotes", () => {
-    run(["--mode", "path-b", "--registerClaim", "Well-sourced claim"]);
-    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example"]);
+    run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
+    run(["--registerClaim", "Well-sourced claim", "--supports", "hyp-1"]);
+    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(res.code).toBe(0);
     expect(res.stdout).toContain('"status": "verified"');
   });
@@ -434,8 +450,8 @@ describe("think.ts: claim caveat enforcement", () => {
 describe("think.ts: hypothesis merge status", () => {
   it("rejects merged without --mergedInto", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B, same mechanism as A"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B, same mechanism as A", "--falsification", "f"]);
     const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("--mergedInto is required");
@@ -443,7 +459,7 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("rejects merging a hypothesis into itself", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
     const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("cannot reference the hypothesis being resolved itself");
@@ -451,7 +467,7 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("rejects merging into a nonexistent target", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
     const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "merged", "--mergedInto", "hyp-99"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("not found in state");
@@ -459,8 +475,8 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("accepts a valid merge and records mergedInto", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B, same mechanism as A"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B, same mechanism as A", "--falsification", "f"]);
     const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "same mechanism, different framing"]);
     expect(res.code).toBe(0);
     const parsed = JSON.parse(res.stdout);
@@ -470,10 +486,10 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("rejects merging into a hypothesis that is itself merged", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B"]);
-    run(["--registerHypothesis", "C"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B", "--falsification", "f"]);
+    run(["--registerHypothesis", "C", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "n"]);
     const res = run(["--resolveHypothesis", "hyp-3", "--hypothesisStatus", "merged", "--mergedInto", "hyp-2"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("already merged");
@@ -481,10 +497,10 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("rejects merging onward a hypothesis that already absorbs another merge", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B"]);
-    run(["--registerHypothesis", "C"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B", "--falsification", "f"]);
+    run(["--registerHypothesis", "C", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "n"]);
     const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "merged", "--mergedInto", "hyp-3"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("merge chains are not allowed");
@@ -492,8 +508,8 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("rejects --mergedInto when --hypothesisStatus is not merged", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B", "--falsification", "f"]);
     const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected", "--mergedInto", "hyp-1"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("--mergedInto");
@@ -501,10 +517,10 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("clears mergedInto when a merged hypothesis is re-resolved to a non-merged status", () => {
     run(["--mode", "path-b", "--thought", "q", "--thoughtNumber", "1", "--totalThoughts", "2", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
-    const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "n"]);
+    const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     expect(res.code).toBe(0);
     const parsed = JSON.parse(res.stdout);
     expect(parsed.status).toBe("rejected");
@@ -513,26 +529,26 @@ describe("think.ts: hypothesis merge status", () => {
 
   it("rejects Path B termination when merges leave fewer than 2 distinct hypotheses", () => {
     run(["--mode", "path-b", "--thought", "decompose", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B, same mechanism as A"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B, same mechanism as A", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "n"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     run(["--thought", "synthesize", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    const res = run(["--thought", "conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    const res = run(["--thought", "conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("distinct hypotheses");
   });
 
   it("treats a merged hypothesis as resolved for Path B termination", () => {
     run(["--mode", "path-b", "--thought", "decompose", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "A"]);
-    run(["--registerHypothesis", "B, same mechanism as A"]);
-    run(["--registerHypothesis", "C, a different mechanism"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-3", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "A", "--falsification", "f"]);
+    run(["--registerHypothesis", "B, same mechanism as A", "--falsification", "f"]);
+    run(["--registerHypothesis", "C, a different mechanism", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "n"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-3", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     run(["--thought", "synthesize", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    const res = run(["--thought", "conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    const res = run(["--thought", "conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
     expect(res.code).toBe(0);
   });
 });
@@ -541,11 +557,11 @@ describe("think.ts: side-command audit trail", () => {
   it("records claim and hypothesis operations in --status auditTrail", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Decomposing", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "Audit claim A"]);
-    run(["--registerHypothesis", "Audit H1"]);
-    run(["--registerHypothesis", "Audit H2"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "Audit H1", "--falsification", "f"]);
+    run(["--registerHypothesis", "Audit H2", "--falsification", "f"]);
+    run(["--registerClaim", "Audit claim A", "--supports", "hyp-1"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     run(["--verifyClaim", "claim-1", "--claimStatus", "not_found", "--claimNotes", "no public record"]);
 
     const status = run(["--status"]);
@@ -554,9 +570,9 @@ describe("think.ts: side-command audit trail", () => {
     expect(Array.isArray(parsed.auditTrail)).toBe(true);
     const ops = parsed.auditTrail.map((e: { op: string }) => e.op);
     expect(ops).toEqual([
+      "registerHypothesis",
+      "registerHypothesis",
       "registerClaim",
-      "registerHypothesis",
-      "registerHypothesis",
       "resolveHypothesis",
       "resolveHypothesis",
       "verifyClaim",
@@ -564,55 +580,60 @@ describe("think.ts: side-command audit trail", () => {
   });
 });
 
-describe("think.ts: --export conclusion card", () => {
-  it("emits a markdown conclusion card on demand for a terminated Path B session", () => {
+describe("think.ts: --export lint report", () => {
+  it("emits a markdown lint report on demand for a terminated Path B session", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Decompose the question", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "Claim that is verified"]);
-    run(["--registerClaim", "Claim with one source"]);
-    run(["--registerHypothesis", "Hypothesis A"]);
-    run(["--registerHypothesis", "Hypothesis B"]);
-    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example"]);
+    run(["--registerHypothesis", "Hypothesis A", "--falsification", "f"]);
+    run(["--registerHypothesis", "Hypothesis B", "--falsification", "f"]);
+    run(["--registerClaim", "Claim that is verified", "--supports", "hyp-1"]);
+    run(["--registerClaim", "Claim with one source", "--supports", "hyp-1"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     run(["--verifyClaim", "claim-2", "--claimStatus", "single_source", "--claimSource", "https://c.example", "--claimNotes", "only one outlet"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     run(["--thought", "Synthesize findings", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--thought", "Conclusion reached", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    run(["--thought", "Conclusion reached", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
 
     const res = run(["--export"]);
     expect(res.code).toBe(0);
-    expect(res.stdout).toContain("#");
-    expect(res.stdout).toContain("[Confirmed]");
-    expect(res.stdout).toContain("[Probable]");
+    expect(res.stdout).toContain("# Reasoning Lint & Fact Sheet");
+    expect(res.stdout).toContain("Lint Violations");
     expect(res.stdout).toContain("Hypothesis A");
     expect(res.stdout).toContain("claim-2");
+    // The lint report never emits calibrated verdict tags.
+    expect(res.stdout).not.toContain("[Confirmed]");
+    expect(res.stdout).not.toContain("[Probable]");
   });
 
-  it("auto-emits the card after the status line when nextThoughtNeeded=false", () => {
+  it("auto-emits the lint report after the status line when nextThoughtNeeded=false", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Decompose", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "H1"]);
-    run(["--registerHypothesis", "H2"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--registerHypothesis", "H1", "--falsification", "f"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     run(["--thought", "Synthesize", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    const res = run(["--thought", "Final conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"]);
+    const res = run(["--thought", "Final conclusion", "--thoughtNumber", "3", "--totalThoughts", "3", "--nextThoughtNeeded", "false"], { THINK_GATES_OFF: "all" });
     expect(res.code).toBe(0);
     expect(res.stdout).toContain("[3/3]");
     expect(res.stdout).toContain("next=false");
-    // Zero claims in Path B → the script does not rate the reasoning, and never invents [Unverified]/Low.
-    expect(res.stdout).toContain("not rated by script");
-    expect(res.stdout).not.toContain("Level: Low");
+    expect(res.stdout).toContain("# Reasoning Lint & Fact Sheet");
+    // Zero claims in Path B → INFO question illuminates the escape surface (never CRIT).
+    expect(res.stdout).toMatch(/\[INFO\].*claims=0/);
+    expect(res.stdout).not.toMatch(/\[CRIT\].*claims=0/);
   });
 
-  it("emits a card mid-session marking unverified claims as residual uncertainty", () => {
+  it("emits a report mid-session recording unverified claims", () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "Exploring", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
-    run(["--registerClaim", "Unresolved claim"]);
+    run(["--registerHypothesis", "H", "--falsification", "f"]);
+    run(["--registerClaim", "Unresolved claim", "--supports", "hyp-1"]);
     const res = run(["--export"]);
     expect(res.code).toBe(0);
-    expect(res.stdout).toContain("[Unverified]");
+    expect(res.stdout).toContain("# Reasoning Lint & Fact Sheet");
     expect(res.stdout).toContain("claim-1");
+    expect(res.stdout).toMatch(/claim-1.*unverified/);
   });
 });
 
@@ -638,25 +659,25 @@ describe("think.ts: THINK_STATE_FILE env isolation", () => {
 });
 
 describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () => {
-  const T = (n: number, total: number, next: string, text: string, extra: string[] = []) =>
-    run(["--thought", text, "--thoughtNumber", String(n), "--totalThoughts", String(total), "--nextThoughtNeeded", next, ...extra]);
+  const T = (n: number, total: number, next: string, text: string, extra: string[] = [], env?: Record<string, string>) =>
+    run(["--thought", text, "--thoughtNumber", String(n), "--totalThoughts", String(total), "--nextThoughtNeeded", next, ...extra], env);
   const startB = () => {
     run(["--reset"]);
     run(["--mode", "path-b", "--thought", "T1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
-    run(["--registerHypothesis", "Option A"]);
-    run(["--registerHypothesis", "Option B"]);
+    run(["--registerHypothesis", "Option A", "--falsification", "f"]);
+    run(["--registerHypothesis", "Option B", "--falsification", "f"]);
   };
 
-  it("an unrelated verified claim does not promote the primary finding to [Confirmed]", () => {
+  it("a verified claim shows as linked-verified link-status without emitting verdict tags", () => {
     startB();
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
-    run(["--registerClaim", "Unrelated fact"]);
-    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--registerClaim", "Unrelated fact", "--supports", "hyp-1"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     const out = run(["--export"]).stdout;
-    expect(out).toMatch(/## Primary Finding\n\[Plausible\] Option A/);
-    expect(out).toContain("fact-check coverage only");
-    expect(out).toContain("does not rate the reasoning");
+    expect(out).toMatch(/hyp-1 \[selected\].*Linked-verified|link-status: Linked-verified/);
+    expect(out).not.toContain("[Confirmed]");
+    expect(out).not.toContain("[Probable]");
   });
 
   it("Path A card is not penalised and never suggests forbidden --registerClaim", () => {
@@ -670,23 +691,24 @@ describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () =>
     expect(res.stdout).toContain("> cross-validated: x=4");
   });
 
-  it("single_source-only sessions no longer contradict themselves", () => {
+  it("single_source-only link-status is Plausible, never Low or Unverified", () => {
     startB();
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected"]);
-    run(["--registerClaim", "c"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--registerClaim", "c", "--supports", "hyp-1"]);
     run(["--verifyClaim", "claim-1", "--claimStatus", "single_source", "--claimSource", "https://blog.example/x", "--claimNotes", "one blog"]);
     const out = run(["--export"]).stdout;
     expect(out).not.toContain("[Unverified] Option A");
-    expect(out).toContain("[Probable] c (claim-1) — one blog");
-    expect(out).toContain("Level (fact-check coverage only): Medium");
+    expect(out).not.toContain("Level: Low");
+    expect(out).toMatch(/Plausible/);
+    expect(out).toContain("one blog");
   });
 
   it("carries hypothesis rationale, all selected, merged targets, trace, and the final thought", () => {
     startB();
-    run(["--registerHypothesis", "Option C"]);
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "WHY-A"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected"]);
-    run(["--resolveHypothesis", "hyp-3", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
+    run(["--registerHypothesis", "Option C", "--falsification", "f"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "WHY-A", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-3", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "n"]);
     T(2, 4, "true", "branch", ["--branchFromThought", "1", "--branchId", "alt"]);
     T(3, 4, "true", "revise", ["--isRevision", "--revisesThought", "1"]);
     const out = run(["--export"]).stdout;
@@ -699,10 +721,12 @@ describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () =>
 
   it("block-quotes a multi-line final thought so it cannot forge card headings", () => {
     startB();
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected"]);
-    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     T(2, 4, "true", "T2");
-    const res = T(3, 4, "false", "verdict\n## Fake Heading\n- x");
+    run(["--recordLens", "--lens", "devil's advocate", "--finding", "f1"]);
+    run(["--recordLens", "--lens", "premortem", "--finding", "f2"]);
+    const res = T(3, 4, "false", "verdict\n## Fake Heading\n- x", [], { THINK_GATES_OFF: "all" });
     expect(res.stdout).toContain("No hypothesis was selected");
     expect(res.stdout).toContain("> ## Fake Heading");
     expect(res.stdout).not.toMatch(/^## Fake Heading/m);
@@ -713,7 +737,7 @@ describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () =>
     const a = run(["--export", "--thought", "lost?", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
     expect(a.code).toBe(1);
     expect(a.stderr).toContain("--export cannot be combined");
-    expect(run(["--export", "--registerClaim", "x"]).code).toBe(1);
+    expect(run(["--export", "--registerClaim", "x", "--supports", "hyp-1"]).code).toBe(1);
     expect(run(["--export", "--status"]).code).toBe(1);
     const b = run(["--reset", "--export"]);
     expect(b.code).toBe(1);
@@ -733,8 +757,8 @@ describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () =>
 
   it("verified dual-source check treats a trailing-dot FQDN as the same host", () => {
     startB();
-    run(["--registerClaim", "c"]);
-    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://example.com./a", "--claimSource", "https://example.com/b"]);
+    run(["--registerClaim", "c", "--supports", "hyp-1"]);
+    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://example.com./a", "--claimSource", "https://example.com/b", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(res.code).toBe(1);
   });
 });

@@ -4,6 +4,34 @@ All notable changes to this skill are documented here.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-01
+
+### Added
+
+- **Falsification-driven hypothesis lifecycle.** `--registerHypothesis` now requires `--falsification <condition>` (the concrete condition that would falsify the hypothesis). Terminal resolutions (`selected` / `rejected` / `synthesized`) require `--hypothesisNotes <why>` **and** `--falsificationResult held|broken`; `merged` is exempt from `--falsificationResult` (the surviving hypothesis keeps its own) but still requires notes. `--mergedInto` cross-checks (self-reference, nonexistent id, already-merged target, rejected target, merge chains, mismatch with `merged` status) now run before the notes/result checks so merge-specific errors surface first.
+- **Acceptance criteria (gates 6–7).** New side-commands `--addCriterion "<text>"` and `--checkCriterion crit-N --met true|false [--criterionNotes ...]`. Gate 6 blocks Path B termination with zero criteria or any unchecked criterion; gate 7 blocks termination on `met=false` without a subsequent `--isRevision` thought or an explicit `--newInsightNotes` rationale.
+- **Critical lens records (gate 8).** New side-command `--recordLens --lens "<name>" --finding "<residual uncertainty>"`; gate 8 blocks Path B termination with fewer than 2 distinct (NFKC/case-normalized) lens names.
+- **Convergence declaration (gate 9).** `--newInsight false` (with optional `--newInsightNotes`) is the convergence declaration on the terminating thought; any other `--newInsight` value exits 1. Gate 9 blocks termination without a declaration unless history contains a revision or branch.
+- **Quote verification (gate 10).** `--verifyClaim ... --claimStatus verified` now requires `--claimQuote`, `--negativeQuery`, and `--negativeFinding` alongside the dual-source rule. Gate 10 blocks termination while any resolved non-merged hypothesis lacks a `falsificationResult`.
+- **Claim–hypothesis linking.** `--registerClaim` requires `--supports <hyp-id>` naming the hypothesis the claim bears on; nonexistent targets exit 1.
+- **`THINK_GATES_OFF` ablation switch.** Gates 6–10 accept a comma-separated list of gate names or `all`. A disabled gate records its would-be violation and surfaces it as a `[WARN] gate <name> disabled: ...` line in the lint report instead of failing. Definition-layer checks (registration/resolution trio, merge validation) stay always on.
+- **Lint-report card export.** New `buildLintReport(state)` replaces the raw verdict-style card: CRIT residuals an active gate should have blocked, WARN entries (disabled gates, missing rationale, thin lens coverage), INFO escape surfaces, acceptance-criterion status, lens findings, and the block-quoted final thought, under a "script's view of state, not the final answer" header. `--export` prints it, and it is auto-emitted after the status line when a session terminates.
+- **Schema v2.** State gains `schemaVersion`, `acceptanceCriteria[]`, `lenses[]`, claim `supports`/`quote`/`negativeQuery`/`negativeFinding`, hypothesis `falsification`/`falsificationResult`/`notes`/`mergedInto`, thought `newInsight`/`newInsightNotes`; v1 files migrate with defaults filled on load. `saveState` is atomic (tmp file + rename).
+
+### Breaking Changes
+
+- `--registerHypothesis` without `--falsification`, terminal `--resolveHypothesis` without `--hypothesisNotes`/`--falsificationResult`, `--registerClaim` without `--supports`, and `verified` verification without the quote/negative-finding trio now exit 1.
+- Path B termination additionally requires: ≥1 checked acceptance criterion, revision or rationale for unmet criteria, ≥2 distinct lens names, a convergence declaration, and falsification results on all resolved hypotheses (gates 6–10).
+- The `--export` card is now a CRIT/WARN/INFO fact sheet, not a confidence verdict.
+
+### Tests
+
+- `tests/think.test.ts` + `tests/issues.test.ts` migrated to the new API (`--falsification`, `--supports`, `--hypothesisNotes`/`--falsificationResult`, verification trio, `THINK_GATES_OFF` on terminating thoughts) and extended: merge semantics, disabled-gate warnings, criterion checks, lens records, quote verification. Suite now **129 tests across 3 files**.
+
+### Files
+
+`scripts/think.ts` (schema v2, gates 6–10, new side-commands, `buildLintReport`) · `tests/think.test.ts` · `tests/issues.test.ts` · `SKILL.md` (Path B protocol, gates table, flag reference, version 3.0.0) · `README.md` (invariants, lint card, 129 tests) · `package.json` + `think.ts` header (version 3.0.0) · `CHANGELOG.md`.
+
 ## [2.2.6] - 2026-09-30
 
 ### Fixed

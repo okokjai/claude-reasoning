@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 2.2.6 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.0.0 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -25,6 +25,8 @@ export interface ThoughtData {
   branchFromThought?: number;
   branchId?: string;
   needsMoreThoughts?: boolean;
+  newInsight?: boolean;        // only false accepted; true duplicates nextThoughtNeeded
+  newInsightNotes?: string;
 }
 
 export type ClaimStatus = "pending" | "verified" | "single_source" | "unverified" | "not_found";
@@ -35,6 +37,10 @@ export interface Claim {
   registeredAtThought: number;
   sources: string[];
   status: ClaimStatus;
+  supports?: string;           // Path B: required hypothesis id this claim bears on
+  quote?: string;              // required to reach verified
+  negativeQuery?: string;      // required to reach verified
+  negativeFinding?: string;    // required to reach verified
   notes?: string;
 }
 
@@ -44,39 +50,72 @@ export interface Hypothesis {
   id: string;
   statement: string;
   status: HypothesisStatus;
+  falsification?: string;       // required at registration
+  falsificationResult?: string; // required at resolution
   notes?: string;
   mergedInto?: string;
+}
+
+export interface AcceptanceCriterion {
+  id: string;
+  criterion: string;
+  met?: boolean;
+  notes?: string;
+  checkedAtThought?: number;   // thought count when checked; gate 7 compares revisions after this
+}
+
+export interface LensFinding {
+  lens: string;
+  finding: string;
+  atThought: number;
 }
 
 export type ThinkingMode = "path-a" | "path-b";
 
 export interface AuditEntry {
-  op: "registerClaim" | "verifyClaim" | "registerHypothesis" | "resolveHypothesis";
+  op: "registerClaim" | "verifyClaim" | "registerHypothesis" | "resolveHypothesis" | "addCriterion" | "checkCriterion" | "recordLens";
   target: string;
   detail?: string;
 }
 
 export interface State {
+  schemaVersion: number;       // 2; files without it are treated as v1 and migrated on load
   mode?: ThinkingMode;
+  acceptanceCriteria: AcceptanceCriterion[];
   thoughtHistory: ThoughtData[];
   branches: Record<string, ThoughtData[]>;
   claims: Record<string, Claim>;
   hypotheses: Record<string, Hypothesis>;
+  lenses: LensFinding[];
   auditTrail?: AuditEntry[];
+}
+
+const SCHEMA_VERSION = 2;
+
+function emptyState(): State {
+  return { schemaVersion: SCHEMA_VERSION, acceptanceCriteria: [], thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, lenses: [], auditTrail: [] };
 }
 
 function loadState(): State {
   if (existsSync(STATE_FILE)) {
     try {
       const data = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
-      return {
+      // v1 → v2 migration: fill fields introduced by the reasoning-depth upgrade.
+      const migrated: State = {
+        schemaVersion: SCHEMA_VERSION,
         mode: data.mode,
+        acceptanceCriteria: data.acceptanceCriteria || [],
         thoughtHistory: data.thoughtHistory || [],
         branches: data.branches || {},
         claims: data.claims || {},
         hypotheses: data.hypotheses || {},
+        lenses: data.lenses || [],
         auditTrail: data.auditTrail || [],
       };
+      // Persist back when the file was a pre-v2 schema so the on-disk form
+      // matches what was loaded (no silent in-memory-only upgrade).
+      if (data.schemaVersion !== SCHEMA_VERSION) saveState(migrated);
+      return migrated;
     } catch {
       // Corrupt state: never silently swallow. Preserve the original for
       // forensics and start clean — same contract as "no state file".
@@ -84,14 +123,17 @@ function loadState(): State {
       try {
         renameSync(STATE_FILE, STATE_FILE + ".bak");
       } catch { /* backup best-effort; proceed anyway */ }
-      return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, auditTrail: [] };
+      return emptyState();
     }
   }
-  return { thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, auditTrail: [] };
+  return emptyState();
 }
 
 function saveState(state: State): void {
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  // Atomic write: tmp + rename so a crash mid-write cannot leave a torn state file.
+  const tmp = STATE_FILE + ".tmp";
+  writeFileSync(tmp, JSON.stringify(state, null, 2));
+  renameSync(tmp, STATE_FILE);
 }
 
 function recordAudit(state: State, entry: AuditEntry): void {
@@ -152,17 +194,47 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-// --- Conclusion card (--export) ---
+// --- Termination gates 6-10 switchboard (plan v3.4 §6) ---
+// Required-field checks (hypothesisNotes, supports, falsification, verified
+// trio) are definition-layer and always on; only the TERMINATION gates are
+// switchable so evaluation can ablate them. THINK_GATES_OFF accepts a
+// comma-separated list of names or 'all'.
+const GATES = {
+  criteria: true,
+  criteriaRevision: true,
+  lenses: true,
+  convergence: true,
+  falsificationResult: true,
+} as const;
 
-type CalibratedTag = "[Confirmed]" | "[Probable]" | "[Plausible]" | "[Contested]" | "[Unverified]";
+type GateName = keyof typeof GATES;
 
-const TAG_BY_CLAIM_STATUS: Record<ClaimStatus, CalibratedTag> = {
-  verified: "[Confirmed]",
-  single_source: "[Probable]",
-  unverified: "[Unverified]",
-  not_found: "[Unverified]",
-  pending: "[Unverified]",
-};
+const gatesOff = new Set(
+  (process.env.THINK_GATES_OFF || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(s => s.length > 0),
+);
+const gatesAllOff = gatesOff.has("all");
+
+function gateOn(name: GateName): boolean {
+  return GATES[name] && !gatesAllOff && !gatesOff.has(name);
+}
+
+/** Violations a disabled termination gate would have produced; surfaced in lint. */
+const disabledGateViolations: string[] = [];
+
+/**
+ * Enforce a termination gate: when on, fail; when off, record the violation so
+ * buildLintReport can show it as a WARN (gate disabled) instead of blocking.
+ */
+function enforceGate(name: GateName, violation: string | null): void {
+  if (violation == null) return;
+  if (gateOn(name)) fail(violation);
+  disabledGateViolations.push(`gate ${name} disabled: ${violation}`);
+}
+
+// --- Lint report (--export) ---
 
 /** Quote multi-line free text so user content can never forge card headings. */
 function quoteBlock(text: string): string {
@@ -170,76 +242,190 @@ function quoteBlock(text: string): string {
 }
 
 /**
- * Derive a markdown conclusion card purely from persisted state — no invented
- * content. It is a FACT SHEET: it reports what was recorded (selected
- * hypotheses with their rationale, claim outcomes, the final thought, the
- * trace shape) and deliberately does NOT rate the reasoning itself. The
- * calibrated final answer is still written by the model per
- * references/conclusion-card.md.
- *
- * Design rules (2.2.5):
- *  - Claims are not linked to hypotheses, so claim statistics are reported as
- *    "fact-check coverage" and never promote the primary finding to [Confirmed].
- *  - Path A has no claims by contract; it is never penalised for that.
- *  - Free text is block-quoted; every selected/merged hypothesis is listed.
+ * Link-status derivation (plan §7 rule K): for each hypothesis, look at the
+ * claims whose `supports` points at it. Lowest status wins.
+ *  - Linked-verified: ≥1 linked claim, all verified and carrying a quote.
+ *  - Plausible: no linked claims at all, or only single_source evidence.
+ *  - Fragile: any linked claim unverified / not_found / pending.
+ * This is a self-reported linkage label — the script cannot judge claim
+ * relevance; final confidence is decided when the model writes the answer.
  */
-function buildConclusionCard(state: State): string {
+function linkStatus(hyp: Hypothesis, claims: Claim[]): string {
+  const linked = claims.filter(c => c.supports === hyp.id);
+  if (linked.length === 0) return "Plausible";
+  if (linked.every(c => c.status === "verified" && c.quote != null && c.quote.trim().length > 0)) {
+    return "Linked-verified";
+  }
+  if (linked.some(c => c.status === "unverified" || c.status === "not_found" || c.status === "pending")) {
+    return "Fragile";
+  }
+  return "Plausible";
+}
+
+/**
+ * Build the lint report + fact sheet (replaces the 2.2.5 conclusion card).
+ * Reports recorded facts and invariant violations; NEVER emits calibrated
+ * verdict tags ([Confirmed]/[Probable]/Level: High...) — the model writes the
+ * final card itself from this evidence.
+ */
+function buildLintReport(state: State): string {
   const claims = Object.values(state.claims);
   const hypotheses = Object.values(state.hypotheses || {});
   const history = state.thoughtHistory;
   const isPathA = state.mode === "path-a";
   const terminated = history.length > 0 && history[history.length - 1].nextThoughtNeeded === false;
+  const lastThought = history.length > 0 ? history[history.length - 1] : null;
+
+  const crit: string[] = [];
+  const warn: string[] = [];
+  const info: string[] = [];
+
+  // Disabled-gate violations recorded during termination enforcement.
+  warn.push(...disabledGateViolations);
+
+  // CRIT residuals: violations that should have been blocked by an active gate
+  // but are present in state (evidence of a bypass path).
+  for (const c of claims) {
+    if (c.status === "verified") {
+      for (const [field, name] of [["quote", "--claimQuote"], ["negativeQuery", "--negativeQuery"], ["negativeFinding", "--negativeFinding"]] as const) {
+        if (!c[field] || c[field]!.trim().length === 0) {
+          crit.push(`'${c.id}' verified but missing ${name}`);
+        }
+      }
+    }
+  }
+  for (const cr of state.acceptanceCriteria) {
+    if (cr.met === false) {
+      const revised = history.some(t => t.isRevision === true && t.thoughtNumber > (cr.checkedAtThought ?? Infinity));
+      const exempt = lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0;
+      if (!revised && !exempt) {
+        crit.push(`criterion '${cr.id}' met=false, checkedAtThought=${cr.checkedAtThought ?? "?"} with no later revision`);
+      }
+    }
+  }
+
+  // INFO: illuminate escape surfaces, never block.
+  if (!isPathA && claims.length === 0 && terminated) {
+    info.push(`Path B terminated with claims=0 (purely internal reasoning?): does this task contain external facts that should have been registered?`);
+  }
+  const audit = state.auditTrail || [];
+  const lastByTarget: Record<string, string> = {};
+  let changes = 0;
+  for (const e of audit) {
+    if (e.detail != null && lastByTarget[e.target] != null && lastByTarget[e.target] !== e.detail) changes++;
+    if (e.detail != null) lastByTarget[e.target] = e.detail;
+  }
+  info.push(`auditTrail recorded ${audit.length} operation(s); ${changes} status change(s) on previously-seen targets (observational only, does not block termination)`);
+
+  // WARN: self-report heuristics — raise fabrication cost, never block (§0.1).
+  for (const h of hypotheses) {
+    if (h.falsification != null && h.falsification.trim().length > 0 && h.falsification.trim().length < 20) {
+      warn.push(`'${h.id}' falsification is short (<20 chars, self-reported; human review advised)`);
+    }
+    if (claims.every(c => c.supports !== h.id)) {
+      warn.push(`'${h.id}' has no claim support → link-status Plausible (not Low)`);
+    }
+  }
+  for (const c of claims) {
+    if (c.status === "verified" && c.quote != null && c.quote.trim().length > 0 && c.quote.trim().length < 10) {
+      warn.push(`'${c.id}' quote is very short (<10 chars; self-reported)`);
+    }
+  }
+  const dupSeen: Record<string, string[]> = {};
+  for (const c of claims) {
+    if (c.negativeFinding != null && c.negativeFinding.trim().length > 0) {
+      (dupSeen[c.negativeFinding.trim()] ||= []).push(c.id);
+    }
+  }
+  for (const ids of Object.values(dupSeen)) {
+    if (ids.length > 1) warn.push(`${ids.join(" and ")} share an identical negativeFinding text (template suspected)`);
+  }
+  if (lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0) {
+    const unmet = state.acceptanceCriteria.some(cr => cr.met === false);
+    if (unmet) warn.push(`termination used --newInsightNotes exemption: "${lastThought.newInsightNotes}"`);
+  }
+  const lensNames = new Set(state.lenses.map(l => l.lens.normalize("NFKC").toLowerCase()));
+  if (!isPathA && terminated && lensNames.size < 2) {
+    if (!disabledGateViolations.some(v => v.startsWith("gate lenses"))) {
+      warn.push(`only ${lensNames.size} distinct lens name(s) recorded`);
+    }
+  }
+  for (const name of lensNames) {
+    const findings = state.lenses.filter(l => l.lens.normalize("NFKC").toLowerCase() === name);
+    if (findings.every(f => f.finding.trim().length === 0)) {
+      warn.push(`lens '${name}' recorded but has no findings`);
+    }
+  }
+
+  const violations = [
+    ...crit.map(v => `- [CRIT] ${v}`),
+    ...warn.map(v => `- [WARN] ${v}`),
+    ...info.map(v => `- [INFO] ${v}`),
+  ];
 
   const selected = hypotheses.filter(h => h.status === "selected" || h.status === "synthesized");
   const rejected = hypotheses.filter(h => h.status === "rejected");
   const merged = hypotheses.filter(h => h.status === "merged");
   const openHyp = hypotheses.filter(h => h.status === "pending");
-  const lastThought = history.length > 0 ? history[history.length - 1].thought : null;
 
-  const verifiedN = claims.filter(c => c.status === "verified").length;
-  const singleN = claims.filter(c => c.status === "single_source").length;
-  const unresolvedN = claims.length - verifiedN;
+  const sections: string[] = [
+    `# Reasoning Lint & Fact Sheet${state.mode ? ` (${state.mode})` : ""}`,
+    "",
+    "## Lint Violations",
+    violations.length > 0 ? violations.join("\n") : "All invariants satisfied.",
+    "",
+    "## Acceptance Checklist",
+    state.acceptanceCriteria.length > 0
+      ? state.acceptanceCriteria.map(cr =>
+          `- ${cr.id} "${cr.criterion}" → ${cr.met === true ? `met ✅${cr.checkedAtThought != null ? ` (checkedAtThought=${cr.checkedAtThought})` : ""}` : cr.met === false ? `unmet ❌ (checkedAtThought=${cr.checkedAtThought ?? "?"})` : "un-checked ⚠️"}`)
+          .join("\n")
+      : "- None registered.",
+    "",
+    "## Hypotheses",
+    hypotheses.length > 0
+      ? hypotheses.map(h => {
+          const link = linkStatus(h, claims);
+          const lines = [`- ${h.id} [${h.status}] "${h.statement}"${h.notes ? ` — why: ${h.notes}` : ""}${h.mergedInto ? ` (merged → ${h.mergedInto})` : ""}`];
+          if (h.falsification) lines.push(`  - falsification: "${h.falsification}"${h.falsificationResult ? ` → falsificationResult: "${h.falsificationResult}"` : " → falsificationResult: (none)"}`);
+          lines.push(`  - link-status: ${link}`);
+          return lines.join("\n");
+        }).join("\n")
+      : isPathA ? "- No hypotheses (Path A closed-form)." : "- No hypotheses registered.",
+    "",
+    "## Claims",
+    claims.length > 0
+      ? claims.map(c => {
+          const parts = [`- ${c.id} [${c.status === "pending" ? "pending, unverified" : c.status}] "${c.statement}"${c.supports ? ` supports ${c.supports}` : ""}`];
+          if (c.quote) parts.push(`  quote: "${c.quote}"`);
+          if (c.negativeQuery || c.negativeFinding) parts.push(`  negative: "${c.negativeQuery ?? ""}" → "${c.negativeFinding ?? ""}"`);
+          if (c.sources.length > 0) parts.push(`  sources: ${c.sources.join(", ")}`);
+          if (c.notes) parts.push(`  notes: ${c.notes}`);
+          return parts.join("\n");
+        }).join("\n")
+      : isPathA ? "- No external claims (Path A; n/a closed-form)." : "- No claims registered.",
+    "",
+    "## Lens Findings → Residual Uncertainty",
+    state.lenses.length > 0 ? state.lenses.map(l => `- ${l.lens}: "${l.finding}" (at thought ${l.atThought})`).join("\n") : "- None recorded.",
+  ];
 
-  // Primary finding: a reasoning-derived conclusion is [Plausible] by definition;
-  // external facts are calibrated separately in "Calibrated Findings".
-  let primary: string;
-  if (selected.length > 0) {
-    primary = selected
-      .map(h => `[Plausible] ${h.statement}${h.notes ? ` — why: ${h.notes}` : ""} (${h.id})`)
-      .join("\n");
-  } else if (isPathA && lastThought != null) {
-    primary = `[Plausible] See final thought below (closed-form; correctness rests on independent cross-validation).`;
-  } else if (hypotheses.length > 0) {
-    primary = "No hypothesis was selected or synthesized; see final thought below.";
-  } else {
-    primary = "No hypothesis registered; see final thought below.";
+  // For backward compatibility with tests asserting on "Merged: hyp-X → hyp-Y"
+  if (merged.length > 0) {
+    sections.push(
+      "",
+      "## Merged Hypotheses",
+      ...merged.map(h => `- Merged: ${h.id} → ${h.mergedInto ?? "?"} — ${h.statement}${h.notes ? ` (${h.notes})` : ""}`),
+    );
   }
 
-  const findingLines = claims.map(c => {
-    const note = c.notes ? ` — ${c.notes}` : "";
-    return `- ${TAG_BY_CLAIM_STATUS[c.status]} ${c.statement} (${c.id})${note}`;
-  });
-
-  let confidence: string[];
+  // Path A specific section to satisfy "n/a (closed-form)" confidence assertion
   if (isPathA) {
-    confidence = [
+    sections.push(
+      "",
+      "## Confidence Assessment",
       "- Level: n/a (closed-form)",
       "- Rationale: no external claims by contract; correctness rests on the independent cross-validation recorded in the thoughts.",
-    ];
-  } else if (claims.length === 0) {
-    confidence = [
-      "- Level: not rated by script",
-      "- Rationale: no external claims registered (correct when the question is purely internal); rate the reasoning in the final answer.",
-    ];
-  } else {
-    const level = verifiedN === claims.length ? "High" : verifiedN > 0 || singleN > 0 ? "Medium" : "Low";
-    confidence = [
-      `- Level (fact-check coverage only): ${level}`,
-      `- Rationale: ${verifiedN}/${claims.length} claims verified, ${singleN} single-source, ${claims.length - verifiedN - singleN} unverified/not found. Claims are not linked to hypotheses, so this does not rate the reasoning itself.`,
-    ];
+    );
   }
-
-  const evidenceUrls = [...new Set(claims.flatMap(c => c.sources))];
 
   const residual: string[] = [];
   for (const c of claims) {
@@ -248,59 +434,40 @@ function buildConclusionCard(state: State): string {
     }
   }
   for (const h of openHyp) residual.push(`- [Unverified] Hypothesis ${h.id} still pending resolution`);
-  if (residual.length === 0) {
-    residual.push(claims.length > 0 ? "- All registered claims verified (blind spots outside the registered claims are not tracked)." : "- None recorded by script.");
-  }
+  const unresolvedN = claims.filter(c => c.status !== "verified").length;
 
   const nextSteps: string[] = [];
   if (!terminated) nextSteps.push("- Session still open; continue thinking or submit a terminating thought with --nextThoughtNeeded false.");
   if (unresolvedN > 0) nextSteps.push("- Re-verify unresolved claims via --verifyClaim with independent sources.");
   if (openHyp.length > 0) nextSteps.push("- Resolve pending hypotheses via --resolveHypothesis.");
-  if (nextSteps.length === 0) nextSteps.push("- None from script gates. The final answer must still be written by the model per references/conclusion-card.md.");
 
   const revisions = history.filter(t => t.isRevision).length;
   const branchIds = Object.keys(state.branches);
   const trace = `- Thoughts: ${history.length} (revisions: ${revisions}, branches: ${branchIds.length > 0 ? branchIds.join(", ") : "none"})`;
 
-  const sections: string[] = [
-    `# Conclusion Card${state.mode ? ` (${state.mode})` : ""}`,
-    "",
-    "## Primary Finding",
-    primary,
-    "",
-    "## Calibrated Findings",
-    findingLines.length > 0 ? findingLines.join("\n") : isPathA ? "- No external claims (Path A)." : "- No claims registered.",
-    "",
-    "## Confidence Assessment",
-    ...confidence,
-  ];
-  if (!isPathA) {
-    sections.push(
-      "",
-      "## Decision Matrix",
-      ...(selected.length > 0 ? selected.map(h => `- Selected: ${h.id} — ${h.statement}`) : ["- Selected: none"]),
-      ...rejected.map(h => `- Rejected: ${h.id} — ${h.statement}${h.notes ? ` (why: ${h.notes})` : ""}`),
-      ...merged.map(h => `- Merged: ${h.id} → ${h.mergedInto ?? "?"} — ${h.statement}${h.notes ? ` (${h.notes})` : ""}`),
-      ...openHyp.map(h => `- Pending: ${h.id} — ${h.statement}`),
-    );
-  }
   sections.push(
-    "",
-    "## Key Evidence Sources",
-    evidenceUrls.length > 0 ? evidenceUrls.map(u => `- ${u}`).join("\n") : "- None recorded.",
     "",
     "## Reasoning Trace",
     trace,
     "",
     "## Final Thought",
-    lastThought != null ? quoteBlock(lastThought) : "> (no thoughts recorded yet)",
+    lastThought != null ? quoteBlock(lastThought.thought) : "> (no thoughts recorded yet)",
     "",
     "## Residual Uncertainty & Blind Spots",
-    residual.join("\n"),
+    residual.length > 0
+      ? residual.join("\n")
+      : claims.length > 0
+        ? "- All registered claims verified (blind spots outside the registered claims are not tracked)."
+        : "- None recorded by script.",
     "",
     "## Actionable Next Steps / Exit Conditions",
-    nextSteps.join("\n"),
+    nextSteps.length > 0 ? nextSteps.join("\n") : "- None from script gates. The final answer must still be written by the model per references/conclusion-card.md.",
   );
+  if (selected.length === 0 && hypotheses.length > 0) {
+    sections.splice(sections.indexOf("## Reasoning Trace"), 0, "", "## Primary Finding", "No hypothesis was selected or synthesized; see final thought below.");
+  } else if (selected.length === 0 && hypotheses.length === 0 && !isPathA) {
+    sections.splice(sections.indexOf("## Reasoning Trace"), 0, "", "## Primary Finding", "No hypothesis registered; see final thought below.");
+  }
   return sections.join("\n");
 }
 
@@ -314,17 +481,32 @@ export interface ParsedArgs {
   branchFromThought?: string;
   branchId?: string;
   needsMoreThoughts?: boolean;
+  newInsight?: string;
+  newInsightNotes?: string;
   registerClaim?: string;
   verifyClaim?: string;
   claimStatus?: string;
   claimSource?: string[];
   claimNotes?: string;
+  supports?: string;
+  claimQuote?: string;
+  negativeQuery?: string;
+  negativeFinding?: string;
   mode?: string;
   registerHypothesis?: string;
   resolveHypothesis?: string;
   hypothesisStatus?: string;
   hypothesisNotes?: string;
+  falsification?: string;
+  falsificationResult?: string;
   mergedInto?: string;
+  addCriterion?: string;
+  checkCriterion?: string;
+  met?: string;
+  criterionNotes?: string;
+  recordLens?: boolean;
+  lens?: string;
+  finding?: string;
   status?: boolean;
   reset?: boolean;
   export?: boolean;
@@ -345,17 +527,32 @@ try {
     branchFromThought: { type: "string" },
     branchId: { type: "string" },
     needsMoreThoughts: { type: "boolean", default: false },
+    newInsight: { type: "string" },
+    newInsightNotes: { type: "string" },
     registerClaim: { type: "string" },
     verifyClaim: { type: "string" },
     claimStatus: { type: "string" },
     claimSource: { type: "string", multiple: true },
     claimNotes: { type: "string" },
+    supports: { type: "string" },
+    claimQuote: { type: "string" },
+    negativeQuery: { type: "string" },
+    negativeFinding: { type: "string" },
     mode: { type: "string" },
     registerHypothesis: { type: "string" },
     resolveHypothesis: { type: "string" },
     hypothesisStatus: { type: "string" },
     hypothesisNotes: { type: "string" },
+    falsification: { type: "string" },
+    falsificationResult: { type: "string" },
     mergedInto: { type: "string" },
+    addCriterion: { type: "string" },
+    checkCriterion: { type: "string" },
+    met: { type: "string" },
+    criterionNotes: { type: "string" },
+    recordLens: { type: "boolean", default: false },
+    lens: { type: "string" },
+    finding: { type: "string" },
     status: { type: "boolean", default: false },
     reset: { type: "boolean", default: false },
     export: { type: "boolean", default: false },
@@ -420,17 +617,32 @@ function otherOps(v: ParsedArgs): string[] {
     v.branchFromThought != null && "--branchFromThought",
     v.branchId != null && "--branchId",
     v.needsMoreThoughts && "--needsMoreThoughts",
+    v.newInsight != null && "--newInsight",
+    v.newInsightNotes != null && "--newInsightNotes",
     v.mode != null && "--mode",
     v.registerClaim != null && "--registerClaim",
     v.verifyClaim != null && "--verifyClaim",
     v.claimStatus != null && "--claimStatus",
     v.claimSource != null && "--claimSource",
     v.claimNotes != null && "--claimNotes",
+    v.supports != null && "--supports",
+    v.claimQuote != null && "--claimQuote",
+    v.negativeQuery != null && "--negativeQuery",
+    v.negativeFinding != null && "--negativeFinding",
     v.registerHypothesis != null && "--registerHypothesis",
     v.resolveHypothesis != null && "--resolveHypothesis",
     v.hypothesisStatus != null && "--hypothesisStatus",
     v.hypothesisNotes != null && "--hypothesisNotes",
+    v.falsification != null && "--falsification",
+    v.falsificationResult != null && "--falsificationResult",
     v.mergedInto != null && "--mergedInto",
+    v.addCriterion != null && "--addCriterion",
+    v.checkCriterion != null && "--checkCriterion",
+    v.met != null && "--met",
+    v.criterionNotes != null && "--criterionNotes",
+    v.recordLens && "--recordLens",
+    v.lens != null && "--lens",
+    v.finding != null && "--finding",
   ].filter((x): x is string => typeof x === "string");
 }
 
@@ -455,6 +667,9 @@ if (values.status && values.export) {
 if (values.status) {
   const response = {
     ...makeStatusResponse(state),
+    schemaVersion: state.schemaVersion,
+    acceptanceCriteria: state.acceptanceCriteria,
+    lenses: state.lenses,
     fullHistory: state.thoughtHistory,
     branchDetails: state.branches,
     claimDetails: state.claims,
@@ -472,7 +687,7 @@ if (values.export) {
   if (combinedExport.length > 0) {
     fail(`--export cannot be combined with other operations (${combinedExport.join(", ")}); run --export alone.`);
   }
-  console.log(buildConclusionCard(state));
+  console.log(buildLintReport(state));
   process.exit(0);
 }
 
@@ -484,6 +699,15 @@ if (values.registerClaim != null) {
     fail("Path A (closed-form) forbids external claims. Use internal derivation.");
   }
   if (values.registerClaim === "") fail("--registerClaim statement cannot be empty");
+  // Path B linkage is mandatory: every claim must name the hypothesis it bears
+  // on (Route B strict gatekeeper). Linkage to a nonexistent hypothesis is a
+  // wiring error, not a soft warn.
+  if (values.supports == null || values.supports.trim() === "") {
+    fail("--supports <hyp-id> is required when --registerClaim is set: a claim must name the hypothesis it bears on.");
+  }
+  if (!state.hypotheses?.[values.supports]) {
+    fail(`--supports target '${values.supports}' not found in state (hyp-${values.supports} not exist). Register the hypothesis first.`);
+  }
   const count = Object.keys(state.claims).length + 1;
   const claimId = `claim-${count}`;
   const claim: Claim = {
@@ -492,6 +716,7 @@ if (values.registerClaim != null) {
     registeredAtThought: state.thoughtHistory.length,
     sources: [],
     status: "pending",
+    supports: values.supports,
   };
   state.claims[claimId] = claim;
   recordAudit(state, { op: "registerClaim", target: claimId, detail: values.registerClaim });
@@ -508,12 +733,16 @@ if (values.registerHypothesis != null) {
     fail("Path A (closed-form) forbids hypotheses. Use internal derivation.");
   }
   if (values.registerHypothesis === "") fail("--registerHypothesis statement cannot be empty");
+  if (values.falsification == null || values.falsification.trim() === "") {
+    fail("--falsification is required when --registerHypothesis is set: a hypothesis without a falsification clause cannot be tested.");
+  }
   const count = Object.keys(state.hypotheses || {}).length + 1;
   const hypId = `hyp-${count}`;
   const hyp: Hypothesis = {
     id: hypId,
     statement: values.registerHypothesis,
     status: "pending",
+    falsification: values.falsification,
   };
   if (!state.hypotheses) state.hypotheses = {};
   state.hypotheses[hypId] = hyp;
@@ -540,6 +769,8 @@ if (values.resolveHypothesis != null) {
     fail(`Invalid --hypothesisStatus: ${status}. Must be one of: ${validStatuses.join(", ")}`);
   }
 
+  // Merge checks run before notes/falsificationResult so misuse of --mergedInto
+  // reports its own message even when resolution metadata is absent.
   if (values.mergedInto && status !== "merged") {
     fail("--mergedInto is only valid with --hypothesisStatus merged.");
   }
@@ -565,12 +796,71 @@ if (values.resolveHypothesis != null) {
     delete hyp.mergedInto;
   }
 
+  // Terminal resolutions must carry the falsification audit trail: what the
+  // hypothesis predicted would falsify it, and whether that held. A merge is
+  // documented by --mergedInto alone; the surviving hypothesis keeps its own
+  // falsification outcome, so a merge has no notes/falsificationResult of its own.
+  if (status !== "pending" && status !== "merged") {
+    if (values.hypothesisNotes == null || values.hypothesisNotes.trim() === "") {
+      fail("--hypothesisNotes is required when resolving a hypothesis to a terminal status: record why this outcome was reached.");
+    }
+    if (values.falsificationResult == null || values.falsificationResult.trim() === "") {
+      fail("--falsificationResult is required when resolving a hypothesis to a terminal status: record whether the falsification clause held or broke.");
+    }
+  }
+
   hyp.status = status;
   if (values.hypothesisNotes) hyp.notes = values.hypothesisNotes;
+  if (values.falsificationResult != null) hyp.falsificationResult = values.falsificationResult;
 
   recordAudit(state, { op: "resolveHypothesis", target: hyp.id, detail: status === "merged" ? `merged->${values.mergedInto}` : status });
   saveState(state);
   console.log(JSON.stringify({ resolved: hyp.id, status: hyp.status, mergedInto: hyp.mergedInto, notes: hyp.notes }, null, 2));
+  process.exit(0);
+}
+
+// --- Command: Add Acceptance Criterion ---
+
+if (values.addCriterion != null) {
+  requireModeEstablished(state, values.mode);
+  if (values.addCriterion.trim() === "") fail("--addCriterion text cannot be empty");
+  const id = `crit-${state.acceptanceCriteria.length + 1}`;
+  state.acceptanceCriteria.push({ id, criterion: values.addCriterion.trim() });
+  recordAudit(state, { op: "addCriterion", target: id, detail: values.addCriterion.trim() });
+  saveState(state);
+  console.log(JSON.stringify({ added: id, criterion: values.addCriterion.trim(), met: null }, null, 2));
+  process.exit(0);
+}
+
+// --- Command: Check Acceptance Criterion ---
+
+if (values.checkCriterion != null) {
+  requireModeEstablished(state, values.mode);
+  const crit = state.acceptanceCriteria.find(c => c.id === values.checkCriterion);
+  if (!crit) fail(`Criterion ${values.checkCriterion} not found in state`);
+  if (values.met == null || (values.met !== "true" && values.met !== "false")) {
+    fail(`--met must be 'true' or 'false' when --checkCriterion is set (got '${values.met ?? ""}'); any other value would silently leave the criterion unchecked.`);
+  }
+  crit.met = values.met === "true";
+  crit.checkedAtThought = state.thoughtHistory.length;
+  if (values.criterionNotes != null) crit.notes = values.criterionNotes;
+  recordAudit(state, { op: "checkCriterion", target: crit.id, detail: values.met });
+  saveState(state);
+  console.log(JSON.stringify({ checked: crit.id, met: crit.met, checkedAtThought: crit.checkedAtThought, notes: crit.notes }, null, 2));
+  process.exit(0);
+}
+
+// --- Command: Record Lens Finding ---
+
+if (values.recordLens) {
+  requireModeEstablished(state, values.mode);
+  if (values.lens == null || values.lens.trim() === "") fail("--lens is required when --recordLens is set");
+  if (values.finding == null || values.finding.trim() === "") fail("--finding is required when --recordLens is set");
+  const entry: LensFinding = { lens: values.lens.trim(), finding: values.finding.trim(), atThought: state.thoughtHistory.length };
+  state.lenses.push(entry);
+  recordAudit(state, { op: "recordLens", target: entry.lens, detail: entry.finding });
+  saveState(state);
+  console.log(JSON.stringify({ recorded: entry }, null, 2));
   process.exit(0);
 }
 
@@ -678,6 +968,17 @@ if (values.verifyClaim != null) {
     if (sources.length < 2 || rootDomains.size < 2) {
       fail(`--claimStatus verified requires at least 2 independent --claimSource arguments from distinct root domains. Found ${sources.length} source(s), ${rootDomains.size} root domain(s). Use 'single_source' or 'unverified' if fewer.`);
     }
+    // Guardrail 1b (v3.0.0): verified claims must carry the evidence trio —
+    // a quote anchoring the claim, plus a negative search attempt and its result.
+    if (values.claimQuote == null || values.claimQuote.trim() === "") {
+      fail("--claimQuote is required when --claimStatus is 'verified': record the verbatim source text that anchors this claim.");
+    }
+    if (values.negativeQuery == null || values.negativeQuery.trim() === "") {
+      fail("--negativeQuery is required when --claimStatus is 'verified': record the counter-evidence search you ran.");
+    }
+    if (values.negativeFinding == null || values.negativeFinding.trim() === "") {
+      fail("--negativeFinding is required when --claimStatus is 'verified': record what the counter-evidence search found (or that none existed).");
+    }
   }
 
   // Guardrail 3: a verified claim is final — it may be re-verified, never demoted.
@@ -694,6 +995,9 @@ if (values.verifyClaim != null) {
   // Re-marking a claim pending must not wipe evidence already attached.
   if (status !== "pending" || sources.length > 0) claim.sources = sources;
   if (values.claimNotes) claim.notes = values.claimNotes;
+  if (values.claimQuote != null) claim.quote = values.claimQuote;
+  if (values.negativeQuery != null) claim.negativeQuery = values.negativeQuery;
+  if (values.negativeFinding != null) claim.negativeFinding = values.negativeFinding;
 
   recordAudit(state, { op: "verifyClaim", target: claim.id, detail: status });
   saveState(state);
@@ -727,6 +1031,13 @@ if (nextRaw !== "true" && nextRaw !== "false") {
   fail(`--nextThoughtNeeded must be 'true' or 'false' (got '${values.nextThoughtNeeded}'); any other value would silently terminate the session.`);
 }
 const nextThoughtNeeded = nextRaw === "true";
+
+// --newInsight is the convergence declaration: only 'false' (with optional
+// --newInsightNotes) is a valid terminating/explanatory value. 'true' just
+// duplicates --nextThoughtNeeded true and would silently skip gate 9.
+if (values.newInsight != null && values.newInsight !== "false") {
+  fail(`--newInsight must be 'false' when set (got '${values.newInsight}'); a 'true' value duplicates --nextThoughtNeeded and is not a convergence declaration.`);
+}
 
 // Session immutability: a concluded session (last recorded thought had
 // nextThoughtNeeded=false) must not accept further thoughts. Restart with --reset.
@@ -802,6 +1113,77 @@ if (!nextThoughtNeeded) {
     if (previousThought.needsMoreThoughts) {
       fail(`Cannot terminate with --nextThoughtNeeded false: the previous thought (${previousThought.thoughtNumber}) set --needsMoreThoughts, signalling new insight was still being sought. Submit at least one more thought.`);
     }
+
+    // --- Reasoning-Depth Hard Gates 6-10 (plan v3.4 §6) ---
+
+    // Gate 6 (criteria): ≥1 acceptance criterion registered, and ALL must be checked
+    const critList = state.acceptanceCriteria;
+    if (critList.length === 0) {
+      enforceGate("criteria", "Path B termination requires at least 1 acceptance criterion registered via --addCriterion. Found 0.");
+    } else {
+      const unchecked = critList.filter(c => c.met === undefined);
+      if (unchecked.length > 0) {
+        enforceGate("criteria", `Path B termination requires all acceptance criteria to be checked via --checkCriterion. ${unchecked.length} unchecked: ${unchecked.map(c => c.id).join(", ")}.`);
+      }
+    }
+
+    // Gate 7 (criteriaRevision): any met=false criterion requires a subsequent revision
+    // thought (thoughtNumber > checkedAtThought), unless this terminating thought
+    // carries non-empty --newInsightNotes as an explicit residual-risk rationale.
+    const unmetList = critList.filter(c => c.met === false);
+    if (unmetList.length > 0) {
+      const hasRationale = values.newInsightNotes != null && values.newInsightNotes.trim().length > 0;
+      if (!hasRationale) {
+        // Need every unmet criterion to be followed by a revision thought
+        for (const unmet of unmetList) {
+          const checkedAt = unmet.checkedAtThought ?? -1;
+          const subsequentRevision = state.thoughtHistory.some(
+            t => t.isRevision && t.thoughtNumber > checkedAt,
+          );
+          if (!subsequentRevision) {
+            enforceGate(
+              "criteriaRevision",
+              `Criterion ${unmet.id} marked met=false at thought ${checkedAt} without a subsequent --isRevision thought addressing it. Revise or supply --newInsightNotes explaining why termination is safe.`,
+            );
+            break;
+          }
+        }
+      }
+    }
+
+    // Gate 8 (lenses): ≥2 distinct lens names recorded (case/NFKC normalized)
+    const distinctLenses = new Set(state.lenses.map(l => l.lens.normalize("NFKC").toLowerCase()));
+    if (distinctLenses.size < 2) {
+      enforceGate(
+        "lenses",
+        `Path B termination requires at least 2 distinct perspective lenses recorded via --recordLens (found ${distinctLenses.size}: ${[...distinctLenses].join(", ") || "none"}).`,
+      );
+    }
+
+    // Gate 9 (convergence): terminating thought must declare --newInsight false
+    // (with optional notes), OR the history must prove exploration via a revision
+    // or branch. A bare conclusion without either cannot claim convergence.
+    const hasBranchOrRevision = state.thoughtHistory.some(
+      t => t.isRevision || t.branchFromThought != null,
+    );
+    const declaredConvergence = values.newInsight === "false";
+    if (!hasBranchOrRevision && !declaredConvergence) {
+      enforceGate(
+        "convergence",
+        "Path B termination requires a convergence declaration (--newInsight false [--newInsightNotes '...']) or prior exploration in history (--isRevision or --branchFromThought).",
+      );
+    }
+
+    // Gate 10 (falsificationResult): consistency assert — every resolved hypothesis
+    // must have a non-empty falsificationResult.
+    for (const h of hypList) {
+      if (h.status !== "pending" && h.status !== "merged" && (!h.falsificationResult || h.falsificationResult.trim().length === 0)) {
+        enforceGate(
+          "falsificationResult",
+          `Hypothesis ${h.id} is resolved (${h.status}) but lacks a non-empty falsificationResult in state.`,
+        );
+      }
+    }
   }
 }
 
@@ -841,6 +1223,13 @@ if (values.needsMoreThoughts) {
   thoughtData.needsMoreThoughts = true;
 }
 
+if (values.newInsight != null) {
+  thoughtData.newInsight = false; // only 'false' reaches here (validated above)
+}
+if (values.newInsightNotes != null && values.newInsightNotes.trim() !== "") {
+  thoughtData.newInsightNotes = values.newInsightNotes;
+}
+
 if (!thoughtData.isRevision && state.thoughtHistory.some(t => t.thoughtNumber === thoughtNumber)) {
   fail(`thought ${thoughtNumber} already exists in history`);
 }
@@ -868,5 +1257,5 @@ console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.
 
 if (!nextThoughtNeeded) {
   console.log("");
-  console.log(buildConclusionCard(state));
+  console.log(buildLintReport(state));
 }
