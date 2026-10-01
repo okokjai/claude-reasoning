@@ -26,7 +26,7 @@ All notable changes to this skill are documented here.
 
 ### Tests
 
-- `tests/think.test.ts` + `tests/issues.test.ts` migrated to the new API (`--falsification`, `--supports`, `--hypothesisNotes`/`--falsificationResult`, verification trio, `THINK_GATES_OFF` on terminating thoughts) and extended: merge semantics, disabled-gate warnings, criterion checks, lens records, quote verification. Suite now **129 tests across 3 files**.
+- `tests/think.test.ts` + `tests/issues.test.ts` migrated to the new API (`--falsification`, `--supports`, `--hypothesisNotes`/`--falsificationResult`, verification trio, `THINK_GATES_OFF` on terminating thoughts) and extended: merge semantics, disabled-gate warnings, criterion checks, lens records, quote verification. Suite now **133 tests across 3 files**.
 
 ### Files
 

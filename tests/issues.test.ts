@@ -388,7 +388,7 @@ describe("Audit 6: --mergedInto cannot target a rejected hypothesis", () => {
     run(["--registerHypothesis", "A", "--falsification", "f"]);
     run(["--registerHypothesis", "B", "--falsification", "f"]);
     run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
-    const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1"]);
+    const res = run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "merged", "--mergedInto", "hyp-1", "--hypothesisNotes", "absorbed into hyp-1"]);
     expect(res.code).toBe(0);
   });
 });
@@ -675,7 +675,7 @@ describe("v3.0.0 termination gates 6-10", () => {
     checkCrit("crit-1", "false");
     T(2, 4, "true", "work");
     T(3, 4, "true", "more");
-    const res = T(4, 4, "false", "conclusion", ["--newInsight", "false"], { THINK_GATES_OFF: "criteriaRevision" });
+    const res = T(4, 4, "false", "conclusion", ["--newInsight", "false"], { THINK_GATES_OFF: "criteriaRevision,convergence" });
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/\[WARN\].*gate.*criteriaRevision.*disabled/i);
   });
@@ -745,6 +745,31 @@ describe("v3.0.0 termination gates 6-10", () => {
     const res = T(4, 4, "false", "conclusion", [], { THINK_GATES_OFF: "convergence" });
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/\[WARN\].*gate.*convergence.*disabled/i);
+  });
+
+  it("Gate 9: --newInsight false alone (no notes) does not satisfy declared convergence", () => {
+    startPathB();
+    addHyps();
+    resolveBoth();
+    addLenses();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    T(3, 4, "true", "more");
+    const res = T(4, 4, "false", "conclusion", ["--newInsight", "false"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/newInsightNotes|convergen/i);
+  });
+
+  it("merged terminal status still requires --hypothesisNotes", () => {
+    startPathB();
+    addHyps();
+    const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "merged", "--mergedInto", "hyp-2"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/hypothesisNotes/i);
+    // but falsificationResult stays exempt for merged
+    const res2 = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "merged", "--mergedInto", "hyp-2", "--hypothesisNotes", "same mechanism"]);
+    expect(res2.code).toBe(0);
   });
 
   it("Gate 10 (falsificationResult): termination passes when every resolved hypothesis has falsificationResult", () => {
@@ -865,6 +890,35 @@ describe("v3.0.0 lint report additions (buildLintReport §7)", () => {
     expect(out).toContain("Acceptance Checklist");
     expect(out).toMatch(/crit-1/);
     expect(out).toMatch(/crit-2/);
+  });
+
+  it("warns on verified claims whose negativeFinding has no command/output record (single-line self-report)", () => {
+    startPathB();
+    addHyps();
+    run(["--registerClaim", "c1", "--supports", "hyp-1"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "a sufficiently long quote", "--negativeQuery", "nq1", "--negativeFinding", "just one line of self-report"]);
+    run(["--registerClaim", "c2", "--supports", "hyp-2"]);
+    run(["--verifyClaim", "claim-2", "--claimStatus", "verified", "--claimSource", "https://c.example", "--claimSource", "https://d.example", "--claimQuote", "a sufficiently long quote", "--negativeQuery", "nq2", "--negativeFinding", "bun test foo\n→ 0 matching failures"]);
+    const out = run(["--export"]).stdout;
+    expect(out).toMatch(/\[WARN\].*1\/2.*negativeFinding/i);
+  });
+
+  it("counts audit state changes in the last thought round only (entries after round-2 ops are not counted)", () => {
+    startPathB();
+    addHyps(); // atThought = 1 (round of thought 1)
+    resolveBoth();
+    run(["--addCriterion", "c"]);
+    checkCrit("crit-1", "true");
+    T(2, 4, "true", "work");
+    // last-round ops happen while history=2 (before thought 3)
+    run(["--recordLens", "--lens", "premortem", "--finding", "f1"]);
+    run(["--recordLens", "--lens", "premortem", "--finding", "changed finding"]); // same target, detail changed → 1 change
+    run(["--recordLens", "--lens", "devil", "--finding", "f2"]); // Gate 8 needs ≥2 distinct lens names
+    T(3, 4, "true", "more");
+    const res = converge();
+    expect(res.code).toBe(0);
+    const out = run(["--export"]).stdout;
+    expect(out).toContain("1 status change(s) on previously-seen targets");
   });
 });
 

@@ -76,6 +76,7 @@ export interface AuditEntry {
   op: "registerClaim" | "verifyClaim" | "registerHypothesis" | "resolveHypothesis" | "addCriterion" | "checkCriterion" | "recordLens";
   target: string;
   detail?: string;
+  atThought?: number;
 }
 
 export interface State {
@@ -138,6 +139,9 @@ function saveState(state: State): void {
 
 function recordAudit(state: State, entry: AuditEntry): void {
   if (!state.auditTrail) state.auditTrail = [];
+  if (entry.atThought === undefined) {
+    entry.atThought = state.thoughtHistory.length;
+  }
   state.auditTrail.push(entry);
 }
 
@@ -309,9 +313,11 @@ function buildLintReport(state: State): string {
     info.push(`Path B terminated with claims=0 (purely internal reasoning?): does this task contain external facts that should have been registered?`);
   }
   const audit = state.auditTrail || [];
+  const maxAtThought = audit.reduce((max, e) => Math.max(max, e.atThought ?? 0), 0);
+  const lastRoundAudit = audit.filter(e => (e.atThought ?? 0) === maxAtThought);
   const lastByTarget: Record<string, string> = {};
   let changes = 0;
-  for (const e of audit) {
+  for (const e of lastRoundAudit) {
     if (e.detail != null && lastByTarget[e.target] != null && lastByTarget[e.target] !== e.detail) changes++;
     if (e.detail != null) lastByTarget[e.target] = e.detail;
   }
@@ -339,6 +345,12 @@ function buildLintReport(state: State): string {
   }
   for (const ids of Object.values(dupSeen)) {
     if (ids.length > 1) warn.push(`${ids.join(" and ")} share an identical negativeFinding text (template suspected)`);
+  }
+  const verifiedWithSingleLineFinding = claims.filter(
+    c => c.status === "verified" && c.negativeFinding != null && !c.negativeFinding.includes("\n")
+  );
+  if (verifiedWithSingleLineFinding.length > 0) {
+    warn.push(`${verifiedWithSingleLineFinding.length}/${claims.filter(c => c.status === "verified").length} verified claims have negativeFinding without command/output record (single-line self-report; human review advised)`);
   }
   if (lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0) {
     const unmet = state.acceptanceCriteria.some(cr => cr.met === false);
@@ -800,10 +812,15 @@ if (values.resolveHypothesis != null) {
   // hypothesis predicted would falsify it, and whether that held. A merge is
   // documented by --mergedInto alone; the surviving hypothesis keeps its own
   // falsification outcome, so a merge has no notes/falsificationResult of its own.
-  if (status !== "pending" && status !== "merged") {
+  // Terminal resolutions must carry notes.
+  if (status !== "pending") {
     if (values.hypothesisNotes == null || values.hypothesisNotes.trim() === "") {
       fail("--hypothesisNotes is required when resolving a hypothesis to a terminal status: record why this outcome was reached.");
     }
+  }
+  // Merges do not require falsificationResult (the surviving hypothesis keeps its own),
+  // but all other terminal resolutions must record whether the falsification clause held or broke.
+  if (status !== "pending" && status !== "merged") {
     if (values.falsificationResult == null || values.falsificationResult.trim() === "") {
       fail("--falsificationResult is required when resolving a hypothesis to a terminal status: record whether the falsification clause held or broke.");
     }
@@ -1166,11 +1183,11 @@ if (!nextThoughtNeeded) {
     const hasBranchOrRevision = state.thoughtHistory.some(
       t => t.isRevision || t.branchFromThought != null,
     );
-    const declaredConvergence = values.newInsight === "false";
+    const declaredConvergence = values.newInsight === "false" && values.newInsightNotes != null && values.newInsightNotes.trim().length > 0;
     if (!hasBranchOrRevision && !declaredConvergence) {
       enforceGate(
         "convergence",
-        "Path B termination requires a convergence declaration (--newInsight false [--newInsightNotes '...']) or prior exploration in history (--isRevision or --branchFromThought).",
+        "Path B termination requires a convergence declaration (--newInsight false --newInsightNotes '...') or prior exploration in history (--isRevision or --branchFromThought).",
       );
     }
 
