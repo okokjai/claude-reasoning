@@ -832,6 +832,29 @@ if (values.registerHypothesis != null) {
   process.exit(0);
 }
 
+/**
+ * Projects the subset of fields legal for a target hypothesis status. A merged
+ * node carries mergedInto (+ optional notes) but never a falsification outcome;
+ * terminal non-merge statuses carry notes + falsificationResult; pending carries
+ * neither. Replaces mutate-then-delete so a stale field cannot survive a
+ * transition regardless of which resolution ran before.
+ */
+function projectHypothesisForStatus(
+  base: Pick<Hypothesis, "id" | "statement" | "falsification">,
+  status: HypothesisStatus,
+  fields: { notes?: string; falsificationResult?: string; mergedInto?: string },
+): Hypothesis {
+  const out: Hypothesis = { id: base.id, statement: base.statement, status, falsification: base.falsification };
+  if (status === "merged") {
+    if (fields.mergedInto != null) out.mergedInto = fields.mergedInto;
+    if (fields.notes != null) out.notes = fields.notes;
+  } else if (status !== "pending") {
+    if (fields.notes != null) out.notes = fields.notes;
+    if (fields.falsificationResult != null) out.falsificationResult = fields.falsificationResult;
+  }
+  return out;
+}
+
 // --- Command: Resolve Hypothesis ---
 
 if (values.resolveHypothesis != null) {
@@ -879,12 +902,9 @@ if (values.resolveHypothesis != null) {
     // Project a clean object: only fields valid for the target status are
     // carried over, so a stale falsificationResult/notes can never survive a
     // merge regardless of which resolution ran before.
-    const clean: Hypothesis = {
-      id: hyp.id, statement: hyp.statement, status,
-      falsification: hyp.falsification, mergedInto: target,
-    };
-    if (values.hypothesisNotes) clean.notes = values.hypothesisNotes;
-    state.hypotheses![hyp.id] = clean;
+    state.hypotheses![hyp.id] = projectHypothesisForStatus(hyp, status, {
+      mergedInto: target, notes: values.hypothesisNotes,
+    });
   } else {
     // A survivor that still absorbs members (mergedInto pointers) cannot be
     // re-resolved to `rejected`/`pending`: that would strand each member's
@@ -900,10 +920,9 @@ if (values.resolveHypothesis != null) {
     }
     // Project a clean object: mergedInto/notes/falsificationResult are only
     // written when valid for this status, never deleted after the fact.
-    const clean: Hypothesis = { id: hyp.id, statement: hyp.statement, status, falsification: hyp.falsification };
-    if (values.hypothesisNotes) clean.notes = values.hypothesisNotes;
-    if (values.falsificationResult != null) clean.falsificationResult = values.falsificationResult;
-    state.hypotheses![hyp.id] = clean;
+    state.hypotheses![hyp.id] = projectHypothesisForStatus(hyp, status, {
+      notes: values.hypothesisNotes, falsificationResult: values.falsificationResult,
+    });
   }
 
   // Terminal resolutions must carry the falsification audit trail: what the

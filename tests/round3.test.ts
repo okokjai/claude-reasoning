@@ -346,4 +346,20 @@ describe("round-8 review: temporal-index gates and flag-pair silent drops", () =
     const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
     expect(s.thoughtHistory.map((t: { historyIndex?: number }) => t.historyIndex)).toEqual([1, 2]);
   });
+
+  it("re-resolving a merged hypothesis to rejected clears mergedInto via projection", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1", "--falsification", "f1 clause long enough"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f2 clause long enough"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "merged", "--mergedInto", "hyp-2", "--hypothesisNotes", "absorbed"]);
+    const s1 = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s1.hypotheses["hyp-1"].mergedInto).toBe("hyp-2");
+    expect(s1.hypotheses["hyp-1"].falsificationResult).toBeUndefined();
+    // hyp-1 absorbs nothing, so it may be re-resolved; mergedInto must not survive.
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "bad idea", "--falsificationResult", "broken"]);
+    const s2 = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s2.hypotheses["hyp-1"].status).toBe("rejected");
+    expect(s2.hypotheses["hyp-1"].mergedInto).toBeUndefined();
+    expect(s2.hypotheses["hyp-1"].falsificationResult).toBe("broken");
+  });
 });
