@@ -58,8 +58,8 @@ export interface AcceptanceCriterion {
 - Thought push: `thoughtData.historyIndex = state.thoughtHistory.length + 1` before `push()`.
 
 **Read paths (Gate 7 + lint WARN + status render):**
-- Replace `unmet.checkedAtThought` with `unmet.checkedAtHistoryIndex ?? unmet.checkedAtThought ?? -1`.
-- `buildLintReport` line ~304 and status render line ~398: same dual-read fallback.
+- `checkedAt` dual-read: `unmet.checkedAtHistoryIndex ?? unmet.checkedAtThought ?? -1` (Gate 7) and `cr.checkedAtHistoryIndex ?? cr.checkedAtThought` (lint WARN + status render).
+- **v3.0.4:** Gate 7 and the lint WARN now compare `t.historyIndex` — not `idx + 1` — against `checkedAt`, so a stored-but-reordered `thoughtHistory` cannot fool the temporal check. `historyIndex` is the semantic timeline; array order is presentation.
 
 ### 2.2 State Projection Factory (optional hardening)
 
@@ -95,12 +95,12 @@ function projectHypothesisForStatus(
 
 ## 3. Non-Goals
 
-- No change to Gate 7 *semantics* — only the field's name/derivation is refactored; `idx + 1 > checkedAt` logic stays identical.
+- Gate 7 *comparison value* is unchanged (`> checkedAt`); v3.0.4 swaps the operand from array `idx + 1` to the persisted `t.historyIndex`. This is a semantic-source fix, not a semantics change — the field now actually carries the timeline the spec promised.
 - No `verifyClaim` factory extraction (see 2.2).
 - No changes to `thoughtNumber` validation, duplicate checks, or branch logic.
 
 ## 4. Verification
 
 - `bun test` must pass 198/0 plus any new regression tests added.
-- New regression tests: (a) legacy state file with `checkedAtThought` only → Gate 7 still evaluates correctly after migration; (b) `historyIndex` present and sequential on all `thoughtHistory` entries after migration and after new pushes.
+- New regression tests: (a) legacy state file with `checkedAtThought` only → Gate 7 still evaluates correctly after migration; (b) `historyIndex` present and sequential on all `thoughtHistory` entries after migration and after new pushes; (c) Gate 7 reads `t.historyIndex`, not `idx + 1` — a revision relocated to array index 0 with `historyIndex=2` still satisfies the gate.
 - `bun scripts/think.ts --status` on a migrated state shows no behavioral difference.

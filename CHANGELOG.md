@@ -2,6 +2,14 @@
 
 All notable changes to this skill are documented here.
 
+## [3.0.4] - 2026-10-03
+
+### Fixed
+
+- **Gate 7 and the lint WARN compared `idx + 1`, not `t.historyIndex`.** The v3.0.3 refactor introduced `historyIndex` as the explicit physical timeline but left the two temporal-position checks reading array index — a stored `thoughtHistory` reordered by an external tool (or any future writer that did not maintain index==position) would silently defeat the revision-after-check invariant. Both sites now read `(t.historyIndex ?? 0) > checkedAt`.
+- **`ThoughtData.historyIndex` was typed optional.** The spec declared it required; the optional type let a hypothetical writer skip the field without a type error. It is now `historyIndex: number` — set unconditionally on push and backfilled on load for pre-v3 files, so every persisted entry carries it.
+
+
 ## [3.0.3] - 2026-10-02
 
 ### Changed
