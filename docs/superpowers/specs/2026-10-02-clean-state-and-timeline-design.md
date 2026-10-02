@@ -1,124 +1,106 @@
 # Architecture Spec: Clean State & Temporal Timeline Refactoring (v3.0.3)
 
-## Status: Proposed (Brainstorming Phase)
-Date: 2026-10-02
-Scope: Architectural Refactoring
+## Status: Approved (revised after baseline audit)
+Date: 2026-10-02 · Branch: `refactor/clean-state-and-timeline`
+Worktree: `C:/tmp/DONE/claude-reasoning-refactor`
 
 ---
 
 ## 1. Problem Statement & Motivation
 
-Prior iterations fixed edge cases via localized patches ("whack-a-mole"):
-1. **Temporal Index Ambiguity:** `checkedAtThought` in `AcceptanceCriterion` stored physical history length (`thoughtHistory.length`), but its name and semantic documentation suggested it compared with `thoughtNumber`. When revisions reuse a previous `thoughtNumber` (e.g. revision of thought 2 occurring at history step 4), this conflation caused Gate 7 to miscalculate temporal ordering.
-2. **In-place Mutation & Delete Patching:** State updates on `Hypothesis` and `Claim` previously mutated existing state and deleted disallowed fields manually (`delete hyp.notes`, `delete claim.tiers`). This allowed stale attributes to linger across state transitions.
-3. **Rigid Test Count Coupling in Documentation:** Documents like `CHANGELOG.md` hardcoded dynamic test numbers (`Verified: two concurrent bun test runs both finish 198/0`, `Suite now 198 tests`), causing doc review gates to fail on every incremental test addition.
+Prior iterations fixed edge cases via localized patches ("whack-a-mole"). Baseline audit on the refactor worktree confirms:
+
+1. **Temporal index ambiguity — CONFIRMED REAL.** `AcceptanceCriterion.checkedAtThought` stores `state.thoughtHistory.length` (a physical count) but its name conflates it with the user-facing `thoughtNumber` (reusable by revisions). `ThoughtData` has no explicit physical index field; position is implicit in array order.
+
+2. **Delete-patching — ALREADY RESOLVED in v3.0.2.** `grep "delete" scripts/think.ts` → 0 hits. `resolveHypothesis` (874-898) and `verifyClaim` (1173-1187) already project clean objects per status. Residual risk is *implicit* logic: no named Factory encapsulates the allowed-fields-per-status rule.
+
+3. **Rigid doc counters — CONFIRMED REAL.** `CHANGELOG.md` line 12 (`finish 198/0`) and line 50 (`Suite now **198 tests**`) hardcode numbers that go stale on every test addition.
+
+**Net new work for v3.0.3:** temporal-index field rename + `historyIndex` on `ThoughtData` + optional Factory extraction + doc counter cleanup.
 
 ---
 
-## 2. Proposed Architecture & Solutions
+## 2. Design
 
-### Section 2.1: Unified Temporal Timeline (`historyIndex`)
-- **Core Concept:** Distinguish between user-declared sequential counter (`thoughtNumber`) and immutable physical event timeline (`historyIndex`).
-- **Data Model:**
-  ```ts
-  export interface ThoughtData {
-    thought: string;
-    thoughtNumber: number;
-    totalThoughts: number;
-    nextThoughtNeeded: boolean;
-    historyIndex: number; // 1-based physical chronological index
-    // ...
-  }
+### 2.1 Unified Temporal Timeline
 
-  export interface AcceptanceCriterion {
-    id: string;
-    criterion: string;
-    met?: boolean;
-    notes?: string;
-    checkedAtHistoryIndex?: number; // 1-based history position when checked
-    /** @deprecated backward-compat alias for checkedAtHistoryIndex */
-    checkedAtThought?: number;
-  }
-  ```
-- **Backward Compatibility:**
-  When loading persisted state in `loadState()`:
-  - If `c.checkedAtHistoryIndex` is undefined but `c.checkedAtThought` exists, migrate: `c.checkedAtHistoryIndex = c.checkedAtThought`.
-  - Maintain getter/setter or populate both during `checkCriterion` execution so external scripts/tests expecting either field remain green.
-- **Gate 7 & Lint Evaluation:**
-  - Evaluates `(idx + 1) > (criterion.checkedAtHistoryIndex ?? -1)`. Clear, unambiguous physical index check.
+**Data model:**
 
-### Section 2.2: Pure State Projection Factories
-- **Core Concept:** Complete replacement of `delete` operations with declarative, pure projection factories.
-- **Factory Definitions:**
-  ```ts
-  export function projectHypothesis(
-    base: { id: string; statement: string; falsification?: string },
-    targetStatus: HypothesisStatus,
-    fields: {
-      notes?: string;
-      falsificationResult?: string;
-      mergedInto?: string;
-    }
-  ): Hypothesis {
-    switch (targetStatus) {
-      case "pending":
-        return {
-          id: base.id,
-          statement: base.statement,
-          status: "pending",
-          falsification: base.falsification,
-        };
-      case "selected":
-      case "rejected":
-      case "synthesized":
-        return {
-          id: base.id,
-          statement: base.statement,
-          status: targetStatus,
-          falsification: base.falsification,
-          notes: fields.notes,
-          falsificationResult: fields.falsificationResult,
-        };
-      case "merged":
-        return {
-          id: base.id,
-          statement: base.statement,
-          status: "merged",
-          falsification: base.falsification,
-          mergedInto: fields.mergedInto,
-          ...(fields.notes ? { notes: fields.notes } : {}),
-        };
-    }
-  }
-  ```
-  ```ts
-  export function projectClaim(
-    base: { id: string; claim: string; supports?: string },
-    targetStatus: ClaimStatus,
-    evidence: {
-      sources?: string[];
-      tiers?: number[];
-      quote?: string;
-      negativeQuery?: string;
-      negativeFinding?: string;
-      notes?: string;
-    }
-  ): Claim {
-    // Only includes evidence fields legally permitted for targetStatus
-    // Eliminates any possibility of residual tiers/quotes in pending status.
-  }
-  ```
+```ts
+export interface ThoughtData {
+  thought: string;
+  thoughtNumber: number;      // user-supplied; may repeat on revisions
+  totalThoughts: number;
+  nextThoughtNeeded: boolean;
+  historyIndex: number;       // NEW: 1-based physical position in thoughtHistory
+  isRevision?: boolean;
+  // ...existing fields unchanged
+}
 
-### Section 2.3: Decoupled Documentation & Invariant Rules
-- **Policy:**
-  - `README.md` and `SKILL.md` use lower-bound milestone counters: `190+ tests across 6 files`.
-  - `CHANGELOG.md` entry descriptions focus on feature behavior and breaking changes. Remove fragile inline counters like `both finish 198/0` in changelog prose; state metrics only in summary headers or milestone releases where appropriate.
+export interface AcceptanceCriterion {
+  id: string;
+  criterion: string;
+  met?: boolean;
+  notes?: string;
+  checkedAtHistoryIndex?: number; // NEW primary field
+  /** @deprecated legacy field; migrated on load, still written for back-compat */
+  checkedAtThought?: number;
+}
+```
+
+**Migration in `loadState()` (schema v2 → v3):**
+- For each criterion: `checkedAtHistoryIndex ??= checkedAtThought`.
+- For each thought in `thoughtHistory`: `historyIndex ??= index + 1`.
+- `SCHEMA_VERSION` bump `2 → 3`; existing `data.schemaVersion !== SCHEMA_VERSION` check persists the migrated form.
+
+**Write paths:**
+- `checkCriterion` handler: `crit.checkedAtHistoryIndex = state.thoughtHistory.length; crit.checkedAtThought = state.thoughtHistory.length;` (same value; `checkedAt` semantics = "history length at check time" = position of the next thought — preserved verbatim).
+- Thought push: `thoughtData.historyIndex = state.thoughtHistory.length + 1` before `push()`.
+
+**Read paths (Gate 7 + lint WARN + status render):**
+- Replace `unmet.checkedAtThought` with `unmet.checkedAtHistoryIndex ?? unmet.checkedAtThought ?? -1`.
+- `buildLintReport` line ~304 and status render line ~398: same dual-read fallback.
+
+### 2.2 State Projection Factory (optional hardening)
+
+Status quo already projects clean objects. Hardening wraps the per-status allowed-fields rule in a named pure function so the invariant is greppable and future edits can't reintroduce `delete`:
+
+```ts
+function projectHypothesisForStatus(
+  base: Pick<Hypothesis, "id" | "statement" | "falsification">,
+  status: HypothesisStatus,
+  fields: { notes?: string; falsificationResult?: string; mergedInto?: string },
+): Hypothesis {
+  const out: Hypothesis = { id: base.id, statement: base.statement, status, falsification: base.falsification };
+  if (status === "merged") {
+    if (fields.mergedInto != null) out.mergedInto = fields.mergedInto;
+    if (fields.notes != null) out.notes = fields.notes;
+  } else if (status !== "pending") {
+    if (fields.notes != null) out.notes = fields.notes;
+    if (fields.falsificationResult != null) out.falsificationResult = fields.falsificationResult;
+  }
+  return out;
+}
+```
+
+`resolveHypothesis` delegates both branches. `verifyClaim` already projects correctly; extracting it to a factory is **out of scope** (claim projection has conditional keep-prior-fields logic — sources/tiers — that doesn't fit a clean per-status whitelist; leave as-is).
+
+### 2.3 Documentation Decoupling
+
+- `README.md`: keep `190+ tests across 6 files`.
+- `CHANGELOG.md` v3.0.2 section: replace `both finish 198/0` → `both finish with zero failures`; `Suite now **198 tests across 6 files**` → `Suite covers … across 6 files` (descriptive, count-free).
+- New v3.0.3 section: no absolute test counts; describe modules and behavior changes only.
 
 ---
 
-## 3. Compatibility & Verification Matrix
-- **Existing Tests:** All 198 tests must continue to pass without regressions.
-- **Replay & Isolations:** `tests/example-replay.test.ts` and `tests/state-isolation.test.ts` verify that CLI outputs and serialized schemas stay consistent.
-- **New Regression Tests:**
-  - Test verifying backward compatibility of loading state with legacy `checkedAtThought`.
-  - Test verifying `projectHypothesis` and `projectClaim` produce clean objects devoid of unapproved keys across all valid transitions.
+## 3. Non-Goals
+
+- No change to Gate 7 *semantics* — only the field's name/derivation is refactored; `idx + 1 > checkedAt` logic stays identical.
+- No `verifyClaim` factory extraction (see 2.2).
+- No changes to `thoughtNumber` validation, duplicate checks, or branch logic.
+
+## 4. Verification
+
+- `bun test` must pass 198/0 plus any new regression tests added.
+- New regression tests: (a) legacy state file with `checkedAtThought` only → Gate 7 still evaluates correctly after migration; (b) `historyIndex` present and sequential on all `thoughtHistory` entries after migration and after new pushes.
+- `bun scripts/think.ts --status` on a migrated state shows no behavioral difference.
