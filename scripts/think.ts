@@ -20,7 +20,7 @@ export interface ThoughtData {
   thoughtNumber: number;
   totalThoughts: number;
   nextThoughtNeeded: boolean;
-  historyIndex?: number;      // 1-based physical position in thoughtHistory; set on push, backfilled on load
+  historyIndex: number;       // 1-based physical position in thoughtHistory; set on push, backfilled on load for v2 files
   isRevision?: boolean;
   revisesThought?: number;
   branchFromThought?: number;
@@ -309,7 +309,7 @@ function buildLintReport(state: State): string {
   }
   for (const cr of state.acceptanceCriteria) {
     if (cr.met === false) {
-      const revised = history.some((t, idx) => t.isRevision === true && idx + 1 > (cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? Infinity));
+      const revised = history.some((t) => t.isRevision === true && (t.historyIndex ?? 0) > (cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? Infinity));
       const exempt = lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0;
       if (!revised && !exempt) {
         crit.push(`criterion '${cr.id}' met=false, checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? "?"} with no later revision`);
@@ -1359,7 +1359,7 @@ if (!nextThoughtNeeded) {
         for (const unmet of unmetList) {
           const checkedAt = unmet.checkedAtHistoryIndex ?? unmet.checkedAtThought ?? -1;
           const subsequentRevision = state.thoughtHistory.some(
-            (t, idx) => t.isRevision && idx + 1 > checkedAt,
+            (t) => t.isRevision && (t.historyIndex ?? 0) > checkedAt,
           );
           if (!subsequentRevision) {
             enforceGate(

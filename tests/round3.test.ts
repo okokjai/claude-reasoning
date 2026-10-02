@@ -362,4 +362,27 @@ describe("round-8 review: temporal-index gates and flag-pair silent drops", () =
     expect(s2.hypotheses["hyp-1"].mergedInto).toBeUndefined();
     expect(s2.hypotheses["hyp-1"].falsificationResult).toBe("broken");
   });
+
+  it("gate 7 reads historyIndex, not array position — revision moved to index 0 still satisfies the gate", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--addCriterion", "must be covered"]);
+    run(["--checkCriterion", "crit-1", "--met", "false"]);
+    run(["--thought", "revise crit-1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true", "--isRevision", "--revisesThought", "1"]);
+    // Reorder the persisted array: move the revision (historyIndex=2) to index
+    // 0. Under idx+1 semantics Gate 7 sees it at position 1 and compares 1 > 1
+    // → false, incorrectly blocks. Under historyIndex semantics it compares
+    // t.historyIndex=2 > checkedAt=1 → true, gate satisfied.
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    const rev = s.thoughtHistory.pop();
+    s.thoughtHistory.unshift(rev);
+    writeFileSync(STATE_FILE, JSON.stringify(s));
+    run(["--registerHypothesis", "H1", "--falsification", "f clause long enough here"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f clause long enough here"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    run(["--recordLens", "--lens", "b", "--finding", "x"]);
+    const allowed = run(["--thought", "end", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false", "--newInsight", "false"]);
+    expect(allowed.code).toBe(0);
+  });
 });
