@@ -1,4 +1,4 @@
-# claude-reasoning 3.0.1
+# claude-reasoning 3.0.2
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
@@ -6,8 +6,9 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
 - **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected; depth beyond 5 is rejected. Claims and hypotheses are forbidden in Path A.
-- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes` and `--falsificationResult`) → 2–4 critical lenses chosen for the task, recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, or any of gates 6–10 fails (unchecked acceptance criteria, unmet criterion without a revision, fewer than 2 lens names, no convergence declaration, resolved hypothesis without a falsification result). Gates 6–10 are switchable via `THINK_GATES_OFF` for ablation studies; disabled-gate violations surface as `[WARN]` lines in the lint report instead of failing.
-- **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search (with a required `--supports <hyp-id>` link), ≥2 independent sources for `verified` plus a recorded `--claimQuote`, `--negativeQuery`, and `--negativeFinding`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
+- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes` and `--falsificationResult`) → 2–4 critical lenses chosen for the task, recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, merges leave fewer than 2 distinct surviving hypotheses, **every resolved hypothesis is `rejected`** (at least one must be `selected` or `synthesized`), or any of gates 6–10 fails (unchecked acceptance criteria, unmet criterion without a revision, fewer than 2 lens names, no convergence declaration, resolved hypothesis without a falsification result). Acceptance criteria and lens records are Path B constructs and are forbidden in Path A.
+- **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search (with a required `--supports <hyp-id>` link), ≥2 independent sources for `verified` classified by `--claimTier` against `references/source-tiers.md` (at least two from Tier 1/2), plus a recorded `--claimQuote`, `--negativeQuery`, and `--negativeFinding`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
+- **Tier shape validation on every status.** A `--claimTier` supplied with any `--claimStatus` must be an integer 1–4 and one per `--claimSource`; a non-conforming vector exits 1 rather than persisting `NaN`/out-of-range tiers on a `single_source`, `unverified`, or `not_found` claim.
 - **Lint-report card.** `--export` (and session termination) prints a `buildLintReport` fact sheet: CRIT residuals that an active gate should have blocked, WARN entries (missing rationale, disabled gates, thin lens coverage), INFO escape surfaces, acceptance-criterion status, lens findings, and the block-quoted final thought — headed by the standing warning that this is the script's view of state, not the final answer.
 - **Zero MCP.** A single TypeScript state machine (`scripts/think.ts`) persisting to `scripts/.think_state.json`.
 - **Integrated High-Value References (ported & cleaned from 1.2.0):**
@@ -75,6 +76,7 @@ bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Cl
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimSource "https://aws.amazon.com/bedrock/pricing/" \
   --claimSource "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" \
+  --claimTier 1 --claimTier 1 \
   --claimQuote "Prompt caching is supported on Amazon Bedrock" \
   --negativeQuery "bedrock prompt caching unsupported regions" \
   --negativeFinding "None found; docs confirm support in all commercial regions."
@@ -125,19 +127,26 @@ These are checked in code, not just documented:
 | `--nextThoughtNeeded false` in `path-b` with fewer than 2 prior thoughts | Exit code 1 — Path B requires ≥ 1 decompose + ≥ 1 synthesis round |
 | `--nextThoughtNeeded false` in `path-b` when the previous thought set `--needsMoreThoughts` | Exit code 1 — cannot flag depth expansion then conclude immediately |
 | `--claimStatus verified` requires ≥ 2 `--claimSource` values from distinct root domains (IP-safe, multi-segment-suffix-aware, trailing root dot normalised) | Exit code 1, error names the shortfall |
+| `--claimStatus verified` requires `--claimTier <1-4>` for every `--claimSource` (positionally aligned) and ≥ 2 sources at Tier 1/2 | Exit code 1 — multiple Tier 3/4 sources cannot elevate a claim to `verified` (`references/source-tiers.md`) |
 | `--claimStatus` of any value other than `verified` on a `verified` claim | Exit code 1 — verified claims are final |
 | `--claimStatus` of `single_source` / `unverified` / `not_found` without `--claimNotes` | Exit code 1 — negative resolutions require a recorded caveat |
 | `--hypothesisStatus merged` without `--mergedInto` | Exit code 1 |
 | `--mergedInto` referencing the hypothesis being resolved or a nonexistent id | Exit code 1 |
 | `--mergedInto` referencing an already-merged hypothesis (merge chain) | Exit code 1 |
 | `--hypothesisStatus merged` on a hypothesis that already absorbs a merge (two-hop chain) | Exit code 1 |
+| `--resolveHypothesis` to `rejected`/`pending` on a survivor that still absorbs a merged member | Exit code 1 — re-point the member's `mergedInto` first |
 | `--mergedInto` passed with `--hypothesisStatus` other than `merged` | Exit code 1 |
+| `--falsificationResult` passed with `--hypothesisStatus merged` | Exit code 1 — a merge is documented by `--mergedInto` alone; the survivor keeps the falsification outcome |
+| `--resolveHypothesis` re-resolving a node to a non-`merged` status | Clears stale `mergedInto`/`notes`/`falsificationResult` — a node only carries the fields its current resolution wrote |
+| `--resolveHypothesis` to `merged` on a node that already resolved | Clears stale `falsificationResult` — the absorbed node has no falsification outcome of its own |
+| `--verifyClaim` re-verifying a claim back to `pending` | Clears resolution-scoped `tiers`/`notes`/`quote`/`negativeQuery`/`negativeFinding` — a pending claim carries no verification outcome (recorded `sources` are kept) |
 | `--nextThoughtNeeded false` in `path-b` when merges leave fewer than 2 distinct hypotheses | Exit code 1 — Path B requires ≥ 2 distinct hypotheses after merges |
 | `--nextThoughtNeeded false` with any `pending` claim | Exit code 1, lists the pending claim ids |
 | `--registerHypothesis` without a non-empty `--falsification` | Exit code 1 — a hypothesis without a falsification clause cannot be tested |
 | `--resolveHypothesis` to `selected` / `rejected` / `synthesized` without `--hypothesisNotes` or without `--falsificationResult` | Exit code 1 — terminal resolutions carry the falsification audit trail (`merged` is exempt: the surviving hypothesis keeps its own) |
 | `--registerClaim` without `--supports <hyp-id>`, or with a nonexistent target | Exit code 1 |
 | `--claimStatus verified` without `--claimQuote`, `--negativeQuery`, or `--negativeFinding` | Exit code 1 — verified claims record verbatim evidence and the counter-evidence search |
+| `--claimStatus verified` without `--claimTier`, with a tier outside 1-4, or with a tier count ≠ source count | Exit code 1 |
 | `--checkCriterion` with an unknown id, or without `--met true`/`--met false` | Exit code 1 |
 | `--recordLens` without `--lens` or without `--finding` | Exit code 1 |
 | `--newInsight` set to anything other than `false` | Exit code 1 — `true` would duplicate `--nextThoughtNeeded` and silently skip the convergence gate |
@@ -168,8 +177,7 @@ These are checked in code, not just documented:
 ```bash
 bun test
 ```
-
-133 tests across 3 files (`tests/think.test.ts`, `tests/issues.test.ts`, and `tests/skill-frontmatter.test.ts`), offline, no network calls, no API keys. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims and hypotheses), Path B hypothesis lifecycle and convergence gates, falsification-driven hypothesis registration/resolution (including merged state constraints), acceptance criteria registration and checking (gates 6-7), critical lens recording (gate 8), convergence declaration (gate 9), quote verification and negative finding linting (gate 10), claim-hypothesis linking, THINK_GATES_OFF switchboard, and the lint-report card export.
+190+ tests across 6 files (`tests/think.test.ts`, `tests/issues.test.ts`, `tests/skill-frontmatter.test.ts`, `tests/example-replay.test.ts`, `tests/state-isolation.test.ts`, and `tests/round3.test.ts`), offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivo…
 
 ## Design notes
 

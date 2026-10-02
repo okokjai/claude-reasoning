@@ -1,5 +1,7 @@
 node_modules/
 scripts/.think_state.json
 scripts/.think_state.json.bak
+tests/.think_state.*.json
+tests/.isolation-*.json
 *.log
 .DS_Store

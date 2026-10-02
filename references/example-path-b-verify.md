@@ -21,26 +21,29 @@ bun scripts/think.ts \
 # Output: [1/6] history=1 mode=path-b next=true
 ```
 
+### Pre-Registering Hypotheses (Mandatory for Path B)
+Hypotheses must exist before any `--registerClaim` can link to them via `--supports <hyp-id>`.
+```bash
+# Hypothesis 1: Anthropic Direct is best for startup agility.
+# --falsification states the observation that would disprove the hypothesis; it is required.
+bun scripts/think.ts --registerHypothesis "Direct Anthropic API is optimal for agile startup speed and latest feature parity" --falsification "Anthropic direct API lags Bedrock by more than one release cycle for Claude model updates"
+# Output: {"registered": "hyp-1", "statement": "Direct Anthropic API is optimal for agile startup speed and latest feature parity", "status": "pending"}
+
+# Hypothesis 2: AWS Bedrock is superior for enterprise compliance.
+bun scripts/think.ts --registerHypothesis "AWS Bedrock is superior for enterprise compliance, VPC endpoints, and unified cloud billing" --falsification "Bedrock cannot satisfy the required data-residency or IAM isolation controls at equal cost"
+# Output: {"registered": "hyp-2", "statement": "AWS Bedrock is superior for enterprise compliance, VPC endpoints, and unified cloud billing", "status": "pending"}
+```
+
 ### Pre-Registering Claims Before Search (Mandatory)
 ```bash
-# Claim 1: Bedrock supports prompt caching for Claude 3.5 Sonnet
-bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet"
+# Claim 1: Bedrock supports prompt caching for Claude 3.5 Sonnet.
+# Every claim must name the hypothesis it bears on via --supports <hyp-id>.
+bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-1
 # Output: {"registered": "claim-1", "statement": "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet", "status": "pending"}
 
 # Claim 2: AWS Bedrock pricing for Claude 3.5 Sonnet matches Anthropic direct API pricing ($3/M input, $15/M output)
-bun scripts/think.ts --registerClaim "AWS Bedrock pricing for Claude 3.5 Sonnet has exact base token price parity with Anthropic API"
+bun scripts/think.ts --registerClaim "AWS Bedrock pricing for Claude 3.5 Sonnet has exact base token price parity with Anthropic API" --supports hyp-1
 # Output: {"registered": "claim-2", "statement": "AWS Bedrock pricing for Claude 3.5 Sonnet has exact base token price parity with Anthropic API", "status": "pending"}
-```
-
-### Registering Competing Hypotheses (Mandatory for Path B)
-```bash
-# Hypothesis 1: Anthropic Direct is best for startup agility
-bun scripts/think.ts --registerHypothesis "Direct Anthropic API is optimal for agile startup speed and latest feature parity"
-# Output: {"registered": "hyp-1", "statement": "Direct Anthropic API is optimal for agile startup speed and latest feature parity", "status": "pending"}
-
-# Hypothesis 2: AWS Bedrock is superior for enterprise compliance
-bun scripts/think.ts --registerHypothesis "AWS Bedrock is superior for enterprise compliance, VPC endpoints, and unified cloud billing"
-# Output: {"registered": "hyp-2", "statement": "AWS Bedrock is superior for enterprise compliance, VPC endpoints, and unified cloud billing", "status": "pending"}
 ```
 
 ---
@@ -67,7 +70,11 @@ Now invoke session search tools (whatever search/fetch capability this environme
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimSource "https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html" \
   --claimSource "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" \
-  --claimNotes "Tier 1 AWS documentation and Anthropic documentation confirm prompt caching is supported for Claude 3.5 Sonnet; negative search surfaced regional restriction to US East/West."
+  --claimTier 1 --claimTier 1 \
+  --claimQuote "Prompt caching is supported for Anthropic Claude 3.5 Sonnet on Amazon Bedrock in the US East (N. Virginia) and US West (Oregon) regions." \
+  --negativeQuery "AWS Bedrock Claude prompt caching limitations region availability" \
+  --negativeFinding "Negative search returned no contradicting source; it did confirm prompt caching was initially limited to us-east-1 and us-west-2, so the claim is scoped to those regions." \
+  --claimNotes "Tier 1 AWS documentation and Anthropic documentation confirm prompt caching support; the negative search surfaced the regional restriction recorded above."
 ```
 
 2. **Verify Claim 2**:
@@ -79,6 +86,10 @@ bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
 bun scripts/think.ts --verifyClaim claim-2 --claimStatus verified \
   --claimSource "https://www.anthropic.com/pricing" \
   --claimSource "https://aws.amazon.com/bedrock/pricing/" \
+  --claimTier 1 --claimTier 1 \
+  --claimQuote "Claude 3.5 Sonnet: $3 per million input tokens, $15 per million output tokens." \
+  --negativeQuery "Anthropic vs AWS Bedrock Claude 3.5 Sonnet price difference" \
+  --negativeFinding "Negative search found no source reporting a base-token price difference; only differing enterprise discount and commitment terms were mentioned." \
   --claimNotes "Both Tier 1 pricing tables confirm exact parity for on-demand base input/output tokens."
 ```
 
@@ -111,19 +122,39 @@ bun scripts/think.ts \
 ## Thought 6: Resolve Hypotheses & Final Termination
 Before terminating, resolve all registered hypotheses:
 ```bash
-bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected --hypothesisNotes "H1 selected for agility and feature velocity unless Bedrock offers strictly equivalent latency"
+bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected \
+  --hypothesisNotes "H1 selected for agility and feature velocity unless Bedrock offers strictly equivalent latency" \
+  --falsificationResult "Falsification clause did not hold: no evidence of a >1 release-cycle lag was found, so the agility advantage stands."
 # Output: {"resolved": "hyp-1", "status": "selected"}
 
-bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected --hypothesisNotes "H2 rejected for this team's lightweight cloud-agnostic profile, but retained as contingency if enterprise requirements change"
+bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected \
+  --hypothesisNotes "H2 rejected for this team's lightweight cloud-agnostic profile, but retained as contingency if enterprise requirements change" \
+  --falsificationResult "Falsification clause held: Bedrock compliance controls were achievable, but the team's profile does not require them at the resulting cost."
 # Output: {"resolved": "hyp-2", "status": "rejected"}
+```
+
+Record the acceptance criteria and critical-lens findings, then converge. Path B termination is blocked until at least one criterion, two distinct lenses, and a converged final thought exist.
+```bash
+bun scripts/think.ts --addCriterion "Recommendation states an explicit provider choice with the pricing and caching evidence behind it"
+# Output: {"added": "crit-1", ...}
+
+bun scripts/think.ts --checkCriterion crit-1 --met true
+# Output: {"checked": "crit-1", "met": true, ...}
+
+bun scripts/think.ts --recordLens --lens "Sensitivity Analysis" --finding "Token volume ±20% and caching hit rate swing the cost gap by under 5%, so pricing parity is robust to volume."
+
+bun scripts/think.ts --recordLens --lens "Pre-Mortem Red Team" --finding "Single-vendor lock-in is the main failure mode; the fallback is routing to the other provider's equivalent endpoint."
+
+bun scripts/think.ts --recordLens --lens "Blast Radius & Degraded Mode" --finding "Failover between direct API and Bedrock is a config change; no data migration is required."
 ```
 
 Now terminate with all claims and hypotheses resolved:
 ```bash
 bun scripts/think.ts \
   --thought "Final conclusion formulated following references/conclusion-card.md structure. All claims verified, all hypotheses resolved; closing session." \
-  --thoughtNumber 6 --totalThoughts 6 --nextThoughtNeeded false
-# Output: [6/6] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false
+  --thoughtNumber 6 --totalThoughts 6 --nextThoughtNeeded false \
+  --newInsight false --newInsightNotes "Session closes the pricing and caching sub-questions; APAC latency remains an open operational item."
+# stdout: a `💭 Thought 6/6` block then the Reasoning Lint & Fact Sheet.
 ```
 
 ---

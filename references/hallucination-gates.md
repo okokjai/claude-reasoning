@@ -5,9 +5,10 @@ Before delivering the final conclusion on any **Path B** reasoning task, execute
 ---
 
 ## Gate 1: Specific Entity & Metric Grounding
-- **Entity check**: Every specific named entity (organization, model number, library, protocol, endpoint) must have appeared in retrieved search results or session ground truth.
+- **Entity check**: Every specific named entity (organization, person — including a handle, username, or author name — company/product affiliation, model number, library, protocol, endpoint, version number, or URL) must have appeared in retrieved search results or session ground truth. This list is illustrative, not exhaustive.
 - **Metric & price check**: Every quantitative metric (prices, token limits, latency, benchmarks, percentages) must be directly traced to a verified source URL.
-- **Rule**: If a metric or price cannot be tied to an explicit source URL, it **must not** appear as a definitive claim. Demote to an unverified estimate or remove it.
+- **No expansion rule**: Do not expand, complete, or infer an entity's name, identity, or affiliation beyond what the source states verbatim. A handle stays a handle; an abbreviation stays an abbreviation unless a retrieved source resolves it.
+- **Rule**: If a metric, price, or entity detail cannot be tied to an explicit source URL, it **must not** appear as a definitive claim. Demote to an unverified estimate or remove it; never fill the gap from memory. Follow Gate 4 and search for the missing detail before writing it down.
 
 ---
 

@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 3.0.1
+version: 3.0.2
 description: "Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or an open-ended question needing verified external facts — before answering, not after. Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 3.0.1
+# claude-reasoning 3.0.2
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -34,7 +34,7 @@ Announce the classification in Thought 1 so the routing is inspectable. Pass it 
 3. **Thought 3** — **Independently cross-validate with a different method**: reverse deduction, extreme-value substitution, set/complement enumeration, or brute-force state space.
 4. **Thoughts 4–5** — Only when Steps 2 and 3 disagree. Resolve the conflict, then terminate immediately.
 
-**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, any external search, depth expansion beyond 5. All four side-commands are rejected with a Path A error.
+**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, any external search, depth expansion beyond 5. All seven side-commands are rejected with a Path A error — acceptance criteria and lens records are Path B constructs.
 
 Terminate as soon as the two independent methods agree: `--nextThoughtNeeded false`.
 
@@ -47,7 +47,7 @@ Rationale, measured: closed-form logic questions that were run through a fixed 1
 **No fixed round count. Converge when a round yields no new insight.**
 
 1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
-2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis "<statement>" --falsification "<condition>"` (both flags required) and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`). Path B termination is rejected while fewer than 2 hypotheses are registered, any remains `pending`, or merges leave fewer than 2 distinct surviving hypotheses. Terminal resolutions (`selected`/`rejected`/`synthesized`) **require `--hypothesisNotes <why>` and `--falsificationResult "<evidence/outcome>"`** (concrete description of whether the falsification condition held or broke). Use `merged` (with `--mergedInto <id>` and `--hypothesisNotes <why>`) when a hypothesis turns out to be the same underlying mechanism as another; merges do not require `--falsificationResult` (the surviving hypothesis retains its own).
+2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis "<statement>" --falsification "<condition>"` (both flags required) and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`). Path B termination is rejected while fewer than 2 hypotheses are registered, any remains `pending`, merges leave fewer than 2 distinct surviving hypotheses, or **every resolved hypothesis is `rejected`** — at least one must be `selected` or `synthesized` to conclude. Terminal resolutions (`selected`/`rejected`/`synthesized`) **require `--hypothesisNotes <why>` and `--falsificationResult "<evidence/outcome>"`** (concrete description of whether the falsification condition held or broke). Use `merged` (with `--mergedInto…
 3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; record via `--recordLens --lens "<name>" --finding "<residual uncertainty>"`. Path B termination blocks with fewer than 2 distinct lens names recorded (Gate 8):
    - **First principles & constraint reduction** — reduce to irreducible constraints.
    - **Pre-mortem & active red team** — assume catastrophic failure 12 months out; identify what killed it.
@@ -99,11 +99,12 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 3. **Dual independent sources & Source Tiers.**
    - Consult `references/source-tiers.md` to classify sources into Tier 1 (primary/official), Tier 2 (reputable media/papers), Tier 3 (community blogs), or Tier 4 (disallowed AI summaries/farms).
-   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated), plus the evidence trio: a verbatim `--claimQuote`, the `--negativeQuery` you ran against the claim, and its `--negativeFinding`. The state machine rejects `verified` with fewer than 2 `--claimSource` values, with sources sharing the same root domain, or with any trio field missing.
+   - `verified` — requires **≥ 2 independent sources** from Tier 1 or Tier 2 (different root domains, not syndicated), plus a `--claimTier <1-4>` per `--claimSource` classifying it against `references/source-tiers.md`, plus the evidence trio: a verbatim `--claimQuote`, the `--negativeQuery` you ran against the claim, and its `--negativeFinding`. The state machine rejects `verified` with fewer than 2 `--claimSource` values, with sources sharing the same root domain, with fewer than 2 sources at Tier 1/2 (multiple Tier 3/4 sources cannot elevate a claim), when `--claimTier` is missing, out of 1-4, or not one-per-`--claimSource`, or with any trio field missing.
      ```bash
      bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
        --claimSource "https://docs.aws.amazon.com/bedrock/..." \
        --claimSource "https://docs.anthropic.com/en/docs/..." \
+       --claimTier 1 --claimTier 1 \
        --claimQuote "Prompt caching is available on Amazon Bedrock" \
        --negativeQuery "bedrock prompt caching unsupported" \
        --negativeFinding "None found; docs confirm support."
@@ -114,7 +115,7 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
        --claimSource "https://example.com/blog/..." --claimNotes "Only one third-party blog; no official confirmation"
      ```
 
-   **`verified` is self-attested.** `think.ts` never fetches a source. It enforces source *count* and root-domain independence and nothing else — whether a URL actually supports the claim it is attached to is the model's assertion, unverifiable from state.
+   **`verified` is self-attested.** `think.ts` never fetches a source. It enforces source *count*, root-domain independence, and the caller-declared `--claimTier` (a Tier 1/2 floor) and nothing else — whether a URL actually supports the claim it is attached to is the model's assertion, unverifiable from state.
 
 4. **Negative Search Query (Active Falsification).**
    Before confirming a major factual proposition, perform at least one search query targeting counter-evidence or known failure modes (e.g. `"<subject> limitations known bugs issue"`). Record any discovered caveats.
@@ -182,8 +183,8 @@ bun scripts/think.ts --recordLens --lens "<lens name>" --finding "<residual unce
 bun scripts/think.ts --registerClaim "<pre-registered factual statement>" --supports hyp-1
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimSource "https://a.example" --claimSource "https://b.example" \
+  --claimTier 1 --claimTier 1 \
   --claimQuote "<verbatim quote>" --negativeQuery "<counter-evidence query>" \
-  --negativeFinding "<caveats found, or 'none'>"
 bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
   --claimSource "https://c.example" --claimNotes "only one source"
 bun scripts/think.ts --verifyClaim claim-3 --claimStatus not_found --claimNotes "no public record"
@@ -214,37 +215,43 @@ Status line returned after each thought:
 | `--thoughtNumber` | int ≥ 1 | Current index |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
 | `--nextThoughtNeeded` | `true`\|`false` | `false` terminates — blocked while claims are pending or termination gates fail; any other value (e.g. `ture`, `yes`) exits 1 |
-| `--isRevision` / `--revisesThought N` | flag / int | Both required together; `N` must exist in history |
-| `--branchFromThought N` / `--branchId label` | int / string | Both required together; `N` must exist in history |
+| `--isRevision` | flag | Marks this thought as a revision; requires `--revisesThought` |
+| `--revisesThought` | int | Target thought index to revise; **requires `--isRevision`**; must exist in history |
+| `--branchFromThought` | int | Target thought index to branch from; requires `--branchId`; must exist in history |
+| `--branchId` | string | Branch label; **requires `--branchFromThought`** |
 | `--needsMoreThoughts` | flag | Signals depth expansion |
 | `--newInsight` | `true`\|`false` | Path B convergence gate 9: declaring `false` signals convergence; can include `--newInsightNotes` |
 | `--newInsightNotes` | string | Rationale for convergence or absence of new insight |
 | `--registerHypothesis` | string | Registers a competing hypothesis; assigns `hyp-N`, status `pending`; **requires `--falsification`** |
-| `--falsification` | string | Concrete condition that would falsify the hypothesis (required on registration) |
+| `--falsification` | string | Concrete condition that would falsify the hypothesis; **requires `--registerHypothesis`** |
 | `--resolveHypothesis` | string | Target hypothesis id |
-| `--hypothesisStatus` | enum | `selected` \| `rejected` \| `synthesized` \| `merged` |
-| `--hypothesisNotes` | string | Rationale recorded on the hypothesis; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`) |
-| `--falsificationResult` | string | Outcome of falsification test (`held`/`broken`); **required** for terminal resolutions (`selected`/`rejected`/`synthesized`) |
-| `--mergedInto` | string | **Required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, already-rejected targets, or a resolving hypothesis that already absorbs another merge |
+| `--hypothesisStatus` | enum | `selected` \| `rejected` \| `synthesized` \| `merged`; **requires `--resolveHypothesis`** |
+| `--hypothesisNotes` | string | Rationale recorded on the hypothesis; **requires `--resolveHypothesis`**; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`) and `merged` |
+| `--falsificationResult` | string | Outcome of falsification test (`held`/`broken`); **requires `--resolveHypothesis`**; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`); **rejected** on `merged` — a merge is documented by `--mergedInto` alone, and a stale value is cleared when a resolved node is re-resolved to `merged` |
+| `--mergedInto` | string | **Requires `--resolveHypothesis`**; **required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, already-rejected targets, or a resolving hypothesis that already absorbs another merge. A survivor still absorbing a member cannot itself be re-resolved to `rejected`/`pending` (re-point the member first) — `selected`/`synthesized` stay allowed |
 | `--addCriterion` | string | Registers an acceptance criterion for the session (assigns `crit-N`) |
 | `--checkCriterion` | string | Criterion id to mark |
-| `--met` | `true`\|`false` | Mark criterion as met or unmet; requires `--checkCriterion` |
-| `--criterionNotes` | string | Context/notes for the criterion check |
+| `--met` | `true`\|`false` | Mark criterion as met or unmet; **requires `--checkCriterion`** |
+| `--criterionNotes` | string | Context/notes for the criterion check; **requires `--checkCriterion`** |
 | `--recordLens` | flag | Records a critical evaluation lens; requires `--lens` and `--finding` |
-| `--lens` | string | Lens name (e.g. `pre-mortem`, `devil's advocate`) |
-| `--finding` | string | Key finding/residual uncertainty from applying the lens |
+| `--lens` | string | Lens name (e.g. `pre-mortem`, `devil's advocate`); **requires `--recordLens`** |
+| `--finding` | string | Key finding/residual uncertainty from applying the lens; **requires `--recordLens`** |
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending`; **requires `--supports <hyp-id>`** in Path B |
-| `--supports` | string | Target hypothesis id this claim provides evidence for (required on registration in Path B) |
+| `--supports` | string | Target hypothesis id this claim provides evidence for; **requires `--registerClaim`** (required on registration in Path B) |
 | `--verifyClaim` | string | Target claim id |
-| `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found` — `verified` claims are final; re-verification to any other status is rejected |
-| `--claimSource` | string, repeatable | ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; a trailing root dot is normalised (`example.com.` = `example.com`); each value must parse as a URL (missing scheme is tolerated) or the call is rejected; preserved when supplied on `pending` transitions |
-| `--claimQuote` | string | Verbatim quote from source (required for `verified`) |
-| `--negativeQuery` | string | Search query targeting counter-evidence (required for `verified`) |
-| `--negativeFinding` | string | Caveats/contradictions found or statement of none (required for `verified`) |
-| `--claimNotes` | string | **Required** for `single_source` / `unverified` / `not_found`; optional for `verified` |
-| `--status` | flag | Full JSON state |
+| `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found`; **requires `--verifyClaim`** — `verified` claims are final; re-verification to any other status is rejected |
+| `--claimSource` | string, repeatable | **Requires `--verifyClaim`**; ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; a trailing root dot is normalised (`example.com.` = `example.com`); each value must be an http(s) URL or a bare `host/path` that names a domain (a `file:///`/`data:`/`foo/file`/single-label value is rejected); recorded `sources` are kept on a `pending` re-verify unless new ones are supplied |
+| `--claimTier` | int 1-4, repeatable | **Requires `--verifyClaim`**; **required** for `verified`, one per `--claimSource` in the same order: the i-th tier classifies the i-th source against `references/source-tiers.md`. `verified` needs ≥ 2 sources at Tier 1/2 (multiple Tier 3/4 sources cannot elevate a claim). Optional for `single_source` / `unverified` / `not_found`, but whenever supplied it must be a canonical integer `1`–`4` (digits only — `1e0`/`0x1`/`+1`/`01` rejected) and one per `--claimSource` — a malformed vector exits 1 rather than being persisted; on a `pending` re-verify the recorded tiers are cleared |
+| `--claimQuote` | string | Verbatim quote from source (required for `verified`); **requires `--verifyClaim`**; cleared on a `pending` re-verify |
+| `--negativeQuery` | string | Search query targeting counter-evidence (required for `verified`); **requires `--verifyClaim`**; cleared on a `pending` re-verify |
+| `--negativeFinding` | string | Caveats/contradictions found or statement of none (required for `verified`); **requires `--verifyClaim`**; cleared on a `pending` re-verify. Record it as two lines — `--negativeFinding "<command>\n<output>"` — so the search is auditable; the lint report flags single-line values, but only checks for the newline, it cannot verify a command ran |
+| `--claimNotes` | string | **Requires `--verifyClaim`**; **required** for `single_source` / `unverified` / `not_found`; optional for `verified`; cleared on a `pending` re-verify |
+| `--status` | flag | Full JSON state. Must run alone — combining with any other operation exits 1 |
 | `--export` | flag | Prints a **lint report / fact sheet** (`buildLintReport`) derived from persisted state (CRIT/WARN/INFO sections, residuals, trace shape, evidence). Must run alone. Also auto-emitted after status line on termination |
 | `--reset` | flag | Clears state for a new session; **must run alone** — combined with any other flag it exits 1 |
+| `--help` | flag | Prints CLI usage summary and exits 0 |
+
+**Verification-only flags require `--verifyClaim`.** `--claimStatus`, `--claimSource`, `--claimTier`, `--claimQuote`, `--negativeQuery`, `--negativeFinding`, and `--claimNotes` only have meaning inside the claim-verification branch; supplying any of them without `--verifyClaim` exits 1 rather than being parsed and ignored.
 
 ---
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.0.1 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.0.2 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -36,6 +36,7 @@ export interface Claim {
   statement: string;
   registeredAtThought: number;
   sources: string[];
+  tiers?: number[];            // tier aligned with sources[]; required for verified
   status: ClaimStatus;
   supports?: string;           // Path B: required hypothesis id this claim bears on
   quote?: string;              // required to reach verified
@@ -300,7 +301,7 @@ function buildLintReport(state: State): string {
   }
   for (const cr of state.acceptanceCriteria) {
     if (cr.met === false) {
-      const revised = history.some(t => t.isRevision === true && t.thoughtNumber > (cr.checkedAtThought ?? Infinity));
+      const revised = history.some((t, idx) => t.isRevision === true && idx + 1 > (cr.checkedAtThought ?? Infinity));
       const exempt = lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0;
       if (!revised && !exempt) {
         crit.push(`criterion '${cr.id}' met=false, checkedAtThought=${cr.checkedAtThought ?? "?"} with no later revision`);
@@ -337,6 +338,11 @@ function buildLintReport(state: State): string {
       warn.push(`'${c.id}' quote is very short (<10 chars; self-reported)`);
     }
   }
+  for (const c of claims) {
+    if (c.status === "verified" && (c.tiers == null || c.tiers.length === 0)) {
+      warn.push(`'${c.id}' verified without --claimTier: source quality is unclassified; re-check against references/source-tiers.md (Tier 3/4 cannot support verified)`);
+    }
+  }
   const dupSeen: Record<string, string[]> = {};
   for (const c of claims) {
     if (c.negativeFinding != null && c.negativeFinding.trim().length > 0) {
@@ -350,7 +356,7 @@ function buildLintReport(state: State): string {
     c => c.status === "verified" && c.negativeFinding != null && !c.negativeFinding.includes("\n")
   );
   if (verifiedWithSingleLineFinding.length > 0) {
-    warn.push(`${verifiedWithSingleLineFinding.length}/${claims.filter(c => c.status === "verified").length} verified claims have negativeFinding without command/output record (single-line self-report; human review advised)`);
+    warn.push(`${verifiedWithSingleLineFinding.length}/${claims.filter(c => c.status === "verified").length} verified claims have a single-line negativeFinding (self-report; the script only checks for a newline and cannot verify the search ran). Record command + observed output as two lines: --negativeFinding "<command>\\n<output>".`);
   }
   if (lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0) {
     const unmet = state.acceptanceCriteria.some(cr => cr.met === false);
@@ -499,6 +505,7 @@ export interface ParsedArgs {
   verifyClaim?: string;
   claimStatus?: string;
   claimSource?: string[];
+  claimTier?: string[];
   claimNotes?: string;
   supports?: string;
   claimQuote?: string;
@@ -522,6 +529,7 @@ export interface ParsedArgs {
   status?: boolean;
   reset?: boolean;
   export?: boolean;
+  help?: boolean;
 }
 
 // --- Parse CLI args ---
@@ -545,6 +553,7 @@ try {
     verifyClaim: { type: "string" },
     claimStatus: { type: "string" },
     claimSource: { type: "string", multiple: true },
+    claimTier: { type: "string", multiple: true },
     claimNotes: { type: "string" },
     supports: { type: "string" },
     claimQuote: { type: "string" },
@@ -568,12 +577,18 @@ try {
     status: { type: "boolean", default: false },
     reset: { type: "boolean", default: false },
     export: { type: "boolean", default: false },
+    help: { type: "boolean", default: false },
   },
   strict: true,
 }) as unknown as { values: ParsedArgs });
 } catch (err: unknown) {
   const e = err as Error;
   fail(`Invalid arguments: ${e.message}`);
+}
+
+if (values.help) {
+  console.log("Usage: bun scripts/think.ts [options]\nRun `bun scripts/think.ts --status` or pass `--thought` to begin.");
+  process.exit(0);
 }
 
 const VALID_MODES: ThinkingMode[] = ["path-a", "path-b"];
@@ -636,6 +651,7 @@ function otherOps(v: ParsedArgs): string[] {
     v.verifyClaim != null && "--verifyClaim",
     v.claimStatus != null && "--claimStatus",
     v.claimSource != null && "--claimSource",
+    v.claimTier != null && "--claimTier",
     v.claimNotes != null && "--claimNotes",
     v.supports != null && "--supports",
     v.claimQuote != null && "--claimQuote",
@@ -670,6 +686,45 @@ if (values.reset) {
 
 const state = loadState();
 
+// Flag dependency matrix: a sub-flag supplied without its parent command flag
+// would otherwise be parsed and silently dropped. One declarative table covers
+// every parent/child pair; add a row when adding a new sub-flag.
+const FLAG_REQUIRES: [keyof ParsedArgs, string][] = [
+  ["claimStatus", "--verifyClaim"],
+  ["claimSource", "--verifyClaim"],
+  ["claimTier", "--verifyClaim"],
+  ["claimQuote", "--verifyClaim"],
+  ["negativeQuery", "--verifyClaim"],
+  ["negativeFinding", "--verifyClaim"],
+  ["claimNotes", "--verifyClaim"],
+  ["supports", "--registerClaim"],
+  ["falsification", "--registerHypothesis"],
+  ["hypothesisStatus", "--resolveHypothesis"],
+  ["hypothesisNotes", "--resolveHypothesis"],
+  ["mergedInto", "--resolveHypothesis"],
+  ["falsificationResult", "--resolveHypothesis"],
+  ["met", "--checkCriterion"],
+  ["criterionNotes", "--checkCriterion"],
+  ["lens", "--recordLens"],
+  ["finding", "--recordLens"],
+  ["branchId", "--branchFromThought"],
+  ["revisesThought", "--isRevision"],
+];
+for (const [child, parent] of FLAG_REQUIRES) {
+  const childVal = values[child];
+  const parentVal = values[parent.slice(2) as keyof ParsedArgs];
+  // A parent passed as "" (e.g. --checkCriterion "") is not an active parent —
+  // its handler has no emptiness guard and would misreport downstream. A
+  // whitespace-only parent stays "present" so the command's own empty-value
+  // error (e.g. "--registerClaim cannot be empty") fires first. Child presence
+  // stays != null: a supplied-but-empty child is still a silently-dropped flag.
+  const parentPresent = parentVal === true || (typeof parentVal !== "boolean" && parentVal != null && parentVal !== "");
+  const childPresent = childVal === true || (typeof childVal !== "boolean" && childVal != null);
+  if (childPresent && !parentPresent) {
+    fail(`--${child} requires ${parent}; the argument would otherwise be ignored.`);
+  }
+}
+
 // --- Command: Status ---
 
 if (values.status && values.export) {
@@ -677,6 +732,11 @@ if (values.status && values.export) {
 }
 
 if (values.status) {
+  // otherOps includes --status itself; exclude it so a bare --status passes.
+  const combinedStatus = otherOps(values).filter(f => f !== "--status");
+  if (combinedStatus.length > 0) {
+    fail(`--status cannot be combined with other operations (${combinedStatus.join(", ")}); run --status alone.`);
+  }
   const response = {
     ...makeStatusResponse(state),
     schemaVersion: state.schemaVersion,
@@ -710,7 +770,7 @@ if (values.registerClaim != null) {
   if (state.mode === "path-a") {
     fail("Path A (closed-form) forbids external claims. Use internal derivation.");
   }
-  if (values.registerClaim === "") fail("--registerClaim statement cannot be empty");
+  if (values.registerClaim.trim() === "") fail("--registerClaim statement cannot be empty");
   // Path B linkage is mandatory: every claim must name the hypothesis it bears
   // on (Route B strict gatekeeper). Linkage to a nonexistent hypothesis is a
   // wiring error, not a soft warn.
@@ -718,7 +778,7 @@ if (values.registerClaim != null) {
     fail("--supports <hyp-id> is required when --registerClaim is set: a claim must name the hypothesis it bears on.");
   }
   if (!state.hypotheses?.[values.supports]) {
-    fail(`--supports target '${values.supports}' not found in state (hyp-${values.supports} not exist). Register the hypothesis first.`);
+    fail(`--supports target '${values.supports}' not found in state. Register the hypothesis first.`);
   }
   const count = Object.keys(state.claims).length + 1;
   const claimId = `claim-${count}`;
@@ -744,7 +804,7 @@ if (values.registerHypothesis != null) {
   if (state.mode === "path-a") {
     fail("Path A (closed-form) forbids hypotheses. Use internal derivation.");
   }
-  if (values.registerHypothesis === "") fail("--registerHypothesis statement cannot be empty");
+  if (values.registerHypothesis.trim() === "") fail("--registerHypothesis statement cannot be empty");
   if (values.falsification == null || values.falsification.trim() === "") {
     fail("--falsification is required when --registerHypothesis is set: a hypothesis without a falsification clause cannot be tested.");
   }
@@ -788,6 +848,11 @@ if (values.resolveHypothesis != null) {
   }
 
   if (status === "merged") {
+    // A merge is documented by --mergedInto alone; an absorbed node has no
+    // falsification outcome of its own, so supplying one is misuse.
+    if (values.falsificationResult != null) {
+      fail("--falsificationResult is not valid with --hypothesisStatus merged; the surviving hypothesis keeps the falsification outcome.");
+    }
     const target = values.mergedInto;
     if (!target) fail("--mergedInto is required when --hypothesisStatus is 'merged' (which surviving hypothesis absorbed this one).");
     if (target === hyp.id) fail("--mergedInto cannot reference the hypothesis being resolved itself.");
@@ -803,9 +868,34 @@ if (values.resolveHypothesis != null) {
     if (victim) {
       fail(`Hypothesis '${hyp.id}' already absorbs '${victim.id}' and cannot itself be merged onward; merge chains are not allowed. Re-point '${victim.id}' to '${target}' first.`);
     }
-    hyp.mergedInto = target;
+    // Project a clean object: only fields valid for the target status are
+    // carried over, so a stale falsificationResult/notes can never survive a
+    // merge regardless of which resolution ran before.
+    const clean: Hypothesis = {
+      id: hyp.id, statement: hyp.statement, status,
+      falsification: hyp.falsification, mergedInto: target,
+    };
+    if (values.hypothesisNotes) clean.notes = values.hypothesisNotes;
+    state.hypotheses![hyp.id] = clean;
   } else {
-    delete hyp.mergedInto;
+    // A survivor that still absorbs members (mergedInto pointers) cannot be
+    // re-resolved to `rejected`/`pending`: that would strand each member's
+    // mergedInto on a node that no longer carries them. `selected`/`synthesized`
+    // keep the survivor a valid merge target, so they stay allowed.
+    if (status === "rejected" || status === "pending") {
+      const absorbed = Object.values(state.hypotheses ?? {}).find(
+        (h) => h.id !== hyp.id && h.mergedInto === hyp.id,
+      );
+      if (absorbed) {
+        fail(`Hypothesis '${hyp.id}' still absorbs '${absorbed.id}' (mergedInto -> '${hyp.id}') and cannot be re-resolved to '${status}'. Re-point '${absorbed.id}' to another survivor first.`);
+      }
+    }
+    // Project a clean object: mergedInto/notes/falsificationResult are only
+    // written when valid for this status, never deleted after the fact.
+    const clean: Hypothesis = { id: hyp.id, statement: hyp.statement, status, falsification: hyp.falsification };
+    if (values.hypothesisNotes) clean.notes = values.hypothesisNotes;
+    if (values.falsificationResult != null) clean.falsificationResult = values.falsificationResult;
+    state.hypotheses![hyp.id] = clean;
   }
 
   // Terminal resolutions must carry the falsification audit trail: what the
@@ -826,13 +916,11 @@ if (values.resolveHypothesis != null) {
     }
   }
 
-  hyp.status = status;
-  if (values.hypothesisNotes) hyp.notes = values.hypothesisNotes;
-  if (values.falsificationResult != null) hyp.falsificationResult = values.falsificationResult;
+  const updated = state.hypotheses![hyp.id];
 
   recordAudit(state, { op: "resolveHypothesis", target: hyp.id, detail: status === "merged" ? `merged->${values.mergedInto}` : status });
   saveState(state);
-  console.log(JSON.stringify({ resolved: hyp.id, status: hyp.status, mergedInto: hyp.mergedInto, notes: hyp.notes }, null, 2));
+  console.log(JSON.stringify({ resolved: hyp.id, status: updated.status, mergedInto: updated.mergedInto, notes: updated.notes }, null, 2));
   process.exit(0);
 }
 
@@ -840,6 +928,9 @@ if (values.resolveHypothesis != null) {
 
 if (values.addCriterion != null) {
   requireModeEstablished(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids acceptance criteria — they are a Path B construct.");
+  }
   if (values.addCriterion.trim() === "") fail("--addCriterion text cannot be empty");
   const id = `crit-${state.acceptanceCriteria.length + 1}`;
   state.acceptanceCriteria.push({ id, criterion: values.addCriterion.trim() });
@@ -853,6 +944,9 @@ if (values.addCriterion != null) {
 
 if (values.checkCriterion != null) {
   requireModeEstablished(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids acceptance criteria — they are a Path B construct.");
+  }
   const crit = state.acceptanceCriteria.find(c => c.id === values.checkCriterion);
   if (!crit) fail(`Criterion ${values.checkCriterion} not found in state`);
   if (values.met == null || (values.met !== "true" && values.met !== "false")) {
@@ -871,6 +965,9 @@ if (values.checkCriterion != null) {
 
 if (values.recordLens) {
   requireModeEstablished(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids lens records — they are a Path B construct.");
+  }
   if (values.lens == null || values.lens.trim() === "") fail("--lens is required when --recordLens is set");
   if (values.finding == null || values.finding.trim() === "") fail("--finding is required when --recordLens is set");
   const entry: LensFinding = { lens: values.lens.trim(), finding: values.finding.trim(), atThought: state.thoughtHistory.length };
@@ -920,6 +1017,25 @@ const MULTI_SEGMENT_SUFFIXES: Record<string, true> = {
   "com.sg": true,
   "com.hk": true,
   "co.id": true,
+  "com.tr": true,
+  "gov.tr": true,
+  "org.tr": true,
+  "com.ar": true,
+  "net.ar": true,
+  "org.ar": true,
+  "gov.ar": true,
+  "co.il": true,
+  "org.il": true,
+  "gov.il": true,
+  "co.th": true,
+  "ac.th": true,
+  "go.th": true,
+  "com.ua": true,
+  "org.ua": true,
+  "gov.ua": true,
+  "com.my": true,
+  "gov.my": true,
+  "org.my": true,
   "github.io": true,
   "gitlab.io": true,
   "herokuapp.com": true,
@@ -937,16 +1053,28 @@ const MULTI_SEGMENT_SUFFIXES: Record<string, true> = {
 };
 
 function rootDomain(urlStr: string): string {
+  // A claim source must be an http(s) URL. Reject file:///, data:, bare
+  // non-host strings ("foo/file"), and anything else that cannot name an
+  // origin — before any scheme-tolerating fallback is attempted.
+  const trimmed = urlStr.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    // Reject real scheme URLs that are not http(s) — file:///, data:, ftp:, etc.
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.includes("://")) {
+      fail(`--claimSource '${urlStr}' is not an http(s) URL; sources must name their origin domain.`);
+    }
+    // A bare host or host/path ("example.com/x") is tolerated only when the
+    // leading token looks like a real domain (contains a dot, or is an IP).
+    const lead = trimmed.split("/")[0];
+    if (!lead.includes(".") && !/^(\d{1,3}\.){3}\d{1,3}$/.test(lead)) {
+      fail(`--claimSource '${urlStr}' does not name a host; sources must name their origin domain.`);
+    }
+    urlStr = `https://${trimmed}`;
+  }
   let hostname: string;
   try {
     hostname = new URL(urlStr).hostname.toLowerCase();
   } catch {
-    try {
-      // Tolerate a missing scheme so "example.com/page" still buckets under example.com.
-      hostname = new URL(`https://${urlStr}`).hostname.toLowerCase();
-    } catch {
-      fail(`--claimSource '${urlStr}' is not a parseable URL; sources must name their origin domain.`);
-    }
+    fail(`--claimSource '${urlStr}' is not a parseable URL; sources must name their origin domain.`);
   }
   // "example.com." (FQDN root dot) is the same host as "example.com".
   hostname = hostname.replace(/\.+$/, "");
@@ -971,6 +1099,7 @@ if (values.verifyClaim != null) {
   const claim = state.claims[values.verifyClaim];
   if (!claim) fail(`Claim ${values.verifyClaim} not found in state`);
   const sources = values.claimSource || [];
+  const tiers = (values.claimTier || []).map(t => Number(t));
   const status = values.claimStatus as ClaimStatus;
   if (!status) fail("--claimStatus is required when --verifyClaim is set");
 
@@ -979,11 +1108,41 @@ if (values.verifyClaim != null) {
     fail(`Invalid --claimStatus: ${status}. Must be one of: ${validStatuses.join(", ")}`);
   }
 
+  // Guardrail 1c-shape: whenever --claimTier is supplied it must be a well-formed
+  // tier vector — integers 1-4, one per --claimSource. This runs for every status,
+  // not just verified, so a non-verified call cannot persist NaN or a tier list
+  // that does not correspond to the recorded sources.
+  if (tiers.length > 0) {
+    // Digits only — rejects 1e0, 0x1, +1, 01, matching the thoughtNumber
+    // convention. Must run before range-check since 1e0 coerces to 1.
+    if ((values.claimTier || []).some(s => s !== String(Number(s)) || !Number.isInteger(Number(s)))) {
+      fail(`--claimTier must be an integer 1-4 spelled as digits (Tier 1 primary ... Tier 4 prohibited). Got: ${(values.claimTier || []).join(", ")}`);
+    }
+    if (tiers.some(t => t < 1 || t > 4)) {
+      fail(`--claimTier must be an integer 1-4 (Tier 1 primary ... Tier 4 prohibited). Got: ${(values.claimTier || []).join(", ")}`);
+    }
+    if (tiers.length !== sources.length) {
+      fail(`--claimTier must have one --claimTier per --claimSource: found ${tiers.length} tier(s) for ${sources.length} source(s).`);
+    }
+  }
+
   // Guardrail 1: 2-source requirement for verified (count + distinct root domains)
   if (status === "verified") {
     const rootDomains = new Set(sources.map(rootDomain));
     if (sources.length < 2 || rootDomains.size < 2) {
       fail(`--claimStatus verified requires at least 2 independent --claimSource arguments from distinct root domains. Found ${sources.length} source(s), ${rootDomains.size} root domain(s). Use 'single_source' or 'unverified' if fewer.`);
+    }
+
+    // Guardrail 1c: --claimTier enforces references/source-tiers.md:40 —
+    // "Even multiple Tier 3 sources cannot elevate a claim to verified".
+    // Tiers align positionally with --claimSource: the i-th --claimTier classifies the i-th --claimSource.
+    if (tiers.length === 0) {
+      fail("--claimTier is required for --claimStatus verified: classify each --claimSource against references/source-tiers.md (1-4). Even multiple Tier 3 sources cannot elevate a claim to verified.");
+    }
+
+    const tier1or2 = tiers.filter(t => t <= 2).length;
+    if (tier1or2 < 2) {
+      fail(`--claimStatus verified requires at least 2 sources from Tier 1 or Tier 2 (references/source-tiers.md:40); found ${tier1or2}. Multiple Tier 3/4 sources cannot elevate a claim to verified - use 'single_source' or 'unverified'.`);
     }
     // Guardrail 1b (v3.0.0): verified claims must carry the evidence trio —
     // a quote anchoring the claim, plus a negative search attempt and its result.
@@ -1008,17 +1167,28 @@ if (values.verifyClaim != null) {
     fail(`--claimStatus ${status} requires --claimNotes explaining why the claim could not be fully verified`);
   }
 
-  claim.status = status;
-  // Re-marking a claim pending must not wipe evidence already attached.
-  if (status !== "pending" || sources.length > 0) claim.sources = sources;
-  if (values.claimNotes) claim.notes = values.claimNotes;
-  if (values.claimQuote != null) claim.quote = values.claimQuote;
-  if (values.negativeQuery != null) claim.negativeQuery = values.negativeQuery;
-  if (values.negativeFinding != null) claim.negativeFinding = values.negativeFinding;
+  // Project a clean claim per target status: fields that do not belong to the
+  // status are never written, so a pending re-verify cannot strand evidence and
+  // a non-pending re-verify cannot strand stale verification fields.
+  const projected: Claim = {
+    id: claim.id, statement: claim.statement, registeredAtThought: claim.registeredAtThought,
+    sources: status === "pending" && sources.length === 0 ? claim.sources : sources,
+    status,
+  };
+  if (claim.supports != null) projected.supports = claim.supports;
+  if (status !== "pending") {
+    if (tiers.length > 0) projected.tiers = tiers;
+    else if (claim.tiers != null) projected.tiers = claim.tiers; // un-tiered re-verify keeps prior tiers
+    if (values.claimNotes) projected.notes = values.claimNotes;
+    if (values.claimQuote != null) projected.quote = values.claimQuote;
+    if (values.negativeQuery != null) projected.negativeQuery = values.negativeQuery;
+    if (values.negativeFinding != null) projected.negativeFinding = values.negativeFinding;
+  }
+  state.claims[claim.id] = projected;
 
   recordAudit(state, { op: "verifyClaim", target: claim.id, detail: status });
   saveState(state);
-  console.log(JSON.stringify({ verified: claim.id, status: claim.status, sources: claim.sources, notes: claim.notes }, null, 2));
+  console.log(JSON.stringify({ verified: claim.id, status: projected.status, sources: projected.sources, notes: projected.notes }, null, 2));
   process.exit(0);
 }
 
@@ -1036,7 +1206,7 @@ if (values.totalThoughts != null) {
 }
 
 if (values.thought == null) fail("--thought is required");
-if (values.thought === "") fail("--thought cannot be empty");
+if (values.thought.trim() === "") fail("--thought cannot be empty");
 if (!values.thoughtNumber) fail("--thoughtNumber is required");
 if (!values.totalThoughts) fail("--totalThoughts is required");
 if (!values.nextThoughtNeeded) fail("--nextThoughtNeeded is required");
@@ -1119,6 +1289,12 @@ if (!nextThoughtNeeded) {
     if (distinctHyps.length < 2) {
       fail(`Path B termination requires at least 2 distinct hypotheses after merges; currently ${distinctHyps.length} (${distinctHyps.map(h => h.id).join(", ")}).`);
     }
+    // Termination with every hypothesis rejected is an unresolved conclusion:
+    // at least one must carry forward (selected or synthesized).
+    const carried = hypList.filter(h => h.status === "selected" || h.status === "synthesized");
+    if (carried.length === 0) {
+      fail("Path B termination requires at least one hypothesis to be selected or synthesized; all resolved hypotheses are rejected.");
+    }
 
     // Gate 4 (Path B): convergence requires at least one decompose + one synthesis round
     if (state.thoughtHistory.length < 2) {
@@ -1155,7 +1331,7 @@ if (!nextThoughtNeeded) {
         for (const unmet of unmetList) {
           const checkedAt = unmet.checkedAtThought ?? -1;
           const subsequentRevision = state.thoughtHistory.some(
-            t => t.isRevision && t.thoughtNumber > checkedAt,
+            (t, idx) => t.isRevision && idx + 1 > checkedAt,
           );
           if (!subsequentRevision) {
             enforceGate(

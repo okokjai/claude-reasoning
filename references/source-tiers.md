@@ -37,7 +37,7 @@ When verifying factual claims, source credibility determines whether a claim can
 - **Community wikis**: Wikipedia (must trace to primary citations; do not cite Wikipedia article directly for load-bearing claims).
 - **Conference presentations**: Slide decks without accompanying peer-reviewed papers.
 
-*Rule*: Even multiple Tier 3 sources cannot elevate a claim to `verified` if no Tier 1 or Tier 2 source confirms it. Status must remain `single_source` or `unverified`.
+*Rule*: Even multiple Tier 3 sources cannot elevate a claim to `verified` if no Tier 1 or Tier 2 source confirms it. Status must remain `single_source` or `unverified`. Enforced by `think.ts`: `--verifyClaim ... --claimStatus verified` requires one `--claimTier <1-4>` per `--claimSource` and rejects the call unless ≥ 2 sources are Tier 1/2.
 
 ---
 
@@ -56,3 +56,4 @@ Before marking `--claimStatus verified`:
 1. **Domain Diversity**: The two `--claimSource` URLs must resolve to distinct root domains owned by different entities.
 2. **Syndication Check**: Ensure Source B is not merely quoting or summarizing a press release from Source A.
 3. If only one independent source exists, you **must** record `--claimStatus single_source`.
+4. **Declare tiers.** Pass `--claimTier` once per `--claimSource`, in the same order; `verified` is rejected unless ≥ 2 declared tiers are 1 or 2.

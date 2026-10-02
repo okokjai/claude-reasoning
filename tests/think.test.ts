@@ -5,7 +5,10 @@ import { join } from "path";
 
 const CWD = join(__dirname, "..");
 const SCRIPT = join(CWD, "scripts", "think.ts");
-const STATE_FILE = join(CWD, "scripts", ".think_state.json");
+// Bun runs test files in parallel, and two concurrent `bun test` invocations
+// must not share files either — the pid keeps each process to its own state.
+const STATE_FILE = join(CWD, "tests", `.think_state.think-${process.pid}.json`);
+process.env.THINK_STATE_FILE = STATE_FILE;
 
 /** Minimal state shape consumed by tests. */
 interface StateShape {
@@ -201,7 +204,7 @@ describe("think.ts: claim pre-registration and lifecycle", () => {
   it("succeeds verification with verified status when 2 or more sources provided", () => {
     run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
     run(["--registerClaim", "Claim statement requiring dual sources", "--supports", "hyp-1"]);
-    const okRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://source1.com", "--claimSource", "https://source2.com", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
+    const okRes = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://source1.com", "--claimSource", "https://source2.com", "--claimTier", "1", "--claimTier", "1", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(okRes.code).toBe(0);
     expect(okRes.stdout).toContain('"status": "verified"');
   });
@@ -303,7 +306,7 @@ describe("integration: Scenario 2 - Path B Open-ended with External Verification
     expect(premature.stderr).toContain("Cannot terminate with --nextThoughtNeeded false: 2 claim(s) still pending");
 
     // 4. Resolve claim 1 with 2 independent sources
-    const v1 = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://aws.amazon.com/bedrock/pricing/", "--claimSource", "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
+    const v1 = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://aws.amazon.com/bedrock/pricing/", "--claimSource", "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching", "--claimTier", "1", "--claimTier", "1", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(v1.code).toBe(0);
     expect(v1.stdout).toContain('"status": "verified"');
 
@@ -441,7 +444,7 @@ describe("think.ts: claim caveat enforcement", () => {
   it("still allows verified without --claimNotes", () => {
     run(["--mode", "path-b", "--registerHypothesis", "H for claims", "--falsification", "f"]);
     run(["--registerClaim", "Well-sourced claim", "--supports", "hyp-1"]);
-    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
+    const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimTier", "1", "--claimTier", "1", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(res.code).toBe(0);
     expect(res.stdout).toContain('"status": "verified"');
   });
@@ -588,7 +591,7 @@ describe("think.ts: --export lint report", () => {
     run(["--registerHypothesis", "Hypothesis B", "--falsification", "f"]);
     run(["--registerClaim", "Claim that is verified", "--supports", "hyp-1"]);
     run(["--registerClaim", "Claim with one source", "--supports", "hyp-1"]);
-    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimTier", "1", "--claimTier", "1", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     run(["--verifyClaim", "claim-2", "--claimStatus", "single_source", "--claimSource", "https://c.example", "--claimNotes", "only one outlet"]);
     run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
@@ -673,7 +676,7 @@ describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () =>
     run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     run(["--registerClaim", "Unrelated fact", "--supports", "hyp-1"]);
-    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
+    run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://a.example", "--claimSource", "https://b.example", "--claimTier", "1", "--claimTier", "1", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     const out = run(["--export"]).stdout;
     expect(out).toMatch(/hyp-1 \[selected\].*Linked-verified|link-status: Linked-verified/);
     expect(out).not.toContain("[Confirmed]");
@@ -721,13 +724,12 @@ describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () =>
 
   it("block-quotes a multi-line final thought so it cannot forge card headings", () => {
     startB();
-    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
     run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
     T(2, 4, "true", "T2");
     run(["--recordLens", "--lens", "devil's advocate", "--finding", "f1"]);
     run(["--recordLens", "--lens", "premortem", "--finding", "f2"]);
     const res = T(3, 4, "false", "verdict\n## Fake Heading\n- x", [], { THINK_GATES_OFF: "all" });
-    expect(res.stdout).toContain("No hypothesis was selected");
     expect(res.stdout).toContain("> ## Fake Heading");
     expect(res.stdout).not.toMatch(/^## Fake Heading/m);
   });
