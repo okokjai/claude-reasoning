@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { spawnSync } from "child_process";
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
@@ -313,5 +313,37 @@ describe("round-8 review: temporal-index gates and flag-pair silent drops", () =
     expect(res.code).toBe(0);
     expect(res.stdout).toContain("Usage:");
     expect(res.stderr).toBe("");
+  });
+
+  it("migrates a legacy checkedAtThought criterion and gate 7 still enforces revision-after-check", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--addCriterion", "must be covered"]);
+    run(["--checkCriterion", "crit-1", "--met", "false"]);
+    // Hand-edit the state file: strip checkedAtHistoryIndex, leave only the
+    // legacy checkedAtThought — simulates a pre-3.0.3 (schema v2) state file.
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    delete s.acceptanceCriteria[0].checkedAtHistoryIndex;
+    writeFileSync(STATE_FILE, JSON.stringify(s));
+    // Next invocation must migrate the field on load and persist it back.
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    const after = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(after.acceptanceCriteria[0].checkedAtHistoryIndex).toBe(1);
+    // Gate 7 must still block termination — no revision since the check.
+    run(["--registerHypothesis", "H1", "--falsification", "f clause long enough here"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f clause long enough here"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    run(["--recordLens", "--lens", "b", "--finding", "x"]);
+    const blocked = run(["--thought", "end", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false", "--newInsight", "false"]);
+    expect(blocked.code).toBe(1);
+    expect(blocked.stderr).toMatch(/criteriaRevision|subsequent --isRevision|Criterion crit-1/i);
+  });
+
+  it("records historyIndex sequentially on every pushed thought", () => {
+    run(["--mode", "path-a", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s.thoughtHistory.map((t: { historyIndex?: number }) => t.historyIndex)).toEqual([1, 2]);
   });
 });

@@ -755,11 +755,11 @@ describe("v3.0.0 state layer: schema migration and atomic save", () => {
     const res = run(["--status"]);
     expect(res.code).toBe(0);
     const parsed = JSON.parse(res.stdout);
-    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.schemaVersion).toBe(3);
     expect(parsed.acceptanceCriteria).toEqual([]);
     expect(parsed.lenses).toEqual([]);
     const onDisk = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
-    expect(onDisk.schemaVersion).toBe(2);
+    expect(onDisk.schemaVersion).toBe(3);
     expect(onDisk.acceptanceCriteria).toEqual([]);
     expect(onDisk.lenses).toEqual([]);
   });

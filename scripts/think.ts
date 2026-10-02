@@ -20,6 +20,7 @@ export interface ThoughtData {
   thoughtNumber: number;
   totalThoughts: number;
   nextThoughtNeeded: boolean;
+  historyIndex?: number;      // 1-based physical position in thoughtHistory; set on push, backfilled on load
   isRevision?: boolean;
   revisesThought?: number;
   branchFromThought?: number;
@@ -62,7 +63,10 @@ export interface AcceptanceCriterion {
   criterion: string;
   met?: boolean;
   notes?: string;
-  checkedAtThought?: number;   // thought count when checked; gate 7 compares revisions after this
+  checkedAtHistoryIndex?: number; // history length (position of next thought) when checked; gate 7 compares revisions after this
+  /** Legacy v2 persisted field — migrated to checkedAtHistoryIndex on load;
+   *  still written alongside so older readers of the state file keep working. */
+  checkedAtThought?: number;
 }
 
 export interface LensFinding {
@@ -92,7 +96,7 @@ export interface State {
   auditTrail?: AuditEntry[];
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function emptyState(): State {
   return { schemaVersion: SCHEMA_VERSION, acceptanceCriteria: [], thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, lenses: [], auditTrail: [] };
@@ -106,8 +110,12 @@ function loadState(): State {
       const migrated: State = {
         schemaVersion: SCHEMA_VERSION,
         mode: data.mode,
-        acceptanceCriteria: data.acceptanceCriteria || [],
-        thoughtHistory: data.thoughtHistory || [],
+        acceptanceCriteria: (data.acceptanceCriteria || []).map((c: AcceptanceCriterion) =>
+          c.checkedAtHistoryIndex == null && c.checkedAtThought != null
+            ? { ...c, checkedAtHistoryIndex: c.checkedAtThought }
+            : c),
+        thoughtHistory: (data.thoughtHistory || []).map((t: ThoughtData, i: number) =>
+          t.historyIndex == null ? { ...t, historyIndex: i + 1 } : t),
         branches: data.branches || {},
         claims: data.claims || {},
         hypotheses: data.hypotheses || {},
@@ -301,10 +309,10 @@ function buildLintReport(state: State): string {
   }
   for (const cr of state.acceptanceCriteria) {
     if (cr.met === false) {
-      const revised = history.some((t, idx) => t.isRevision === true && idx + 1 > (cr.checkedAtThought ?? Infinity));
+      const revised = history.some((t, idx) => t.isRevision === true && idx + 1 > (cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? Infinity));
       const exempt = lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0;
       if (!revised && !exempt) {
-        crit.push(`criterion '${cr.id}' met=false, checkedAtThought=${cr.checkedAtThought ?? "?"} with no later revision`);
+        crit.push(`criterion '${cr.id}' met=false, checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? "?"} with no later revision`);
       }
     }
   }
@@ -395,7 +403,7 @@ function buildLintReport(state: State): string {
     "## Acceptance Checklist",
     state.acceptanceCriteria.length > 0
       ? state.acceptanceCriteria.map(cr =>
-          `- ${cr.id} "${cr.criterion}" → ${cr.met === true ? `met ✅${cr.checkedAtThought != null ? ` (checkedAtThought=${cr.checkedAtThought})` : ""}` : cr.met === false ? `unmet ❌ (checkedAtThought=${cr.checkedAtThought ?? "?"})` : "un-checked ⚠️"}`)
+          `- ${cr.id} "${cr.criterion}" → ${cr.met === true ? `met ✅${(cr.checkedAtHistoryIndex ?? cr.checkedAtThought) != null ? ` (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought})` : ""}` : cr.met === false ? `unmet ❌ (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? "?"})` : "un-checked ⚠️"}`)
           .join("\n")
       : "- None registered.",
     "",
@@ -953,11 +961,12 @@ if (values.checkCriterion != null) {
     fail(`--met must be 'true' or 'false' when --checkCriterion is set (got '${values.met ?? ""}'); any other value would silently leave the criterion unchecked.`);
   }
   crit.met = values.met === "true";
+  crit.checkedAtHistoryIndex = state.thoughtHistory.length;
   crit.checkedAtThought = state.thoughtHistory.length;
   if (values.criterionNotes != null) crit.notes = values.criterionNotes;
   recordAudit(state, { op: "checkCriterion", target: crit.id, detail: values.met });
   saveState(state);
-  console.log(JSON.stringify({ checked: crit.id, met: crit.met, checkedAtThought: crit.checkedAtThought, notes: crit.notes }, null, 2));
+  console.log(JSON.stringify({ checked: crit.id, met: crit.met, checkedAtThought: crit.checkedAtHistoryIndex, notes: crit.notes }, null, 2));
   process.exit(0);
 }
 
@@ -1329,7 +1338,7 @@ if (!nextThoughtNeeded) {
       if (!hasRationale) {
         // Need every unmet criterion to be followed by a revision thought
         for (const unmet of unmetList) {
-          const checkedAt = unmet.checkedAtThought ?? -1;
+          const checkedAt = unmet.checkedAtHistoryIndex ?? unmet.checkedAtThought ?? -1;
           const subsequentRevision = state.thoughtHistory.some(
             (t, idx) => t.isRevision && idx + 1 > checkedAt,
           );
@@ -1422,6 +1431,8 @@ if (values.newInsight != null) {
 if (values.newInsightNotes != null && values.newInsightNotes.trim() !== "") {
   thoughtData.newInsightNotes = values.newInsightNotes;
 }
+
+thoughtData.historyIndex = state.thoughtHistory.length + 1;
 
 if (!thoughtData.isRevision && state.thoughtHistory.some(t => t.thoughtNumber === thoughtNumber)) {
   fail(`thought ${thoughtNumber} already exists in history`);
