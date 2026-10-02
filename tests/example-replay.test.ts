@@ -19,9 +19,10 @@ const README = join(CWD, "README.md");
  * so the example cannot drift out of sync with the CLI again.
  */
 
-/** Extract fenced bash blocks in document order. */
+/** Extract fenced bash blocks in document order. Tolerates CRLF checkouts
+ *  (git core.autocrlf on Windows) so the parser is line-ending agnostic. */
 function bashBlocks(markdown: string): string[] {
-  return [...markdown.matchAll(/```bash\n([\s\S]*?)```/g)].map(m => m[1]);
+  return [...markdown.matchAll(/```bash\r?\n([\s\S]*?)```/g)].map(m => m[1]);
 }
 
 /** Split a block into individual think.ts invocations (a block may hold several). */
