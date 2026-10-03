@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.0.2 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.0.5 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -20,6 +20,7 @@ export interface ThoughtData {
   thoughtNumber: number;
   totalThoughts: number;
   nextThoughtNeeded: boolean;
+  historyIndex: number;       // 1-based physical position in thoughtHistory; set on push, backfilled on load for v2 files
   isRevision?: boolean;
   revisesThought?: number;
   branchFromThought?: number;
@@ -62,7 +63,10 @@ export interface AcceptanceCriterion {
   criterion: string;
   met?: boolean;
   notes?: string;
-  checkedAtThought?: number;   // thought count when checked; gate 7 compares revisions after this
+  checkedAtHistoryIndex?: number; // history length (position of next thought) when checked; gate 7 compares revisions after this
+  /** Legacy v2 persisted field — migrated to checkedAtHistoryIndex on load;
+   *  still written alongside so older readers of the state file keep working. */
+  checkedAtThought?: number;
 }
 
 export interface LensFinding {
@@ -81,7 +85,7 @@ export interface AuditEntry {
 }
 
 export interface State {
-  schemaVersion: number;       // 2; files without it are treated as v1 and migrated on load
+  schemaVersion: number;       // 3; files without it are treated as v1 and migrated on load
   mode?: ThinkingMode;
   acceptanceCriteria: AcceptanceCriterion[];
   thoughtHistory: ThoughtData[];
@@ -92,7 +96,7 @@ export interface State {
   auditTrail?: AuditEntry[];
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function emptyState(): State {
   return { schemaVersion: SCHEMA_VERSION, acceptanceCriteria: [], thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, lenses: [], auditTrail: [] };
@@ -106,8 +110,12 @@ function loadState(): State {
       const migrated: State = {
         schemaVersion: SCHEMA_VERSION,
         mode: data.mode,
-        acceptanceCriteria: data.acceptanceCriteria || [],
-        thoughtHistory: data.thoughtHistory || [],
+        acceptanceCriteria: (data.acceptanceCriteria || []).map((c: AcceptanceCriterion) =>
+          c.checkedAtHistoryIndex == null && c.checkedAtThought != null
+            ? { ...c, checkedAtHistoryIndex: c.checkedAtThought }
+            : c),
+        thoughtHistory: (data.thoughtHistory || []).map((t: ThoughtData, i: number) =>
+          t.historyIndex == null ? { ...t, historyIndex: i + 1 } : t),
         branches: data.branches || {},
         claims: data.claims || {},
         hypotheses: data.hypotheses || {},
@@ -247,17 +255,31 @@ function quoteBlock(text: string): string {
 }
 
 /**
+ * Coverage marker: a surviving hypothesis whose load-bearing proposition was
+ * reached by reasoning rather than retrieval must carry this token in its
+ * notes, so the absence of external coverage is an explicit, machine-visible
+ * claim instead of a silent gap. Coverage itself is not a hard gate (see
+ * SKILL.md §Coverage); the marker only makes the omission auditable.
+ */
+const INFERENCE_MARKER = "[INFERENCE]";
+function declaresInference(h: Hypothesis): boolean {
+  return h.notes != null && h.notes.toUpperCase().includes(INFERENCE_MARKER);
+}
+
+/**
  * Link-status derivation (plan §7 rule K): for each hypothesis, look at the
  * claims whose `supports` points at it. Lowest status wins.
  *  - Linked-verified: ≥1 linked claim, all verified and carrying a quote.
- *  - Plausible: no linked claims at all, or only single_source evidence.
+ *  - No external coverage: no linked claims at all — the script records that
+ *    nothing external backs this hypothesis (not a quality verdict).
+ *  - Plausible: only single_source evidence.
  *  - Fragile: any linked claim unverified / not_found / pending.
  * This is a self-reported linkage label — the script cannot judge claim
  * relevance; final confidence is decided when the model writes the answer.
  */
 function linkStatus(hyp: Hypothesis, claims: Claim[]): string {
   const linked = claims.filter(c => c.supports === hyp.id);
-  if (linked.length === 0) return "Plausible";
+  if (linked.length === 0) return "No external coverage";
   if (linked.every(c => c.status === "verified" && c.quote != null && c.quote.trim().length > 0)) {
     return "Linked-verified";
   }
@@ -301,10 +323,10 @@ function buildLintReport(state: State): string {
   }
   for (const cr of state.acceptanceCriteria) {
     if (cr.met === false) {
-      const revised = history.some((t, idx) => t.isRevision === true && idx + 1 > (cr.checkedAtThought ?? Infinity));
+      const revised = history.some((t) => t.isRevision === true && (t.historyIndex ?? 0) > (cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? Infinity));
       const exempt = lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0;
       if (!revised && !exempt) {
-        crit.push(`criterion '${cr.id}' met=false, checkedAtThought=${cr.checkedAtThought ?? "?"} with no later revision`);
+        crit.push(`criterion '${cr.id}' met=false, checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? "?"} with no later revision`);
       }
     }
   }
@@ -329,8 +351,12 @@ function buildLintReport(state: State): string {
     if (h.falsification != null && h.falsification.trim().length > 0 && h.falsification.trim().length < 20) {
       warn.push(`'${h.id}' falsification is short (<20 chars, self-reported; human review advised)`);
     }
-    if (claims.every(c => c.supports !== h.id)) {
-      warn.push(`'${h.id}' has no claim support → link-status Plausible (not Low)`);
+    // Only survivors matter: a rejected/merged hypothesis carries no load-bearing
+    // proposition forward, so warning it is a contradiction (mirrors the Blind
+    // Spots survivor filter below).
+    if ((h.status === "selected" || h.status === "synthesized") && claims.every(c => c.supports !== h.id)) {
+      const marker = declaresInference(h) ? "marked [INFERENCE]" : "NOT marked [INFERENCE]";
+      warn.push(`'${h.id}' has no claim support (${marker}); its load-bearing proposition is unverified — cite as inference, not fact`);
     }
   }
   for (const c of claims) {
@@ -395,7 +421,7 @@ function buildLintReport(state: State): string {
     "## Acceptance Checklist",
     state.acceptanceCriteria.length > 0
       ? state.acceptanceCriteria.map(cr =>
-          `- ${cr.id} "${cr.criterion}" → ${cr.met === true ? `met ✅${cr.checkedAtThought != null ? ` (checkedAtThought=${cr.checkedAtThought})` : ""}` : cr.met === false ? `unmet ❌ (checkedAtThought=${cr.checkedAtThought ?? "?"})` : "un-checked ⚠️"}`)
+          `- ${cr.id} "${cr.criterion}" → ${cr.met === true ? `met ✅${(cr.checkedAtHistoryIndex ?? cr.checkedAtThought) != null ? ` (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought})` : ""}` : cr.met === false ? `unmet ❌ (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? "?"})` : "un-checked ⚠️"}`)
           .join("\n")
       : "- None registered.",
     "",
@@ -452,6 +478,17 @@ function buildLintReport(state: State): string {
     }
   }
   for (const h of openHyp) residual.push(`- [Unverified] Hypothesis ${h.id} still pending resolution`);
+  // Coverage visibility: surviving hypotheses with no linked claim are listed
+  // either as an explicit inference (marked) or as an uncovered violation.
+  const survivors = hypotheses.filter(h => h.status === "selected" || h.status === "synthesized");
+  for (const h of survivors) {
+    if (claims.some(c => c.supports === h.id)) continue;
+    residual.push(
+      declaresInference(h)
+        ? `- [Inference] ${h.id} is not backed by any claim; declared as inference from reasoning, not retrieved evidence`
+        : `- [Uncovered] ${h.id} is a surviving hypothesis with no claim support and is NOT marked [INFERENCE]; either register a supporting claim or append [INFERENCE] to --hypothesisNotes`,
+    );
+  }
   const unresolvedN = claims.filter(c => c.status !== "verified").length;
 
   const nextSteps: string[] = [];
@@ -476,7 +513,7 @@ function buildLintReport(state: State): string {
       ? residual.join("\n")
       : claims.length > 0
         ? "- All registered claims verified (blind spots outside the registered claims are not tracked)."
-        : "- None recorded by script.",
+        : "- No claims registered and no surviving hypotheses — nothing for the script to check.",
     "",
     "## Actionable Next Steps / Exit Conditions",
     nextSteps.length > 0 ? nextSteps.join("\n") : "- None from script gates. The final answer must still be written by the model per references/conclusion-card.md.",
@@ -725,6 +762,23 @@ for (const [child, parent] of FLAG_REQUIRES) {
   }
 }
 
+// --thought is a standalone mode: its dispatch block sits after every
+// side-command handler, each of which early-exits. A --thought alongside a
+// side-command would be parsed, silently discarded, and the command would still
+// exit 0 (see the no-silent-swap contract). Reject the combination explicitly.
+const THOUGHT_FLAGS: Record<string, true> = {
+  "--thought": true, "--thoughtNumber": true, "--totalThoughts": true,
+  "--nextThoughtNeeded": true, "--isRevision": true, "--revisesThought": true,
+  "--branchFromThought": true, "--branchId": true, "--needsMoreThoughts": true,
+  "--newInsight": true, "--newInsightNotes": true, "--mode": true,
+};
+if (values.thought != null) {
+  const conflicting = otherOps(values).filter(f => THOUGHT_FLAGS[f] !== true);
+  if (conflicting.length > 0) {
+    fail(`--thought cannot be combined with ${conflicting.join(", ")}; the thought would be silently discarded. Submit the thought alone, then run the side-command.`);
+  }
+}
+
 // --- Command: Status ---
 
 if (values.status && values.export) {
@@ -824,6 +878,29 @@ if (values.registerHypothesis != null) {
   process.exit(0);
 }
 
+/**
+ * Projects the subset of fields legal for a target hypothesis status. A merged
+ * node carries mergedInto (+ optional notes) but never a falsification outcome;
+ * terminal non-merge statuses carry notes + falsificationResult; pending carries
+ * neither. Replaces mutate-then-delete so a stale field cannot survive a
+ * transition regardless of which resolution ran before.
+ */
+function projectHypothesisForStatus(
+  base: Pick<Hypothesis, "id" | "statement" | "falsification">,
+  status: HypothesisStatus,
+  fields: { notes?: string; falsificationResult?: string; mergedInto?: string },
+): Hypothesis {
+  const out: Hypothesis = { id: base.id, statement: base.statement, status, falsification: base.falsification };
+  if (status === "merged") {
+    if (fields.mergedInto != null) out.mergedInto = fields.mergedInto;
+    if (fields.notes != null) out.notes = fields.notes;
+  } else if (status !== "pending") {
+    if (fields.notes != null) out.notes = fields.notes;
+    if (fields.falsificationResult != null) out.falsificationResult = fields.falsificationResult;
+  }
+  return out;
+}
+
 // --- Command: Resolve Hypothesis ---
 
 if (values.resolveHypothesis != null) {
@@ -871,12 +948,9 @@ if (values.resolveHypothesis != null) {
     // Project a clean object: only fields valid for the target status are
     // carried over, so a stale falsificationResult/notes can never survive a
     // merge regardless of which resolution ran before.
-    const clean: Hypothesis = {
-      id: hyp.id, statement: hyp.statement, status,
-      falsification: hyp.falsification, mergedInto: target,
-    };
-    if (values.hypothesisNotes) clean.notes = values.hypothesisNotes;
-    state.hypotheses![hyp.id] = clean;
+    state.hypotheses![hyp.id] = projectHypothesisForStatus(hyp, status, {
+      mergedInto: target, notes: values.hypothesisNotes,
+    });
   } else {
     // A survivor that still absorbs members (mergedInto pointers) cannot be
     // re-resolved to `rejected`/`pending`: that would strand each member's
@@ -892,10 +966,9 @@ if (values.resolveHypothesis != null) {
     }
     // Project a clean object: mergedInto/notes/falsificationResult are only
     // written when valid for this status, never deleted after the fact.
-    const clean: Hypothesis = { id: hyp.id, statement: hyp.statement, status, falsification: hyp.falsification };
-    if (values.hypothesisNotes) clean.notes = values.hypothesisNotes;
-    if (values.falsificationResult != null) clean.falsificationResult = values.falsificationResult;
-    state.hypotheses![hyp.id] = clean;
+    state.hypotheses![hyp.id] = projectHypothesisForStatus(hyp, status, {
+      notes: values.hypothesisNotes, falsificationResult: values.falsificationResult,
+    });
   }
 
   // Terminal resolutions must carry the falsification audit trail: what the
@@ -953,11 +1026,12 @@ if (values.checkCriterion != null) {
     fail(`--met must be 'true' or 'false' when --checkCriterion is set (got '${values.met ?? ""}'); any other value would silently leave the criterion unchecked.`);
   }
   crit.met = values.met === "true";
+  crit.checkedAtHistoryIndex = state.thoughtHistory.length;
   crit.checkedAtThought = state.thoughtHistory.length;
   if (values.criterionNotes != null) crit.notes = values.criterionNotes;
   recordAudit(state, { op: "checkCriterion", target: crit.id, detail: values.met });
   saveState(state);
-  console.log(JSON.stringify({ checked: crit.id, met: crit.met, checkedAtThought: crit.checkedAtThought, notes: crit.notes }, null, 2));
+  console.log(JSON.stringify({ checked: crit.id, met: crit.met, checkedAtThought: crit.checkedAtHistoryIndex, notes: crit.notes }, null, 2));
   process.exit(0);
 }
 
@@ -1329,9 +1403,9 @@ if (!nextThoughtNeeded) {
       if (!hasRationale) {
         // Need every unmet criterion to be followed by a revision thought
         for (const unmet of unmetList) {
-          const checkedAt = unmet.checkedAtThought ?? -1;
+          const checkedAt = unmet.checkedAtHistoryIndex ?? unmet.checkedAtThought ?? -1;
           const subsequentRevision = state.thoughtHistory.some(
-            (t, idx) => t.isRevision && idx + 1 > checkedAt,
+            (t) => t.isRevision && (t.historyIndex ?? 0) > checkedAt,
           );
           if (!subsequentRevision) {
             enforceGate(
@@ -1385,6 +1459,7 @@ const thoughtData: ThoughtData = {
   thoughtNumber,
   totalThoughts,
   nextThoughtNeeded,
+  historyIndex: state.thoughtHistory.length + 1,
 };
 
 if (values.isRevision) {

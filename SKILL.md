@@ -1,14 +1,32 @@
 ---
 name: claude-reasoning
-version: 3.0.2
+version: 3.0.5
 description: "Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or an open-ended question needing verified external facts — before answering, not after. Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 3.0.2
+# claude-reasoning 3.0.5
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
 State machine: `scripts/think.ts` (TypeScript, runs on `bun` or `npx tsx`). Persistent state: `scripts/.think_state.json`. No MCP server required.
+
+---
+
+## Step -1: Load Contract (Path B)
+
+Load these before the first Path B thought — the state machine cannot check that
+they were read, so this is the one ordering the model must enforce on itself:
+
+| Read | Before |
+|---|---|
+| `references/critical-lenses.md` | choosing `--recordLens` names |
+| `references/source-tiers.md` | any `--claimStatus verified` |
+| `references/hallucination-gates.md` | the termination audit (gates 6–10) |
+| `references/conclusion-card.md` | writing the final delivery |
+
+Reading them late (or not at all) is the failure this checklist exists to prevent:
+the references are cited throughout the Path B steps below, and by the time the
+step that needs one is reached the context has usually been diluted by other work.
 
 ---
 
@@ -45,6 +63,8 @@ Rationale, measured: closed-form logic questions that were run through a fixed 1
 ## Path B: Open-Ended Adaptive Reasoning
 
 **No fixed round count. Converge when a round yields no new insight.**
+
+Do not send the first Path B thought until the four reference files in **Step -1** are read.
 
 1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
 2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis "<statement>" --falsification "<condition>"` (both flags required) and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`). Path B termination is rejected while fewer than 2 hypotheses are registered, any remains `pending`, merges leave fewer than 2 distinct surviving hypotheses, or **every resolved hypothesis is `rejected`** — at least one must be `selected` or `synthesized` to conclude. Terminal resolutions (`selected`/`rejected`/`synthesized`) **require `--hypothesisNotes <why>` and `--falsificationResult "<evidence/outcome>"`** (concrete description of whether the falsification condition held or broke). Use `merged` (with `--mergedInto…
@@ -117,6 +137,8 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
    **`verified` is self-attested.** `think.ts` never fetches a source. It enforces source *count*, root-domain independence, and the caller-declared `--claimTier` (a Tier 1/2 floor) and nothing else — whether a URL actually supports the claim it is attached to is the model's assertion, unverifiable from state.
 
+   **Coverage is not a gate.** The script enforces the resolution of *registered* claims; it cannot know which load-bearing propositions *should* have been registered. A surviving hypothesis with no linked claim is reported as `link-status: No external coverage` and listed `[Uncovered]` in the lint card's Blind Spots — but termination still succeeds. To close the gap deliberately: give every surviving hypothesis at least one supporting claim, **or** mark its `--hypothesisNotes` with the token `[INFERENCE]` when the conclusion rests on reasoning rather than retrieval. A marked hypothesis is reported as `[Inference]` instead of `[Uncovered]`. Either way the omission leaves a machine-readable trace; an unmarked, uncovered hypothesis is the exact signature of a confidently-asserted-but-unretrieved claim.
+
 4. **Negative Search Query (Active Falsification).**
    Before confirming a major factual proposition, perform at least one search query targeting counter-evidence or known failure modes (e.g. `"<subject> limitations known bugs issue"`). Record any discovered caveats.
 
@@ -128,6 +150,8 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 6. **Termination is gated.**
    `--nextThoughtNeeded false` fails while any claim is still `pending`. Every pre-registered claim must reach an explicit resolution before the session can close. In Path B, termination additionally requires **≥ 2 prior thoughts** (at least one decompose and one synthesis round) and is rejected if the immediately preceding thought set `--needsMoreThoughts` — you cannot flag depth expansion and then conclude without another round.
+
+   **Coverage caveat.** Termination gates track *registered* claims only. Registering a weak but verifiable claim is not a substitute for covering the hypothesis's actual load-bearing proposition — the script cannot check relevance (`--supports` validates only that the target hypothesis exists). Zero-claim Path B sessions terminate successfully; they are reported as unverified coverage, not blocked.
 
    ### Termination gates 6–10 (Path B)
 
@@ -211,7 +235,7 @@ Status line returned after each thought:
 | Flag | Type | Notes |
 |---|---|---|
 | `--mode` | enum | `path-a` \| `path-b` — **required on the first thought**; immutable for the session |
-| `--thought` | string | Thought content; a value starting with `-` needs `--thought=<value>` |
+| `--thought` | string | Thought content; a value starting with `-` needs `--thought=<value>`. **Standalone**: cannot be combined with any side-command (`--recordLens`, `--resolveHypothesis`, `--status`, …) — the thought would be silently discarded, so the combination exits 1 |
 | `--thoughtNumber` | int ≥ 1 | Current index |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
 | `--nextThoughtNeeded` | `true`\|`false` | `false` terminates — blocked while claims are pending or termination gates fail; any other value (e.g. `ture`, `yes`) exits 1 |
@@ -273,6 +297,8 @@ Status line returned after each thought:
 ## State file
 
 `scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
+
+**Schema `v3`.** `ThoughtData` carries `historyIndex` — the 1-based position of the thought in the *timeline*, which is distinct from the caller-supplied `thoughtNumber` (revisions re-enter the history without renumbering it, so the two diverge). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. A `v2` state file is migrated to `v3` automatically on load; the version is stored in the file as `schemaVersion`.
 
 Two guards protect the file itself:
 

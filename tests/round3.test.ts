@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { spawnSync } from "child_process";
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
@@ -313,5 +313,167 @@ describe("round-8 review: temporal-index gates and flag-pair silent drops", () =
     expect(res.code).toBe(0);
     expect(res.stdout).toContain("Usage:");
     expect(res.stderr).toBe("");
+  });
+
+  it("migrates a legacy checkedAtThought criterion and gate 7 still enforces revision-after-check", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--addCriterion", "must be covered"]);
+    run(["--checkCriterion", "crit-1", "--met", "false"]);
+    // Hand-edit the state file: strip checkedAtHistoryIndex, leave only the
+    // legacy checkedAtThought — simulates a pre-3.0.3 (schema v2) state file.
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    delete s.acceptanceCriteria[0].checkedAtHistoryIndex;
+    writeFileSync(STATE_FILE, JSON.stringify(s));
+    // Next invocation must migrate the field on load and persist it back.
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    const after = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(after.acceptanceCriteria[0].checkedAtHistoryIndex).toBe(1);
+    // Gate 7 must still block termination — no revision since the check.
+    run(["--registerHypothesis", "H1", "--falsification", "f clause long enough here"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f clause long enough here"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    run(["--recordLens", "--lens", "b", "--finding", "x"]);
+    const blocked = run(["--thought", "end", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false", "--newInsight", "false"]);
+    expect(blocked.code).toBe(1);
+    expect(blocked.stderr).toMatch(/criteriaRevision|subsequent --isRevision|Criterion crit-1/i);
+  });
+
+  it("records historyIndex sequentially on every pushed thought", () => {
+    run(["--mode", "path-a", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s.thoughtHistory.map((t: { historyIndex?: number }) => t.historyIndex)).toEqual([1, 2]);
+  });
+
+  it("re-resolving a merged hypothesis to rejected clears mergedInto via projection", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1", "--falsification", "f1 clause long enough"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f2 clause long enough"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "merged", "--mergedInto", "hyp-2", "--hypothesisNotes", "absorbed"]);
+    const s1 = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s1.hypotheses["hyp-1"].mergedInto).toBe("hyp-2");
+    expect(s1.hypotheses["hyp-1"].falsificationResult).toBeUndefined();
+    // hyp-1 absorbs nothing, so it may be re-resolved; mergedInto must not survive.
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "bad idea", "--falsificationResult", "broken"]);
+    const s2 = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s2.hypotheses["hyp-1"].status).toBe("rejected");
+    expect(s2.hypotheses["hyp-1"].mergedInto).toBeUndefined();
+    expect(s2.hypotheses["hyp-1"].falsificationResult).toBe("broken");
+  });
+
+  it("gate 7 reads historyIndex, not array position — revision moved to index 0 still satisfies the gate", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--addCriterion", "must be covered"]);
+    run(["--checkCriterion", "crit-1", "--met", "false"]);
+    run(["--thought", "revise crit-1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true", "--isRevision", "--revisesThought", "1"]);
+    // Reorder the persisted array: move the revision (historyIndex=2) to index
+    // 0. Under idx+1 semantics Gate 7 sees it at position 1 and compares 1 > 1
+    // → false, incorrectly blocks. Under historyIndex semantics it compares
+    // t.historyIndex=2 > checkedAt=1 → true, gate satisfied.
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    const rev = s.thoughtHistory.pop();
+    s.thoughtHistory.unshift(rev);
+    writeFileSync(STATE_FILE, JSON.stringify(s));
+    run(["--registerHypothesis", "H1", "--falsification", "f clause long enough here"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f clause long enough here"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    run(["--recordLens", "--lens", "b", "--finding", "x"]);
+    const allowed = run(["--thought", "end", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false", "--newInsight", "false"]);
+    expect(allowed.code).toBe(0);
+  });
+
+  // --- v3.0.5: [INFERENCE] coverage marker (contract §Coverage) ---
+  //
+  // Path B may terminate with zero registered claims (coverage is not a hard
+  // gate). The gap the marker closes: a surviving hypothesis whose load-bearing
+  // proposition was never retrieved must say so explicitly, and the lint card
+  // must show it — so "asserted confidently without [INFERENCE]" is machine-visible.
+  function reachTerminationWithZeroClaims(notes: string): { code: number; stdout: string; stderr: string } {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1", "--falsification", "f clause long enough here"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f clause long enough here"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", notes, "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--addCriterion", "covered"]);
+    run(["--checkCriterion", "crit-1", "--met", "true"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    run(["--recordLens", "--lens", "b", "--finding", "x"]);
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t3", "--thoughtNumber", "3", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    return run(["--thought", "end", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false", "--newInsight", "false", "--newInsightNotes", "converged"]);
+  }
+
+  it("flags an uncovered surviving hypothesis (no claim, no [INFERENCE]) in the lint card", () => {
+    const res = reachTerminationWithZeroClaims("plain rationale, no marker");
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[Uncovered\].*hyp-1/i);
+    expect(res.stdout).not.toContain("- None recorded by script.");
+  });
+
+  it("does not flag a surviving hypothesis explicitly marked [INFERENCE]", () => {
+    const res = reachTerminationWithZeroClaims("reasoned from first principles [INFERENCE]");
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[Inference\].*hyp-1/i);
+    expect(res.stdout).not.toMatch(/\[Uncovered\]/i);
+  });
+
+  it("shows No external coverage for a claim-less surviving hypothesis in link-status", () => {
+    const res = reachTerminationWithZeroClaims("plain rationale, no marker");
+    expect(res.stdout).toMatch(/link-status: No external coverage/);
+  });
+
+  it("does not warn about claim coverage for rejected/merged hypotheses — only survivors", () => {
+    const res = reachTerminationWithZeroClaims("plain rationale, no marker");
+    // hyp-2 is rejected: its proposition is not carried forward, so "load-bearing
+    // proposition unverified" is a contradiction. Only survivors are warned.
+    expect(res.stdout).not.toMatch(/'hyp-2'.*has no claim support/);
+    expect(res.stdout).toMatch(/'hyp-1'.*has no claim support/);
+    // Blind Spots must likewise only list the survivor.
+    expect(res.stdout).not.toMatch(/\[Uncovered\]\s+hyp-2/);
+  });
+
+  // --- v3.0.5: --thought is a standalone mode (no silent drop) ---
+  //
+  // Every side-command handler early-exits before the thought block, so a
+  // --thought passed alongside one was parsed, discarded, and the command
+  // exited 0 with normal output — the thought never reached history.
+  it("rejects --thought combined with --recordLens instead of silently dropping the thought", () => {
+    const res = run(["--mode", "path-b", "--thought", "REAL", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true", "--recordLens", "--lens", "a", "--finding", "x"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/--thought.*cannot be combined|silently/i);
+  });
+
+  it("rejects --thought combined with --resolveHypothesis instead of silently dropping the thought", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H", "--falsification", "f clause long enough here"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    const before = s.thoughtHistory.length;
+    const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held", "--thought", "REAL", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/--thought.*cannot be combined|silently/i);
+    const after = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(after.thoughtHistory.length).toBe(before);
+  });
+
+  it("records lens atThought against the real history length (no desync)", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s.thoughtHistory.length).toBe(2);
+    expect(s.lenses[0].atThought).toBe(2);
+  });
+
+  it("assigns a required historyIndex to every pushed thought (schema v3)", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t2", "--thoughtNumber", "5", "--totalThoughts", "6", "--nextThoughtNeeded", "true"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s.thoughtHistory.map((t: { historyIndex: number }) => t.historyIndex)).toEqual([1, 2]);
+    // The caller-supplied thoughtNumber diverges from the physical timeline.
+    expect(s.thoughtHistory.map((t: { thoughtNumber: number }) => t.thoughtNumber)).toEqual([1, 5]);
   });
 });

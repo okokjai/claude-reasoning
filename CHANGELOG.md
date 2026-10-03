@@ -2,6 +2,63 @@
 
 All notable changes to this skill are documented here.
 
+## [3.0.5] - 2026-10-03
+
+### Tooling
+
+- **`bun run typecheck` (`tsc --noEmit`) and a CI workflow.** `bun test` does not typecheck, so a type-only defect (see the `historyIndex` literal below) passes every test. The script makes the check a one-liner; README wires it into the documented test command; `.github/workflows/ci.yml` runs `bun install --frozen-lockfile`, `typecheck`, and `test` on push/PR.
+
+### Fixed
+
+- **Coverage WARN fired for every hypothesis, not just survivors.** The no-claim warning ran over all hypotheses including `rejected`/`merged`/`pending` ones, so a rejected hypothesis was told its "load-bearing proposition is unverified" — a contradiction, since a rejected proposition is not carried forward. The warning is now scoped to `selected`/`synthesized`, matching the Blind Spots survivor filter.
+- **`--thought` combined with a side-command was silently discarded.** Every side-command handler (`--registerClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, `--verifyClaim`) early-exits before the thought block, so a `--thought` passed alongside one was parsed, dropped, and the command still exited 0 with normal output — the thought never reached `thoughtHistory`. The user-visible symptom was a later `history=N` far below the thoughts submitted, tripping the termination gates. The combination now exits 1 with `--thought cannot be combined with <flags>; the thought would be silently discarded.`
+- **`--recordLens` `atThought` desynchronized after a dropped thought.** With the silent drop above, a lens's `atThought` (recorded as the current history length) froze at a stale value. Fixed transitively: thoughts can no longer vanish, so `atThought` tracks the real history.
+- **`ThoughtData` literal omitted the now-required `historyIndex`.** v3.0.4 made `historyIndex` required, but the thought-submission literal assigned it *after* construction, so the object did not satisfy `ThoughtData` — a type error, never a runtime one. `bun test` does not typecheck, so no test caught it, and README's claim that `bunx tsc --noEmit` typechecks clean was false (dependencies had to be installed in the worktree before `tsc` could resolve `fs`/`path`/`process` at all). `historyIndex` is now set in the literal (`state.thoughtHistory.length + 1`) and the late assignment is gone. `bunx tsc --noEmit` is now genuinely clean.
+
+### Added
+
+- **`## Step -1: Load Contract` in SKILL.md.** The four `references/*.md` files were cited passively throughout the Path B steps with no ordering requirement, so the model often reached the step needing one only after its context had been diluted. Step -1 lists all four with the point at which each must be read, and Path B gates its first thought on it. The state machine cannot verify a file was read; this makes the contract explicit and regressable (`tests/skill-frontmatter.test.ts` asserts the section and its four paths exist).
+- **`[INFERENCE]` coverage marker.** Appending the token `[INFERENCE]` to a hypothesis's `--hypothesisNotes` declares "this load-bearing proposition came from reasoning, not retrieval". It does not block termination and does not assert correctness — it makes the absence of external coverage explicit, so a confidently-asserted-but-unretrieved conclusion is distinguishable from a covered one in both the state file and the lint card.
+- **`tests/changelog-structure.test.ts`.** Asserts no duplicate `### Heading` within a single `## [x.y.z]` version block — the merge-remnant guard for CHANGELOG.md.
+
+### Changed
+
+- **Coverage is now machine-visible.** A surviving (`selected`/`synthesized`) hypothesis with no linked claim previously produced the silent lint line `blind spots … None recorded by script.` and a `link-status: Plausible` label — zero evidence was presented as "plausible" while a hypothesis backed by a *pending* claim was labelled `Fragile`. Now:
+  - `linkStatus` returns `No external coverage` (not `Plausible`) when a hypothesis has no linked claim.
+  - `buildLintReport` lists every uncovered surviving hypothesis in **Residual Uncertainty & Blind Spots** — as `[Uncovered]` when it is unmarked, or `[Inference]` when its `--hypothesisNotes` carries the `[INFERENCE]` token.
+  - The no-claim WARN names the marker state: `has no claim support (NOT marked [INFERENCE])`.
+  - The `claims=0` fallback line no longer reads "None recorded by script."
+- **State-file schema `v3` is now documented in README and SKILL.** The 3.0.3 schema change (`ThoughtData.historyIndex`, `AcceptanceCriterion.checkedAtHistoryIndex`, `SCHEMA_VERSION` 2→3 auto-migration) was recorded only here, so any external tool reading `scripts/.think_state.json` had no user-facing description of it. Both docs now carry a State-file section naming the fields, the timeline-vs-`thoughtNumber` distinction, and the auto-migration. The stale `// 2` comment on `State.schemaVersion` is corrected to `3`.
+- **README no longer hardcodes a test count.** `190+ tests across 6 files` was stale (actual count has moved past it) and contradicted 3.0.3's deliberate decoupling of fragile counters. It now points at `tests/` with no absolute number.
+
+### Notes
+
+- Coverage remains **not** a hard gate: `--supports` validates only that the target hypothesis exists, so the script cannot judge relevance or know which propositions should have been registered (see SKILL.md §Coverage). This release closes the *visibility* gap, not the *judgment* gap.
+
+## [3.0.4] - 2026-10-03
+
+### Fixed
+
+- **Gate 7 and the lint WARN compared `idx + 1`, not `t.historyIndex`.** The v3.0.3 refactor introduced `historyIndex` as the explicit physical timeline but left the two temporal-position checks reading array index — a stored `thoughtHistory` reordered by an external tool (or any future writer that did not maintain index==position) would silently defeat the revision-after-check invariant. Both sites now read `(t.historyIndex ?? 0) > checkedAt`.
+- **`ThoughtData.historyIndex` was typed optional.** The spec declared it required; the optional type let a hypothetical writer skip the field without a type error. It is now `historyIndex: number` — set unconditionally on push and backfilled on load for pre-v3 files, so every persisted entry carries it.
+
+
+## [3.0.3] - 2026-10-02
+
+### Changed
+
+- **Temporal index is now explicit.** `ThoughtData` carries `historyIndex` (1-based physical position in `thoughtHistory`) and `AcceptanceCriterion` records `checkedAtHistoryIndex` (renamed from `checkedAtThought`, which was a history length conflated with the user-facing `thoughtNumber`). Gate 7 and the lint WARN now read the renamed field; `thoughtNumber` is no longer referenced by any temporal-position check.
+- **Hypothesis transitions delegate to `projectHypothesisForStatus`.** The allowed-fields-per-status rule that previously lived inline in `resolveHypothesis` is now a named pure function, so the invariant is greppable and cannot be silently bypassed by a future `delete` patch.
+
+### Fixed
+
+- **`example-replay.test.ts` failed on CRLF checkouts.** Git's `core.autocrlf` on Windows converts `references/*.md` to CRLF, and the fenced-block parser matched only `\n`, producing zero bash blocks. The parser now tolerates `\r\n`, and `.gitattributes` enforces `eol=lf` on text files.
+
+### Schema
+
+- State file schema bumps to `SCHEMA_VERSION = 3`. Legacy v2 files auto-migrate on load: `checkedAtThought` is copied to `checkedAtHistoryIndex`, and `historyIndex` is backfilled to each thought's array position. No `--reset` required; the migrated form is persisted back.
+
+
 ## [3.0.2] - 2026-10-02
 
 ### Fixed
@@ -9,7 +66,7 @@ All notable changes to this skill are documented here.
 - **Tier-3-only claims could reach `verified` (enforcement gap).** `--verifyClaim --claimStatus verified` enforced only source count and root-domain diversity, so four distinct Tier 3 domains (aggregators, exchange blogs, community posts) passed the guardrail and produced `[Confirmed]` cards. `references/source-tiers.md:40` ("even multiple Tier 3 sources cannot elevate a claim to verified") lived only in prose. `--verifyClaim` now requires one `--claimTier <1-4>` per `--claimSource` (positionally aligned) and rejects `verified` unless at least 2 sources are Tier 1/2. Tiers persist on the claim as `tiers[]`.
 - **`--claimTier` was only shape-validated on `verified`.** Supplying `--claimTier` with a non-`verified` status skipped every check, so a typo or a stray count persisted garbage into state: `--claimTier abc` wrote `tiers: [null]` (NaN serialized to null), `--claimTier 5 --claimTier 0` wrote `tiers: [5, 0]`, and a tier count with no matching source wrote `tiers: [2, 2, 2]` against `sources: []`. Shape validation (integer 1-4, one tier per source) is now hoisted above the `verified`-only block and runs for every status; a non-conforming tier vector exits 1 instead of being written.
 - **`references/example-path-b-verify.md` examples were unrunnable.** Every `bash` block in the worked example exited 1: `--registerClaim` without the required `--supports` link, `--registerHypothesis` without `--falsification`, both `--verifyClaim` calls without `--claimTier` and the quote/negative-search trio, `--resolveHypothesis` without `--falsificationResult`, and a terminating thought with no acceptance criterion, lens records, or `--newInsight` declaration. The file predated the 3.0.0 guardrails; it is now rewritten against the current CLI and replayed by a test. Claim registration is documented after hypothesis registration because `--supports` requires the target to already exist.
-- **Test suites shared the real state file.** `tests/think.test.ts`, `tests/issues.test.ts`, and the new `tests/example-replay.test.ts` all wrote to `scripts/.think_state.json` and `beforeEach`-unlinked it; `bun test` runs files in parallel processes, so two concurrent `bun test` invocations produced ~50% failures. Every suite now pins `THINK_STATE_FILE` to a per-process path (`tests/.think_state.<file>-<pid>.json`), and a new `tests/state-isolation.test.ts` regression-guards both the per-file pin and cross-process independence. Verified: two concurrent `bun test` runs both finish 198/0.
+- **Test suites shared the real state file.** `tests/think.test.ts`, `tests/issues.test.ts`, and the new `tests/example-replay.test.ts` all wrote to `scripts/.think_state.json` and `beforeEach`-unlinked it; `bun test` runs files in parallel processes, so two concurrent `bun test` invocations produced ~50% failures. Every suite now pins `THINK_STATE_FILE` to a per-process path (`tests/.think_state.<file>-<pid>.json`), and a new `tests/state-isolation.test.ts` regression-guards both the per-file pin and cross-process independence. Verified: two concurrent `bun test` runs both finish with zero failures.
 - **The worked-example `# Output:` lines were never checked.** `example-replay.test.ts` only asserted exit 0, so the documented `"supports": "hyp-1"` field on `--registerClaim` — which `think.ts` does not emit — would have stayed wrong forever. The replay test now also parses every `# Output:` line: JSON bodies must match the real stdout object's keys **and values** (a `"resolved": "WRONG"` doc is caught), and status lines must appear verbatim; the phantom `supports` keys are removed from the example, and the terminating-thought output is rewritten as free prose (`# stdout:`) since a fresh process cannot reproduce a populated session card.
 - **Re-verifying without `--claimTier` wiped stored tiers.** `claim.tiers = tiers` ran unconditionally for non-`pending` statuses, so `verifyClaim … --claimStatus single_source` (no tiers) after a prior tiered verify persisted `tiers: []`. Now only `tiers.length > 0` overwrites — an un-tiered re-verify preserves the recorded tiers.
 - **Verification-only flags were silently dropped without `--verifyClaim`.** `--claimTier 1` or `--claimNotes note` passed alongside `--registerClaim` was parsed, ignored, and the command exited 0 — the claim registered with no tier or note attached. Any of `--claimStatus`, `--claimSource`, `--claimTier`, `--claimQuote`, `--negativeQuery`, `--negativeFinding`, `--claimNotes` without `--verifyClaim` now exits 1.
@@ -46,7 +103,9 @@ All notable changes to this skill are documented here.
 
 ### Tests
 
-- `tests/issues.test.ts`: new `Audit 5` block (8 cases) — four distinct Tier 3 domains rejected; 1×Tier1 + 1×Tier3 rejected; 2×Tier1/2 accepted; tier/source count mismatch rejected; out-of-range tier rejected; missing `--claimTier` rejected; `single_source` unaffected; a hand-written legacy verified claim with no `tiers[]` produces the lint WARN. Plus 4 cases for non-verified tier shape validation (non-numeric, out-of-range, count mismatch, and an aligned tier that persists), a regression test locking the anti-heuristic decision, and three new cases: un-tiered re-verify preserves stored tiers, verification flags without `--verifyClaim` exit 1, non-canonical tier spellings (`1e0`,`0x1`,`+1`,`01`) exit 1. New `tests/example-replay.test.ts` executes every command in `references/example-path-b-verify.md` in document order, asserts exit 0, and matches each `# Output:` line against real stdout (documented JSON key/value pairs must both appear on the real object; verbatim tokens for status lines). New `tests/state-isolation.test.ts` guards per-process `THINK_STATE_FILE` isolation. `tests/round3.test.ts` covers the round-3 silent-failure/bypass fixes plus the merge-chain, stale-survivor, re-resolve field cleanup, merged `falsificationResult` rejection, claim `pending` re-verify evidence cleanup, empty-string parent-flag gap, and `--help` CLI support. Existing `verified` call sites migrated to pass `--claimTier`. Suite now **198 tests across 6 files**.
+- `tests/issues.test.ts`: new `Audit 5` block (8 cases) — four distinct Tier 3 domains rejected; 1×Tier1 + 1×Tier3 rejected; 2×Tier1/2 accepted; tier/source count mismatch rejected; out-of-range tier rejected; missing `--claimTier` rejected; `single_source` unaffected; a hand-written legacy verified claim with no `tiers[]` produces the lint WARN. Plus 4 cases for non-verified tier shape validation (non-numeric, out-of-range, count mismatch, and an aligned tier that persists), a regression test locking the anti-heuristic decision, and three new cases: un-tiered re-verify preserves stored tiers, verification flags without `--verifyClaim` exit 1, non-canonical tier spellings (`1e0`,`0x1`,`+1`,`01`) exit 1. New `tests/example-replay.test.ts` executes every command in `references/example-path-b-verify.md` in document order, asserts exit 0, and matches each `# Output:` line against real stdout (documented JSON key/value pairs must both appear on the real object; verbatim tokens for status lines). New `tests/state-isolation.test.ts` guards per-process `THINK_STATE_FILE` isolation. `tests/round3.test.ts` covers the round-3 silent-failure/bypass fixes plus the merge-chain, stale-survivor, re-resolve field cleanup, merged `falsificationResult` rejection, claim `pending` re-verify evidence cleanup, empty-string parent-flag gap, and `--help` CLI support. Existing `verified` call sites migrated to pass `--claimTier`.
+
+- `tests/round3.test.ts` additions cover the empty-string parent-flag gap, `--help` CLI support, and the new temporal-index/schema-v3 migration regressions.
 
 ### Files
 

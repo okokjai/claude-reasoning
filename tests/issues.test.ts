@@ -755,11 +755,11 @@ describe("v3.0.0 state layer: schema migration and atomic save", () => {
     const res = run(["--status"]);
     expect(res.code).toBe(0);
     const parsed = JSON.parse(res.stdout);
-    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.schemaVersion).toBe(3);
     expect(parsed.acceptanceCriteria).toEqual([]);
     expect(parsed.lenses).toEqual([]);
     const onDisk = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
-    expect(onDisk.schemaVersion).toBe(2);
+    expect(onDisk.schemaVersion).toBe(3);
     expect(onDisk.acceptanceCriteria).toEqual([]);
     expect(onDisk.lenses).toEqual([]);
   });
@@ -1028,11 +1028,11 @@ describe("v3.0.0 lint report additions (buildLintReport §7)", () => {
     expect(out).toMatch(/\[WARN\].*claim-1.*claim-2|claim-2.*claim-1/i);
   });
 
-  it("derives link-status per rule K: Fragile on unverified claim, Plausible on no claims, Linked-verified on verified+quote", () => {
+  it("derives link-status per rule K: Fragile on unverified claim, No external coverage on no claims, Linked-verified on verified+quote", () => {
     setup();
     const out = run(["--export"]).stdout;
     expect(out).toContain("link-status: Linked-verified");
-    expect(out).toMatch(/hyp-2[\s\S]*link-status: Plausible/);
+    expect(out).toMatch(/hyp-2[\s\S]*link-status: No external coverage/);
     // Now make claim-2 unverified -> Fragile on hyp-1... claim-2 doesn't exist; add one:
   });
 
