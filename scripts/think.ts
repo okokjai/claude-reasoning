@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.0.4 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.0.5 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -85,7 +85,7 @@ export interface AuditEntry {
 }
 
 export interface State {
-  schemaVersion: number;       // 2; files without it are treated as v1 and migrated on load
+  schemaVersion: number;       // 3; files without it are treated as v1 and migrated on load
   mode?: ThinkingMode;
   acceptanceCriteria: AcceptanceCriterion[];
   thoughtHistory: ThoughtData[];
@@ -255,17 +255,31 @@ function quoteBlock(text: string): string {
 }
 
 /**
+ * Coverage marker: a surviving hypothesis whose load-bearing proposition was
+ * reached by reasoning rather than retrieval must carry this token in its
+ * notes, so the absence of external coverage is an explicit, machine-visible
+ * claim instead of a silent gap. Coverage itself is not a hard gate (see
+ * SKILL.md §Coverage); the marker only makes the omission auditable.
+ */
+const INFERENCE_MARKER = "[INFERENCE]";
+function declaresInference(h: Hypothesis): boolean {
+  return h.notes != null && h.notes.toUpperCase().includes(INFERENCE_MARKER);
+}
+
+/**
  * Link-status derivation (plan §7 rule K): for each hypothesis, look at the
  * claims whose `supports` points at it. Lowest status wins.
  *  - Linked-verified: ≥1 linked claim, all verified and carrying a quote.
- *  - Plausible: no linked claims at all, or only single_source evidence.
+ *  - No external coverage: no linked claims at all — the script records that
+ *    nothing external backs this hypothesis (not a quality verdict).
+ *  - Plausible: only single_source evidence.
  *  - Fragile: any linked claim unverified / not_found / pending.
  * This is a self-reported linkage label — the script cannot judge claim
  * relevance; final confidence is decided when the model writes the answer.
  */
 function linkStatus(hyp: Hypothesis, claims: Claim[]): string {
   const linked = claims.filter(c => c.supports === hyp.id);
-  if (linked.length === 0) return "Plausible";
+  if (linked.length === 0) return "No external coverage";
   if (linked.every(c => c.status === "verified" && c.quote != null && c.quote.trim().length > 0)) {
     return "Linked-verified";
   }
@@ -337,8 +351,12 @@ function buildLintReport(state: State): string {
     if (h.falsification != null && h.falsification.trim().length > 0 && h.falsification.trim().length < 20) {
       warn.push(`'${h.id}' falsification is short (<20 chars, self-reported; human review advised)`);
     }
-    if (claims.every(c => c.supports !== h.id)) {
-      warn.push(`'${h.id}' has no claim support → link-status Plausible (not Low)`);
+    // Only survivors matter: a rejected/merged hypothesis carries no load-bearing
+    // proposition forward, so warning it is a contradiction (mirrors the Blind
+    // Spots survivor filter below).
+    if ((h.status === "selected" || h.status === "synthesized") && claims.every(c => c.supports !== h.id)) {
+      const marker = declaresInference(h) ? "marked [INFERENCE]" : "NOT marked [INFERENCE]";
+      warn.push(`'${h.id}' has no claim support (${marker}); its load-bearing proposition is unverified — cite as inference, not fact`);
     }
   }
   for (const c of claims) {
@@ -460,6 +478,17 @@ function buildLintReport(state: State): string {
     }
   }
   for (const h of openHyp) residual.push(`- [Unverified] Hypothesis ${h.id} still pending resolution`);
+  // Coverage visibility: surviving hypotheses with no linked claim are listed
+  // either as an explicit inference (marked) or as an uncovered violation.
+  const survivors = hypotheses.filter(h => h.status === "selected" || h.status === "synthesized");
+  for (const h of survivors) {
+    if (claims.some(c => c.supports === h.id)) continue;
+    residual.push(
+      declaresInference(h)
+        ? `- [Inference] ${h.id} is not backed by any claim; declared as inference from reasoning, not retrieved evidence`
+        : `- [Uncovered] ${h.id} is a surviving hypothesis with no claim support and is NOT marked [INFERENCE]; either register a supporting claim or append [INFERENCE] to --hypothesisNotes`,
+    );
+  }
   const unresolvedN = claims.filter(c => c.status !== "verified").length;
 
   const nextSteps: string[] = [];
@@ -484,7 +513,7 @@ function buildLintReport(state: State): string {
       ? residual.join("\n")
       : claims.length > 0
         ? "- All registered claims verified (blind spots outside the registered claims are not tracked)."
-        : "- None recorded by script.",
+        : "- No claims registered and no surviving hypotheses — nothing for the script to check.",
     "",
     "## Actionable Next Steps / Exit Conditions",
     nextSteps.length > 0 ? nextSteps.join("\n") : "- None from script gates. The final answer must still be written by the model per references/conclusion-card.md.",
@@ -730,6 +759,23 @@ for (const [child, parent] of FLAG_REQUIRES) {
   const childPresent = childVal === true || (typeof childVal !== "boolean" && childVal != null);
   if (childPresent && !parentPresent) {
     fail(`--${child} requires ${parent}; the argument would otherwise be ignored.`);
+  }
+}
+
+// --thought is a standalone mode: its dispatch block sits after every
+// side-command handler, each of which early-exits. A --thought alongside a
+// side-command would be parsed, silently discarded, and the command would still
+// exit 0 (see the no-silent-swap contract). Reject the combination explicitly.
+const THOUGHT_FLAGS: Record<string, true> = {
+  "--thought": true, "--thoughtNumber": true, "--totalThoughts": true,
+  "--nextThoughtNeeded": true, "--isRevision": true, "--revisesThought": true,
+  "--branchFromThought": true, "--branchId": true, "--needsMoreThoughts": true,
+  "--newInsight": true, "--newInsightNotes": true, "--mode": true,
+};
+if (values.thought != null) {
+  const conflicting = otherOps(values).filter(f => THOUGHT_FLAGS[f] !== true);
+  if (conflicting.length > 0) {
+    fail(`--thought cannot be combined with ${conflicting.join(", ")}; the thought would be silently discarded. Submit the thought alone, then run the side-command.`);
   }
 }
 
@@ -1413,6 +1459,7 @@ const thoughtData: ThoughtData = {
   thoughtNumber,
   totalThoughts,
   nextThoughtNeeded,
+  historyIndex: state.thoughtHistory.length + 1,
 };
 
 if (values.isRevision) {
@@ -1450,8 +1497,6 @@ if (values.newInsight != null) {
 if (values.newInsightNotes != null && values.newInsightNotes.trim() !== "") {
   thoughtData.newInsightNotes = values.newInsightNotes;
 }
-
-thoughtData.historyIndex = state.thoughtHistory.length + 1;
 
 if (!thoughtData.isRevision && state.thoughtHistory.some(t => t.thoughtNumber === thoughtNumber)) {
   fail(`thought ${thoughtNumber} already exists in history`);
