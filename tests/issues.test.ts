@@ -210,7 +210,7 @@ describe("Issue 8 & 9: CLI parsing errors emit clean Error message without stack
   });
 
   it("rejects --thoughtNumber=-1 with validation error", () => {
-    const res = run(["--thoughtNumber=-1"]);
+    const res = run(["--thought", "x", "--thoughtNumber=-1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("--thoughtNumber must be an integer >= 1");
   });
@@ -240,7 +240,7 @@ describe("Issue 11: empty string values are rejected specifically", () => {
       "--nextThoughtNeeded", "true",
     ]);
     expect(res.code).toBe(1);
-    expect(res.stderr).toContain("--thought cannot be empty");
+    expect(res.stderr).toContain("--thoughtNumber requires --thought");
   });
 
   it("rejects --registerClaim '' with specific error rather than fallthrough", () => {
@@ -585,19 +585,19 @@ describe("Audit 7: --reset cannot be combined with other operations", () => {
 
 describe("Audit 8: numeric flags reject non-decimal notation", () => {
   it("rejects scientific notation for --thoughtNumber", () => {
-    const res = run(["--thoughtNumber", "1e1"]);
+    const res = run(["--thought", "x", "--thoughtNumber", "1e1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("--thoughtNumber must be an integer >= 1");
   });
 
   it("rejects hex notation for --totalThoughts", () => {
-    const res = run(["--totalThoughts", "0x10"]);
+    const res = run(["--thought", "x", "--totalThoughts", "0x10", "--thoughtNumber", "1", "--nextThoughtNeeded", "true"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("--totalThoughts must be an integer >= 1");
   });
 
   it("rejects leading/trailing whitespace", () => {
-    const res = run(["--thoughtNumber= 5"]);
+    const res = run(["--thought", "x", "--thoughtNumber= 5", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain("--thoughtNumber must be an integer >= 1");
   });
