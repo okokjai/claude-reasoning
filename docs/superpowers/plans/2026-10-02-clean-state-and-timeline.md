@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: Completed** — Tasks 1–3 landed as `1979dc8`, `30b9655`, `6bd8b9d` (v3.0.3) and `3d6092b`, `1c8903d` (v3.0.4); v3.0.5 extended the same scope.
+
 **Goal:** Decouple physical timeline (`historyIndex`) from user `thoughtNumber`; extract a named `projectHypothesisForStatus` factory; remove rigid test counters from CHANGELOG.
 
 **Architecture:** `scripts/think.ts` single-file state machine. `ThoughtData` gains `historyIndex` (1-based position); `AcceptanceCriterion` gains `checkedAtHistoryIndex` (renamed from `checkedAtThought`, legacy migrated on load); `resolveHypothesis` delegates to a pure projection factory.
@@ -29,7 +31,7 @@
 **Interfaces:**
 - Produces: `AcceptanceCriterion.checkedAtHistoryIndex?: number` (primary), `checkedAtThought?: number` (written in parallel for back-compat); `ThoughtData.historyIndex: number` (required on new pushes, backfilled on load).
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Append to the `"round-8 review"` describe in `tests/round3.test.ts`:
 
@@ -64,12 +66,12 @@ Append to the `"round-8 review"` describe in `tests/round3.test.ts`:
 
 `writeFileSync` needs to be added to the existing `import { existsSync, readFileSync, unlinkSync } from "fs"` at the top of the test file.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bun test tests/round3.test.ts`
 Expected: FAIL — `checkedAtHistoryIndex` undefined; `historyIndex` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 (a) `ThoughtData` — add field after `nextThoughtNeeded`:
 ```ts
@@ -121,11 +123,11 @@ and line ~307: `checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThoug
 
 (i) Bump `const SCHEMA_VERSION = 2;` → `3`.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `bun test tests/round3.test.ts` — new tests PASS; then `bun test` full suite — 200/0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/think.ts tests/round3.test.ts
@@ -142,7 +144,7 @@ git commit -m "refactor: introduce historyIndex and checkedAtHistoryIndex, migra
 **Interfaces:**
 - Produces: `projectHypothesisForStatus(base, status, fields) → Hypothesis`.
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Append to round-8 describe:
 
@@ -171,7 +173,7 @@ Wait — verify the merge chain invariant first: hyp-1 merged into hyp-2 means h
 
 This should already pass on baseline (projection exists); the test locks the invariant while the code is restructured. Run it against baseline first: expected PASS (guarding regression, not driving new code — acceptable since behavior is preserved, per TDD refactor rules where tests pin behavior before restructuring).
 
-- [ ] **Step 2: Extract factory and delegate**
+- [x] **Step 2: Extract factory and delegate**
 
 Add before `resolveHypothesis` handler (near other helpers, ~line 780):
 
@@ -211,11 +213,11 @@ Replace non-merged branch (lines ~895-898):
     });
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `bun test` — expect same pass count (200/0), no behavior change.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/think.ts tests/round3.test.ts
@@ -231,17 +233,17 @@ git commit -m "refactor: extract projectHypothesisForStatus factory for hypothes
 - Modify: `README.md` (confirm `190+` already sufficient — no change expected)
 - Modify: `package.json`, `SKILL.md` header — version bump `3.0.2 → 3.0.3`; `scripts/think.ts` version string (locate via `grep -n "3.0.2" scripts/think.ts`)
 
-- [ ] **Step 1: Locate version strings**
+- [x] **Step 1: Locate version strings**
 
 Run: `grep -rn "3\.0\.2" --include="*.ts" --include="*.json" --include="*.md" .`
 Update each to `3.0.3` (CHANGELOG stays — it documents released versions).
 
-- [ ] **Step 2: Decouple fragile counters in CHANGELOG v3.0.2 section**
+- [x] **Step 2: Decouple fragile counters in CHANGELOG v3.0.2 section**
 
 - Line ~12: `both finish 198/0.` → `both finish with zero failures.`
 - Line ~50: `Suite now **198 tests across 6 files**.` → `Suite covers … across 6 files.` (keep the descriptive prefix, drop the bold count).
 
-- [ ] **Step 3: Prepend v3.0.3 section to CHANGELOG**
+- [x] **Step 3: Prepend v3.0.3 section to CHANGELOG**
 
 ```markdown
 ## [3.0.3] - 2026-10-02
@@ -260,11 +262,11 @@ Update each to `3.0.3` (CHANGELOG stays — it documents released versions).
 - State file schema bumps to `SCHEMA_VERSION = 3`. Legacy v2 files auto-migrate on load: `checkedAtThought` is copied to `checkedAtHistoryIndex`, and `historyIndex` is backfilled to each thought's array position. No `--reset` required; the migrated form is persisted back.
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `bun test` — all green; `grep -rn "198 tests\|198/0" CHANGELOG.md` — zero hits in 3.0.2/3.0.3 sections (older history may keep its counts — that's fine, they're historical records).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CHANGELOG.md README.md SKILL.md package.json scripts/think.ts

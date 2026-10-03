@@ -385,4 +385,95 @@ describe("round-8 review: temporal-index gates and flag-pair silent drops", () =
     const allowed = run(["--thought", "end", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false", "--newInsight", "false"]);
     expect(allowed.code).toBe(0);
   });
+
+  // --- v3.0.5: [INFERENCE] coverage marker (contract §Coverage) ---
+  //
+  // Path B may terminate with zero registered claims (coverage is not a hard
+  // gate). The gap the marker closes: a surviving hypothesis whose load-bearing
+  // proposition was never retrieved must say so explicitly, and the lint card
+  // must show it — so "asserted confidently without [INFERENCE]" is machine-visible.
+  function reachTerminationWithZeroClaims(notes: string): { code: number; stdout: string; stderr: string } {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1", "--falsification", "f clause long enough here"]);
+    run(["--registerHypothesis", "H2", "--falsification", "f clause long enough here"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", notes, "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--addCriterion", "covered"]);
+    run(["--checkCriterion", "crit-1", "--met", "true"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    run(["--recordLens", "--lens", "b", "--finding", "x"]);
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t3", "--thoughtNumber", "3", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    return run(["--thought", "end", "--thoughtNumber", "4", "--totalThoughts", "4", "--nextThoughtNeeded", "false", "--newInsight", "false", "--newInsightNotes", "converged"]);
+  }
+
+  it("flags an uncovered surviving hypothesis (no claim, no [INFERENCE]) in the lint card", () => {
+    const res = reachTerminationWithZeroClaims("plain rationale, no marker");
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[Uncovered\].*hyp-1/i);
+    expect(res.stdout).not.toContain("- None recorded by script.");
+  });
+
+  it("does not flag a surviving hypothesis explicitly marked [INFERENCE]", () => {
+    const res = reachTerminationWithZeroClaims("reasoned from first principles [INFERENCE]");
+    expect(res.code).toBe(0);
+    expect(res.stdout).toMatch(/\[Inference\].*hyp-1/i);
+    expect(res.stdout).not.toMatch(/\[Uncovered\]/i);
+  });
+
+  it("shows No external coverage for a claim-less surviving hypothesis in link-status", () => {
+    const res = reachTerminationWithZeroClaims("plain rationale, no marker");
+    expect(res.stdout).toMatch(/link-status: No external coverage/);
+  });
+
+  it("does not warn about claim coverage for rejected/merged hypotheses — only survivors", () => {
+    const res = reachTerminationWithZeroClaims("plain rationale, no marker");
+    // hyp-2 is rejected: its proposition is not carried forward, so "load-bearing
+    // proposition unverified" is a contradiction. Only survivors are warned.
+    expect(res.stdout).not.toMatch(/'hyp-2'.*has no claim support/);
+    expect(res.stdout).toMatch(/'hyp-1'.*has no claim support/);
+    // Blind Spots must likewise only list the survivor.
+    expect(res.stdout).not.toMatch(/\[Uncovered\]\s+hyp-2/);
+  });
+
+  // --- v3.0.5: --thought is a standalone mode (no silent drop) ---
+  //
+  // Every side-command handler early-exits before the thought block, so a
+  // --thought passed alongside one was parsed, discarded, and the command
+  // exited 0 with normal output — the thought never reached history.
+  it("rejects --thought combined with --recordLens instead of silently dropping the thought", () => {
+    const res = run(["--mode", "path-b", "--thought", "REAL", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true", "--recordLens", "--lens", "a", "--finding", "x"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/--thought.*cannot be combined|silently/i);
+  });
+
+  it("rejects --thought combined with --resolveHypothesis instead of silently dropping the thought", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H", "--falsification", "f clause long enough here"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    const before = s.thoughtHistory.length;
+    const res = run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held", "--thought", "REAL", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    expect(res.code).toBe(1);
+    expect(res.stderr).toMatch(/--thought.*cannot be combined|silently/i);
+    const after = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(after.thoughtHistory.length).toBe(before);
+  });
+
+  it("records lens atThought against the real history length (no desync)", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--recordLens", "--lens", "a", "--finding", "x"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s.thoughtHistory.length).toBe(2);
+    expect(s.lenses[0].atThought).toBe(2);
+  });
+
+  it("assigns a required historyIndex to every pushed thought (schema v3)", () => {
+    run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--thought", "t2", "--thoughtNumber", "5", "--totalThoughts", "6", "--nextThoughtNeeded", "true"]);
+    const s = JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    expect(s.thoughtHistory.map((t: { historyIndex: number }) => t.historyIndex)).toEqual([1, 2]);
+    // The caller-supplied thoughtNumber diverges from the physical timeline.
+    expect(s.thoughtHistory.map((t: { thoughtNumber: number }) => t.thoughtNumber)).toEqual([1, 5]);
+  });
 });

@@ -32,3 +32,39 @@ describe("SKILL.md description: selector visibility", () => {
     expect(pkg.description).toBe(skillDescription());
   });
 });
+
+describe("SKILL.md: Path B load contract", () => {
+  const text = () => readFileSync(join(CWD, "SKILL.md"), "utf-8");
+
+  it("declares a Step -1 load contract listing the four reference files", () => {
+    const t = text();
+    expect(t).toContain("## Step -1: Load Contract");
+    for (const ref of [
+      "references/critical-lenses.md",
+      "references/source-tiers.md",
+      "references/hallucination-gates.md",
+      "references/conclusion-card.md",
+    ]) {
+      expect(t).toContain(ref);
+    }
+  });
+
+  it("gates the first Path B thought on reading the contract", () => {
+    expect(text()).toMatch(/Do not send the first Path B thought until.*Step -1/i);
+  });
+});
+
+describe("State file schema v3 documentation", () => {
+  it("documents historyIndex / checkedAtHistoryIndex in SKILL.md", () => {
+    const t = readFileSync(join(CWD, "SKILL.md"), "utf-8");
+    expect(t).toContain("historyIndex");
+    expect(t).toContain("checkedAtHistoryIndex");
+  });
+
+  it("documents historyIndex / checkedAtHistoryIndex in README.md", () => {
+    const t = readFileSync(join(CWD, "README.md"), "utf-8");
+    expect(t).toContain("historyIndex");
+    expect(t).toContain("checkedAtHistoryIndex");
+  });
+});
+

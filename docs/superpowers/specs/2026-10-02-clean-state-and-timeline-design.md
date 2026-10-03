@@ -1,7 +1,7 @@
-# Architecture Spec: Clean State & Temporal Timeline Refactoring (v3.0.3)
+# Architecture Spec: Clean State & Temporal Timeline Refactoring (v3.0.3–3.0.5)
 
 ## Status: Approved (revised after baseline audit)
-Date: 2026-10-02 · Branch: `refactor/clean-state-and-timeline`
+Date: 2026-10-02 · Branch: `refactor/clean-state-and-timeline` · **Scope extended through v3.0.5** (§2.1 records the v3.0.4 Gate-7 operator fix; the v3.0.5 coverage-visibility work is tracked in CHANGELOG `[3.0.5]`)
 Worktree: `C:/tmp/DONE/claude-reasoning-refactor`
 
 ---
@@ -16,7 +16,7 @@ Prior iterations fixed edge cases via localized patches ("whack-a-mole"). Baseli
 
 3. **Rigid doc counters — CONFIRMED REAL.** `CHANGELOG.md` line 12 (`finish 198/0`) and line 50 (`Suite now **198 tests**`) hardcode numbers that go stale on every test addition.
 
-**Net new work for v3.0.3:** temporal-index field rename + `historyIndex` on `ThoughtData` + optional Factory extraction + doc counter cleanup.
+**Scope:** the spec opened at v3.0.3 (temporal-index rename + `historyIndex` + Factory extraction + doc counter cleanup) and absorbed v3.0.4 (Gate 7 operator) and v3.0.5 (coverage visibility) without a title bump — hence the `v3.0.3–3.0.5` range above.
 
 ---
 

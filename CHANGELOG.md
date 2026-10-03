@@ -2,6 +2,39 @@
 
 All notable changes to this skill are documented here.
 
+## [3.0.5] - 2026-10-03
+
+### Tooling
+
+- **`bun run typecheck` (`tsc --noEmit`) and a CI workflow.** `bun test` does not typecheck, so a type-only defect (see the `historyIndex` literal below) passes every test. The script makes the check a one-liner; README wires it into the documented test command; `.github/workflows/ci.yml` runs `bun install --frozen-lockfile`, `typecheck`, and `test` on push/PR.
+
+### Fixed
+
+- **Coverage WARN fired for every hypothesis, not just survivors.** The no-claim warning ran over all hypotheses including `rejected`/`merged`/`pending` ones, so a rejected hypothesis was told its "load-bearing proposition is unverified" — a contradiction, since a rejected proposition is not carried forward. The warning is now scoped to `selected`/`synthesized`, matching the Blind Spots survivor filter.
+- **`--thought` combined with a side-command was silently discarded.** Every side-command handler (`--registerClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, `--verifyClaim`) early-exits before the thought block, so a `--thought` passed alongside one was parsed, dropped, and the command still exited 0 with normal output — the thought never reached `thoughtHistory`. The user-visible symptom was a later `history=N` far below the thoughts submitted, tripping the termination gates. The combination now exits 1 with `--thought cannot be combined with <flags>; the thought would be silently discarded.`
+- **`--recordLens` `atThought` desynchronized after a dropped thought.** With the silent drop above, a lens's `atThought` (recorded as the current history length) froze at a stale value. Fixed transitively: thoughts can no longer vanish, so `atThought` tracks the real history.
+- **`ThoughtData` literal omitted the now-required `historyIndex`.** v3.0.4 made `historyIndex` required, but the thought-submission literal assigned it *after* construction, so the object did not satisfy `ThoughtData` — a type error, never a runtime one. `bun test` does not typecheck, so no test caught it, and README's claim that `bunx tsc --noEmit` typechecks clean was false (dependencies had to be installed in the worktree before `tsc` could resolve `fs`/`path`/`process` at all). `historyIndex` is now set in the literal (`state.thoughtHistory.length + 1`) and the late assignment is gone. `bunx tsc --noEmit` is now genuinely clean.
+
+### Added
+
+- **`## Step -1: Load Contract` in SKILL.md.** The four `references/*.md` files were cited passively throughout the Path B steps with no ordering requirement, so the model often reached the step needing one only after its context had been diluted. Step -1 lists all four with the point at which each must be read, and Path B gates its first thought on it. The state machine cannot verify a file was read; this makes the contract explicit and regressable (`tests/skill-frontmatter.test.ts` asserts the section and its four paths exist).
+- **`[INFERENCE]` coverage marker.** Appending the token `[INFERENCE]` to a hypothesis's `--hypothesisNotes` declares "this load-bearing proposition came from reasoning, not retrieval". It does not block termination and does not assert correctness — it makes the absence of external coverage explicit, so a confidently-asserted-but-unretrieved conclusion is distinguishable from a covered one in both the state file and the lint card.
+- **`tests/changelog-structure.test.ts`.** Asserts no duplicate `### Heading` within a single `## [x.y.z]` version block — the merge-remnant guard for CHANGELOG.md.
+
+### Changed
+
+- **Coverage is now machine-visible.** A surviving (`selected`/`synthesized`) hypothesis with no linked claim previously produced the silent lint line `blind spots … None recorded by script.` and a `link-status: Plausible` label — zero evidence was presented as "plausible" while a hypothesis backed by a *pending* claim was labelled `Fragile`. Now:
+  - `linkStatus` returns `No external coverage` (not `Plausible`) when a hypothesis has no linked claim.
+  - `buildLintReport` lists every uncovered surviving hypothesis in **Residual Uncertainty & Blind Spots** — as `[Uncovered]` when it is unmarked, or `[Inference]` when its `--hypothesisNotes` carries the `[INFERENCE]` token.
+  - The no-claim WARN names the marker state: `has no claim support (NOT marked [INFERENCE])`.
+  - The `claims=0` fallback line no longer reads "None recorded by script."
+- **State-file schema `v3` is now documented in README and SKILL.** The 3.0.3 schema change (`ThoughtData.historyIndex`, `AcceptanceCriterion.checkedAtHistoryIndex`, `SCHEMA_VERSION` 2→3 auto-migration) was recorded only here, so any external tool reading `scripts/.think_state.json` had no user-facing description of it. Both docs now carry a State-file section naming the fields, the timeline-vs-`thoughtNumber` distinction, and the auto-migration. The stale `// 2` comment on `State.schemaVersion` is corrected to `3`.
+- **README no longer hardcodes a test count.** `190+ tests across 6 files` was stale (actual count has moved past it) and contradicted 3.0.3's deliberate decoupling of fragile counters. It now points at `tests/` with no absolute number.
+
+### Notes
+
+- Coverage remains **not** a hard gate: `--supports` validates only that the target hypothesis exists, so the script cannot judge relevance or know which propositions should have been registered (see SKILL.md §Coverage). This release closes the *visibility* gap, not the *judgment* gap.
+
 ## [3.0.4] - 2026-10-03
 
 ### Fixed

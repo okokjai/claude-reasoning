@@ -1,4 +1,4 @@
-# claude-reasoning 3.0.4
+# claude-reasoning 3.0.5
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
@@ -39,7 +39,8 @@ git pull
 ## Dev tooling
 
 ```bash
-bun install   # installs devDependencies: typescript, @types/node, @types/bun
+bun install    # devDependencies: typescript, @types/node, @types/bun
+bun run typecheck   # tsc --noEmit
 ```
 
 `tsconfig.json` (bun defaults, strict) gives editors/tsserver the project root for LSP type intelligence; `bunx tsc --noEmit` typechecks clean.
@@ -172,12 +173,16 @@ These are checked in code, not just documented:
 | Unknown `--claimStatus` or `--hypothesisStatus` value | Exit code 1 |
 | Malformed CLI flags or numeric arguments with scientific, hex, or decimal notation | Exit code 1, clean error message |
 
+## State file
+
+`scripts/.think_state.json` is schema **`v3`**. `ThoughtData` carries `historyIndex` — the 1-based position in the *timeline*, distinct from the caller-supplied `thoughtNumber` (a revision re-enters history without renumbering it). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. A `v2` file (no `historyIndex`) is migrated to `v3` automatically on load. Tools reading the file directly should key on `historyIndex`, not `thoughtNumber`.
+
 ## Tests
 
 ```bash
-bun test
+bun run typecheck && bun test
 ```
-190+ tests across 6 files (`tests/think.test.ts`, `tests/issues.test.ts`, `tests/skill-frontmatter.test.ts`, `tests/example-replay.test.ts`, `tests/state-isolation.test.ts`, and `tests/round3.test.ts`), offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivo…
+Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), and the `--thought` standalone-mode guard.
 
 ## Design notes
 
