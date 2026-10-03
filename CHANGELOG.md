@@ -2,6 +2,29 @@
 
 All notable changes to this skill are documented here.
 
+
+## [3.0.6] - 2026-10-03
+
+### Fixed
+
+- **Cross-process writes could lose data.** Concurrent invocations raced on a fixed `STATE_FILE.tmp` + `renameSync` cycle — two processes could read the same snapshot, each write, and one overwrite the other's mutations. The lock now serializes every state-touching invocation via `mkdir`-as-mutex (`STATE_FILE.lock`), the tmp filename is per-process (`${pid}.tmp`), and a stale lock (from a crashed process, `>30s` old) is stolen rather than deadlocking.
+- **`--claimStatus verified` accepted two Tier 1 sources on the same domain.** The Tier check counted *sources*, not *domains*, so `nature.com/a` + `nature.com/b` (both Tier 1) + one Tier 3 blog passed `verified`. The check now requires ≥2 distinct root domains *among* the Tier 1/2 sources only — `nature.com/a` + `nature.com/b` is one trusted origin, not two.
+- **Disabled gates left no trace after termination.** `THINK_GATES_OFF` bypasses were recorded only in memory; a later `--export` could not see them. Violations are now persisted to `state.gateBypasses` so they survive into any subsequent export.
+- **`--claimSource example.com:8080/x` was misidentified as a non-http URL.** The scheme-detector regex `[a-zA-Z][a-zA-Z0-9+.-]*:` treated `example.com:8080` as a scheme (`example.com:`), not a host:port. A bare host with a port is now correctly parsed when no `://` follows.
+- **`--negativeFinding '<command>\n<output>'` never satisfied the two-line lint.** Shells do not expand `\n` inside quotes, so the literal backslash-n arrived as one line and the lint WARN could never clear. The string is now converted to a real newline before the lint check.
+- **`gov.au`-style ccTLD agencies were collapsed into one domain.** `abs.gov.au` and `ato.gov.au` (different agencies under `gov.au`) were treated as the same root domain, so two Tier 1 sources on different agencies failed the distinct-domain check. A `GENERIC_SECOND_LEVEL` lookup now expands `gov`/`edu`/`ac`/`co`/`com`/`org`/`net`/`go`/`or`/`ne`/`mil`/`sch`/`nhs`/`ltd`/`plc`/`gob` under any 2-letter ccTLD, so `abs.gov.au` and `ato.gov.au` stay distinct.
+
+- **Orphaned thought flags were silently dropped.** `--thoughtNumber`, `--totalThoughts`, `--nextThoughtNeeded`, `isRevision`, and `--mode` could be passed without `--thought` and exited 0 — the values never reached `thoughtHistory`. `FLAG_REQUIRES` now maps all five to `--thought`; any of the five without `--thought` exits 1 with `--<flag> requires --thought; the argument would otherwise be ignored.`
+
+### Added
+
+- **`tests/round4.test.ts`** — 13 regression tests covering the Tier-1/2 domain independence bug, concurrent-write loss, `THINK_GATES_OFF` trace persistence, the `host:port` URL parsing fix, the `\n`-in-`--negativeFinding` fix, and the `gov.au` ccTLD fix.
+- **`.gitignore`** covers the new `STATE_FILE.lock` directory and per-process `.tmp` files.
+
+### Notes
+
+- Medium/low-severity issues confirmed but **not** patched in this release: lens gate checks structure not content (`.`/`-` pass), `newInsightNotes "."` bypasses Gate 7, criterion met-flip requires no evidence, Path A accepts 3 single-character thoughts, `thoughtNumber` has no ordering check, `localhost`/`127.0.0.1`/`*.invalid`/`google.co.jp` treated as independent sources, `--mode` persists before first thought, `--mergedInto ""` silently ignored, revision-closing-thought miscounts Gate 7/9, `-`-prefixed thoughts rejected, `auditTrail` 7 vs documented 4 ops.
+
 ## [3.0.5] - 2026-10-03
 
 ### Tooling

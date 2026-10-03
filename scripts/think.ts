@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.0.5 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.0.6 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
  * Enhanced with Claim Pre-registration, Dual-Source Verification, and Guardrails.
  */
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync, renameSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync, renameSync, mkdirSync, rmdirSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { parseArgs } from "util";
@@ -94,6 +94,9 @@ export interface State {
   hypotheses: Record<string, Hypothesis>;
   lenses: LensFinding[];
   auditTrail?: AuditEntry[];
+  /** Violations a disabled termination gate would have raised (THINK_GATES_OFF).
+   *  Persisted so a later, separate `--export` still shows the bypass. */
+  gateBypasses?: string[];
 }
 
 const SCHEMA_VERSION = 3;
@@ -121,6 +124,7 @@ function loadState(): State {
         hypotheses: data.hypotheses || {},
         lenses: data.lenses || [],
         auditTrail: data.auditTrail || [],
+        gateBypasses: data.gateBypasses || [],
       };
       // Persist back when the file was a pre-v2 schema so the on-disk form
       // matches what was loaded (no silent in-memory-only upgrade).
@@ -139,9 +143,57 @@ function loadState(): State {
   return emptyState();
 }
 
+/**
+ * Cross-process lock around the whole load → mutate → save cycle. Without it,
+ * two concurrent invocations (parallel subagents, two sessions) both read the
+ * same snapshot: one write silently overwrites the other and both can be handed
+ * the same `hyp-N` / `claim-N` id. mkdir is atomic, so it doubles as a mutex.
+ * A lock older than STALE_MS belongs to a crashed process and is stolen.
+ */
+const LOCK_DIR = STATE_FILE + ".lock";
+const LOCK_WAIT_MS = 15_000;
+const LOCK_STALE_MS = 30_000;
+let lockHeld = false;
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function releaseLock(): void {
+  if (!lockHeld) return;
+  lockHeld = false;
+  try { rmdirSync(LOCK_DIR); } catch { /* already gone */ }
+}
+
+function acquireLock(): void {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      mkdirSync(LOCK_DIR);
+      lockHeld = true;
+      process.on("exit", releaseLock);
+      return;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - statSync(LOCK_DIR).mtimeMs > LOCK_STALE_MS) {
+          try { rmdirSync(LOCK_DIR); } catch { /* another waiter stole it first */ }
+          continue;
+        }
+      } catch { continue; /* lock vanished between mkdir and stat: retry */ }
+      if (Date.now() > deadline) {
+        console.error(`Error: timed out after ${LOCK_WAIT_MS / 1000}s waiting for state lock ${LOCK_DIR}; if no other think.ts is running, delete that directory.`);
+        process.exit(1);
+      }
+      sleepSync(20 + Math.floor(Math.random() * 30));
+    }
+  }
+}
+
 function saveState(state: State): void {
   // Atomic write: tmp + rename so a crash mid-write cannot leave a torn state file.
-  const tmp = STATE_FILE + ".tmp";
+  // The tmp name is per-process so concurrent writers never share one file.
+  const tmp = `${STATE_FILE}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(state, null, 2));
   renameSync(tmp, STATE_FILE);
 }
@@ -307,8 +359,9 @@ function buildLintReport(state: State): string {
   const warn: string[] = [];
   const info: string[] = [];
 
-  // Disabled-gate violations recorded during termination enforcement.
-  warn.push(...disabledGateViolations);
+  // Disabled-gate violations: persisted in state so they survive into later
+  // --export runs; the in-process list is merged for callers that have not saved yet.
+  for (const v of new Set([...(state.gateBypasses ?? []), ...disabledGateViolations])) warn.push(v);
 
   // CRIT residuals: violations that should have been blocked by an active gate
   // but are present in state (evidence of a bypass path).
@@ -711,6 +764,9 @@ function otherOps(v: ParsedArgs): string[] {
   ].filter((x): x is string => typeof x === "string");
 }
 
+// Serialize every state-touching invocation (--reset included). Released on exit.
+acquireLock();
+
 if (values.reset) {
   const combined = [...otherOps(values), ...(values.export ? ["--export"] : [])];
   if (combined.length > 0) {
@@ -746,6 +802,10 @@ const FLAG_REQUIRES: [keyof ParsedArgs, string][] = [
   ["finding", "--recordLens"],
   ["branchId", "--branchFromThought"],
   ["revisesThought", "--isRevision"],
+  ["thoughtNumber", "--thought"],
+  ["totalThoughts", "--thought"],
+  ["nextThoughtNeeded", "--thought"],
+  ["isRevision", "--thought"],
 ];
 for (const [child, parent] of FLAG_REQUIRES) {
   const childVal = values[child];
@@ -1126,6 +1186,12 @@ const MULTI_SEGMENT_SUFFIXES: Record<string, true> = {
   "cloudfront.net": true,
 };
 
+/** Registry labels that, under a 2-letter ccTLD, form a public suffix (ts-set-map: Record, not Set). */
+const GENERIC_SECOND_LEVEL: Record<string, true> = {
+  co: true, com: true, org: true, net: true, gov: true, edu: true, ac: true,
+  go: true, or: true, ne: true, mil: true, sch: true, nhs: true, ltd: true, plc: true, gob: true,
+};
+
 function rootDomain(urlStr: string): string {
   // A claim source must be an http(s) URL. Reject file:///, data:, bare
   // non-host strings ("foo/file"), and anything else that cannot name an
@@ -1133,7 +1199,9 @@ function rootDomain(urlStr: string): string {
   const trimmed = urlStr.trim();
   if (!/^https?:\/\//i.test(trimmed)) {
     // Reject real scheme URLs that are not http(s) — file:///, data:, ftp:, etc.
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.includes("://")) {
+    // "example.com:8080/x" is a host with a port, not a URL scheme: a scheme is
+    // not followed by a bare port number.
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+(\/|$))/.test(trimmed) || trimmed.includes("://")) {
       fail(`--claimSource '${urlStr}' is not an http(s) URL; sources must name their origin domain.`);
     }
     // A bare host or host/path ("example.com/x") is tolerated only when the
@@ -1158,7 +1226,13 @@ function rootDomain(urlStr: string): string {
   if (parts.length <= 2) return hostname;
   // Last two labels forming a known multi-segment public suffix mean the
   // registrable domain is three labels deep (bbc.co.uk, not co.uk).
-  return MULTI_SEGMENT_SUFFIXES[parts.slice(-2).join(".")]
+  const lastTwo = parts.slice(-2).join(".");
+  // Generic fallback for country-code second-level registries not in the table
+  // (gov.au, edu.sg, ac.jp, go.kr ...): a 2-letter ccTLD preceded by a well-known
+  // registry label is a public suffix, so abs.gov.au and ato.gov.au stay distinct.
+  const [sld, tld] = parts.slice(-2);
+  const looksLikeCcSuffix = tld.length === 2 && GENERIC_SECOND_LEVEL[sld] === true;
+  return MULTI_SEGMENT_SUFFIXES[lastTwo] || looksLikeCcSuffix
     ? parts.slice(-3).join(".")
     : parts.slice(-2).join(".");
 }
@@ -1214,9 +1288,12 @@ if (values.verifyClaim != null) {
       fail("--claimTier is required for --claimStatus verified: classify each --claimSource against references/source-tiers.md (1-4). Even multiple Tier 3 sources cannot elevate a claim to verified.");
     }
 
-    const tier1or2 = tiers.filter(t => t <= 2).length;
-    if (tier1or2 < 2) {
-      fail(`--claimStatus verified requires at least 2 sources from Tier 1 or Tier 2 (references/source-tiers.md:40); found ${tier1or2}. Multiple Tier 3/4 sources cannot elevate a claim to verified - use 'single_source' or 'unverified'.`);
+    // Independence must hold AMONG the Tier 1/2 sources: two pages on one Tier 1
+    // domain plus a Tier 3 blog is one trusted origin, not two. Count distinct
+    // root domains over the qualifying sources only.
+    const tier12Domains = new Set(sources.filter((_, i) => tiers[i] <= 2).map(rootDomain));
+    if (tier12Domains.size < 2) {
+      fail(`--claimStatus verified requires at least 2 sources from Tier 1 or Tier 2 on distinct root domains (references/source-tiers.md:40); found ${tier12Domains.size} distinct Tier 1/2 root domain(s). Multiple Tier 3/4 sources, or several pages on one domain, cannot elevate a claim to verified - use 'single_source' or 'unverified'.`);
     }
     // Guardrail 1b (v3.0.0): verified claims must carry the evidence trio —
     // a quote anchoring the claim, plus a negative search attempt and its result.
@@ -1256,7 +1333,9 @@ if (values.verifyClaim != null) {
     if (values.claimNotes) projected.notes = values.claimNotes;
     if (values.claimQuote != null) projected.quote = values.claimQuote;
     if (values.negativeQuery != null) projected.negativeQuery = values.negativeQuery;
-    if (values.negativeFinding != null) projected.negativeFinding = values.negativeFinding;
+    // Shells do not expand \n inside quotes, so the documented "<command>\n<output>"
+    // form arrives as a literal backslash-n. Convert it so the two-line check can pass.
+    if (values.negativeFinding != null) projected.negativeFinding = values.negativeFinding.replace(/\\n/g, "\n");
   }
   state.claims[claim.id] = projected;
 
@@ -1503,6 +1582,9 @@ if (!thoughtData.isRevision && state.thoughtHistory.some(t => t.thoughtNumber ==
 }
 
 state.thoughtHistory.push(thoughtData);
+if (disabledGateViolations.length > 0) {
+  state.gateBypasses = [...new Set([...(state.gateBypasses ?? []), ...disabledGateViolations])];
+}
 
 if (thoughtData.branchFromThought != null && thoughtData.branchId != null) {
   if (!state.branches[thoughtData.branchId]) {
