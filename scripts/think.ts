@@ -38,6 +38,7 @@ export interface Claim {
   registeredAtThought: number;
   sources: string[];
   tiers?: number[];            // tier aligned with sources[]; required for verified
+  claimDates?: string[];   // publish date per source, aligned to sources[]
   status: ClaimStatus;
   supports?: string;           // Path B: required hypothesis id this claim bears on
   quote?: string;              // required to reach verified
@@ -465,6 +466,22 @@ function buildLintReport(state: State): string {
       warn.push(`'${c.id}' verified without --claimTier: source quality is unclassified; re-check against references/source-tiers.md (Tier 3/4 cannot support verified)`);
     }
   }
+
+  // Freshness: a verified claim's evidence must be re-checked when its newest
+  // source is older than 180 days. Absent dates get a soft warn so the gap is
+  // visible without blocking.
+  for (const c of claims) {
+    if (c.status !== "verified") continue;
+    if (c.claimDates == null || c.claimDates.length === 0) {
+      warn.push(`'${c.id}' verified but source publish dates not recorded (--claimDate)`);
+      continue;
+    }
+    const newest = c.claimDates.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b));
+    const ageDays = Math.floor((Date.parse(today()) - Date.parse(newest)) / 86_400_000);
+    if (ageDays > 180) {
+      warn.push(`'${c.id}' newest source is ${ageDays} days old (>180d); re-check for updates (Gate 3)`);
+    }
+  }
   const dupSeen: Record<string, string[]> = {};
   for (const c of claims) {
     if (c.negativeFinding != null && c.negativeFinding.trim().length > 0) {
@@ -640,6 +657,7 @@ export interface ParsedArgs {
   claimStatus?: string;
   claimSource?: string[];
   claimTier?: string[];
+  claimDate?: string[];
   claimNotes?: string;
   supports?: string;
   claimQuote?: string;
@@ -688,6 +706,7 @@ try {
     claimStatus: { type: "string" },
     claimSource: { type: "string", multiple: true },
     claimTier: { type: "string", multiple: true },
+    claimDate: { type: "string", multiple: true },
     claimNotes: { type: "string" },
     supports: { type: "string" },
     claimQuote: { type: "string" },
@@ -722,16 +741,16 @@ try {
 
 // parseArgs keeps the last value for a repeated non-multiple option and never
 // complains, so `--registerClaim A --registerClaim B` silently drops A. Catch
-// the repeat explicitly; only --claimSource/--claimTier are legitimately multiple.
+// the repeat explicitly; only --claimSource/--claimTier/--claimDate are legitimately multiple.
 {
   const seen = new Set<string>();
   for (const arg of process.argv.slice(2)) {
     const m = /^--([A-Za-z][A-Za-z0-9-]*)(=|$)/.exec(arg);
     if (!m) continue;
     const name = m[1];
-    if (name === "claimSource" || name === "claimTier") continue;
+    if (name === "claimSource" || name === "claimTier" || name === "claimDate") continue;
     if (seen.has(name)) {
-      fail(`--${name} was supplied more than once; the earlier value would be silently discarded. Repeatable flags are only --claimSource and --claimTier.`);
+      fail(`--${name} was supplied more than once; the earlier value would be silently discarded. Repeatable flags are only --claimSource, --claimTier and --claimDate.`);
     }
     seen.add(name);
   }
@@ -847,6 +866,7 @@ const FLAG_REQUIRES: [keyof ParsedArgs, string][] = [
   ["claimStatus", "--verifyClaim"],
   ["claimSource", "--verifyClaim"],
   ["claimTier", "--verifyClaim"],
+  ["claimDate", "--verifyClaim"],
   ["claimQuote", "--verifyClaim"],
   ["negativeQuery", "--verifyClaim"],
   ["negativeFinding", "--verifyClaim"],
@@ -1358,6 +1378,25 @@ if (values.verifyClaim != null) {
     }
   }
 
+  // Guardrail freshness-shape: whenever --claimDate is supplied it must be a
+  // well-formed ISO date vector — YYYY-MM-DD, parseable, none after today, one
+  // per --claimSource. Runs for every status, mirroring the tier shape-check, so
+  // a non-verified call cannot persist dates that do not correspond to the
+  // recorded sources.
+  const claimDates = values.claimDate || [];
+  if (claimDates.length > 0) {
+    if (claimDates.some(d => !/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(Date.parse(d)))) {
+      fail(`--claimDate must be a valid YYYY-MM-DD date. Got: ${claimDates.join(", ")}`);
+    }
+    const todayStr = today();
+    if (claimDates.some(d => d > todayStr)) {
+      fail(`--claimDate ${claimDates.find(d => d > todayStr)} is in the future (today is ${todayStr})`);
+    }
+    if (claimDates.length !== sources.length) {
+      fail(`--claimDate must have one --claimDate per --claimSource: found ${claimDates.length} date(s) for ${sources.length} source(s).`);
+    }
+  }
+
   // Guardrail 1: 2-source requirement for verified (count + distinct root domains)
   if (status === "verified") {
     const rootDomains = new Set(sources.map(rootDomain));
@@ -1425,6 +1464,8 @@ if (values.verifyClaim != null) {
     // mirroring the sources rule above so the two never drift apart.
     if (tiers.length > 0) projected.tiers = tiers;
     else if (claim.tiers != null) projected.tiers = claim.tiers;
+    if (values.claimDate != null && values.claimDate.length > 0) projected.claimDates = values.claimDate;
+    else if (claim.claimDates != null) projected.claimDates = claim.claimDates;
     if (values.claimNotes) projected.notes = values.claimNotes;
     if (values.claimQuote != null) projected.quote = values.claimQuote;
     if (values.negativeQuery != null) projected.negativeQuery = values.negativeQuery;

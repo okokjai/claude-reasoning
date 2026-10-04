@@ -45,3 +45,47 @@ describe("Session clock", () => {
     expect(s.endedAt).toMatch(ISO);
   });
 });
+
+describe("--claimDate", () => {
+  beforeEach(() => { if (existsSync(STATE)) unlinkSync(STATE); });
+
+  function seed(): void {
+    run(["--mode","path-b","--registerHypothesis","h1","--falsification","f1"]);
+    run(["--registerClaim","c1","--supports","hyp-1"]);
+  }
+
+  it("requires --verifyClaim", () => {
+    seed();
+    const r = run(["--claimDate","2025-01-01"]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toMatch(/claimDate requires --verifyClaim/i);
+  });
+
+  it("rejects a non-ISO date", () => {
+    seed();
+    const r = run(["--verifyClaim","claim-1","--claimStatus","single_source","--claimSource","https://a.com","--claimNotes","n","--claimDate","not-a-date"]);
+    expect(r.code).toBe(1);
+  });
+
+  it("rejects a future date", () => {
+    seed();
+    const r = run(["--verifyClaim","claim-1","--claimStatus","single_source","--claimSource","https://a.com","--claimNotes","n","--claimDate","2999-01-01"]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toMatch(/future|after|today/i);
+  });
+
+  it("rejects a count mismatch with --claimSource", () => {
+    seed();
+    const r = run(["--verifyClaim","claim-1","--claimStatus","single_source","--claimSource","https://a.com","--claimNotes","n","--claimDate","2025-01-01","--claimDate","2025-02-01"]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toMatch(/one --claimDate per --claimSource|per --claimSource/i);
+  });
+
+  it("persists claimDates aligned to sources", () => {
+    seed();
+    const r = run(["--verifyClaim","claim-1","--claimStatus","single_source","--claimSource","https://a.com","--claimNotes","n","--claimDate","2025-06-01"]);
+    expect(r.code).toBe(0);
+    const s = JSON.parse(readFileSync(STATE,"utf-8"));
+    expect(s.claims["claim-1"].claimDates).toEqual(["2025-06-01"]);
+  });
+});
