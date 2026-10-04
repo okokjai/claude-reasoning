@@ -97,9 +97,16 @@ export interface State {
   /** Violations a disabled termination gate would have raised (THINK_GATES_OFF).
    *  Persisted so a later, separate `--export` still shows the bypass. */
   gateBypasses?: string[];
+  startedAt?: string;   // ISO YYYY-MM-DD, set on first thought
+  endedAt?: string;     // ISO YYYY-MM-DD, set on terminating thought
 }
 
 const SCHEMA_VERSION = 3;
+
+/** UTC calendar date (YYYY-MM-DD) for the session clock. Called from status,
+ *  reset, the lint report header and the thought write path — one formula, four
+ *  call sites, so it stays a named contract. */
+function today(): string { return new Date().toISOString().slice(0, 10); }
 
 function emptyState(): State {
   return { schemaVersion: SCHEMA_VERSION, acceptanceCriteria: [], thoughtHistory: [], branches: {}, claims: {}, hypotheses: {}, lenses: [], auditTrail: [] };
@@ -125,6 +132,8 @@ function loadState(): State {
         lenses: data.lenses || [],
         auditTrail: data.auditTrail || [],
         gateBypasses: data.gateBypasses || [],
+        startedAt: data.startedAt,
+        endedAt: data.endedAt,
       };
       // Persist back when the file was a pre-v2 schema so the on-disk form
       // matches what was loaded (no silent in-memory-only upgrade).
@@ -501,6 +510,7 @@ function buildLintReport(state: State): string {
 
   const sections: string[] = [
     `# Reasoning Lint & Fact Sheet${state.mode ? ` (${state.mode})` : ""}`,
+    `Session Clock: started ${state.startedAt ?? "?"} · ended ${state.endedAt ?? "?"} · today ${today()}`,
     "",
     "## Lint Violations",
     violations.length > 0 ? violations.join("\n") : "All invariants satisfied.",
@@ -824,7 +834,7 @@ if (values.reset) {
     fail(`--reset cannot be combined with other operations (${combined.join(", ")}); run --reset alone.`);
   }
   if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
-  console.log(JSON.stringify({ status: "reset", message: "Thinking session cleared" }, null, 2));
+  console.log(JSON.stringify({ status: "reset", message: "Thinking session cleared", today: today() }, null, 2));
   process.exit(0);
 }
 
@@ -925,6 +935,7 @@ if (values.status) {
     claimDetails: state.claims,
     hypothesisDetails: state.hypotheses,
     auditTrail: state.auditTrail || [],
+    today: today(),
   };
   console.log(JSON.stringify(response, null, 2));
   process.exit(0);
@@ -1712,6 +1723,11 @@ if (thoughtData.branchFromThought != null && thoughtData.branchId != null) {
   }
   state.branches[thoughtData.branchId].push(thoughtData);
 }
+
+// Session clock: start on the first thought, stamp the end when the
+// terminating thought lands. Both are dates, not instants.
+if (state.startedAt == null) state.startedAt = today();
+if (!nextThoughtNeeded) state.endedAt = today();
 
 saveState(state);
 
