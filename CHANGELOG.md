@@ -3,6 +3,34 @@
 All notable changes to this skill are documented here.
 
 
+## [3.0.7] - 2026-10-05
+
+### Fixed
+
+- **Two side-commands in one invocation silently dropped all but the first.** `--registerClaim … --registerHypothesis …` exited 0 and persisted only the claim — each handler early-exits, so the rest never ran. A new guard rejects any invocation carrying more than one side-command (`--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`) with exit 1 before any handler fires.
+- **A stale lock that could not be removed busy-spun at 100% CPU.** The steal path did `rmdirSync` then `continue` unconditionally; when the lock path was a plain file or a non-empty directory, `rmdirSync` always failed and the `continue` skipped the deadline check and the sleep, so the loop never terminated. The `continue` now happens only after a successful steal — an unremovable lock falls through to the deadline check and sleeps, timing out with a readable message.
+- **The lock wait expired before a crashed process's lock could be stolen.** `LOCK_WAIT_MS` (15s) was shorter than `LOCK_STALE_MS` (30s), so a lock left by a crash could not be stolen before the waiter gave up and told the user to delete it by hand. `LOCK_WAIT_MS` is now `LOCK_STALE_MS + 10_000`, guaranteeing at least one steal attempt.
+- **A re-verify without `--claimSource` wiped the persisted sources while keeping their tiers.** The source projection only preserved prior sources for `pending`; any other status replaced them with the (empty) current list, leaving `sources: []` next to a surviving `tiers: [...]`. Sources are now kept whenever none are supplied, matching the existing tier rule — the two can no longer drift apart.
+- **`single_source` accepted zero sources, and whitespace-only `--claimNotes` passed.** `--claimStatus single_source` had no arity check, so a claim with no sources was recorded as `single_source []`; `--claimNotes "   "` was truthy and bypassed the caveat guard that `--hypothesisNotes` already trimmed. `single_source` now requires exactly one `--claimSource`, and negative statuses require non-empty trimmed notes.
+- **Claims under a merged hypothesis did not count as coverage for the survivor.** Both the lint's "no claim support" WARN and the `[Uncovered]` residual tested `c.supports === h.id`, so after `hyp-2` merged into `hyp-1`, a claim backing `hyp-2` left `hyp-1` flagged `No external coverage` and `[Uncovered]`. The lookup now expands the absorbed member set before matching.
+- **User-supplied text could forge a section heading in the lint report.** Hypothesis statements/notes, claim fields, criterion text, and lens findings were interpolated raw, so a value containing `\n## Confidence Assessment` rendered as a real `##` section. A new `escapeHeadings` helper neutralizes line-leading `#` runs in every interpolated user string.
+- **A lock-path failure surfaced as a raw stack trace.** `mkdirSync` failures other than `EEXIST` (EPERM/EACCES/ENOTDIR/…) were rethrown straight out of `acquireLock`. They now print `Error: cannot create state lock … (CODE); check that the state directory exists and is writable.` and exit 1.
+- **thoughtNumber had no ordering check.** A session could record 1, 2, 9, then 4. Non-revision thoughts must now be strictly greater than every prior non-revision number. Revisions keep their documented exemption: a revision carries its temporal position in `historyIndex` and may reuse the number it revises (pinned by `tests/round3.test.ts` round-8 tests).
+- **A repeated single-value flag silently kept the last value.** `--registerClaim A --registerClaim B` exited 0 with only `B` persisted. A post-`parseArgs` scan now fails on any repeated flag except `--claimSource`/`--claimTier`, the only legitimately multiple options.
+- **Boolean flags disagreed on case.** `--nextThoughtNeeded TRUE` was accepted (it lowercases) while `--met TRUE` and `--newInsight FALSE` were rejected by exact string comparison. All three now compare lowercased values, so case handling is uniform.
+- **`localhost` and `127.0.0.1` counted as two independent origins, and an unclosed branch could terminate.** Loopback/reserved hosts (`localhost`, `*.localhost`, `127.x.x.x`, `::1`, `*.invalid`, `*.test`) collapsed to a single sentinel so they can never satisfy the two-domain rule; and a new `branchClosure` gate blocks termination when a branch was opened but no main-line thought followed it.
+
+### Added
+
+- **`tests/round5.test.ts`** — 16 regression tests covering the twelve behavior changes behind the eleven `Fixed` bullets above (the last bullet bundles the loopback-origin sentinel and the `branchClosure` gate) plus the SKILL.md `verifyClaim` example.
+
+### Documentation
+
+- **SKILL.md `verifyClaim` example is now executable as written** — it was missing the required `--negativeFinding` and its trailing backslash continued the next command's `bun` into the argument list.
+- **SKILL.md convergence docs now match the code** — `--newInsight false` requires a non-empty `--newInsightNotes` unless history already contains a revision or a branch.
+- **SKILL.md gates table extended to 6–11** to include the new `branchClosure` gate.
+- **Documented `escapeHeadings` scope** — it neutralizes only line-leading `#` to protect the report's section headings; list/table/fence markers are intentionally unescaped as cosmetic artifacts in plain-text output.
+
 ## [3.0.6] - 2026-10-03
 
 ### Fixed
@@ -23,7 +51,7 @@ All notable changes to this skill are documented here.
 
 ### Notes
 
-- Medium/low-severity issues confirmed but **not** patched in this release: lens gate checks structure not content (`.`/`-` pass), `newInsightNotes "."` bypasses Gate 7, criterion met-flip requires no evidence, Path A accepts 3 single-character thoughts, `thoughtNumber` has no ordering check, `localhost`/`127.0.0.1`/`*.invalid`/`google.co.jp` treated as independent sources, `--mode` persists before first thought, `--mergedInto ""` silently ignored, revision-closing-thought miscounts Gate 7/9, `-`-prefixed thoughts rejected, `auditTrail` 7 vs documented 4 ops.
+- Medium/low-severity issues confirmed but **not** patched in this release: lens gate checks structure not content (`.`/`-` pass), `newInsightNotes "."` bypasses Gate 7, criterion met-flip requires no evidence, Path A accepts 3 single-character thoughts, `thoughtNumber` has no ordering check **(fixed in 3.0.7)**, `localhost`/`127.0.0.1`/`*.invalid`/`google.co.jp` treated as independent sources **(fixed in 3.0.7 — loopback/reserved hosts now collapse to one origin; `google.co.jp` stays a distinct registrable domain by design)**, `--mode` persists before first thought, `--mergedInto ""` silently ignored, revision-closing-thought miscounts Gate 7/9, `-`-prefixed thoughts rejected, `auditTrail` 7 vs documented 4 ops.
 
 ## [3.0.5] - 2026-10-03
 

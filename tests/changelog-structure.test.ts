@@ -39,3 +39,25 @@ describe("CHANGELOG.md structure", () => {
     expect(dupes).toEqual([]);
   });
 });
+
+/**
+ * The gate count is a contract: adding a gate means updating every site that
+ * names the range. A stale `6-10` in a comment or doc is a doc/code mismatch,
+ * not a cosmetic one — it tells the reader the new gate does not exist.
+ */
+describe("gate-range references stay in sync with the GATES switchboard", () => {
+  const GATE_COUNT = Object.keys(
+    /\bconst GATES = \{([^}]*)\}/.exec(readFileSync(join(CWD, "scripts", "think.ts"), "utf-8"))?.[1] ?? "",
+  ).filter(k => k.trim().length > 0).length;
+
+  it("derives the gate count from the switchboard itself", () => {
+    // Guard against the derivation silently becoming 0 (regex drift).
+    expect(GATE_COUNT).toBeGreaterThanOrEqual(11);
+  });
+
+  it.each(["scripts/think.ts", "SKILL.md", "README.md"])("%s has no stale gate range", (file) => {
+    const text = readFileSync(join(CWD, file), "utf-8");
+    const stale = text.match(/[Gg]ates? 6[-–]10([^0-9]|$)/g) ?? [];
+    expect(stale).toEqual([]);
+  });
+});

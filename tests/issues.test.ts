@@ -765,7 +765,7 @@ describe("v3.0.0 state layer: schema migration and atomic save", () => {
   });
 });
 
-describe("v3.0.0 termination gates 6-10", () => {
+describe("v3.0.0 termination gates 6-11", () => {
   it("Gate 6 (criteria): blocks termination with no acceptance criteria", () => {
     startPathB();
     addHyps();

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.0.6 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.0.7 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -151,8 +151,11 @@ function loadState(): State {
  * A lock older than STALE_MS belongs to a crashed process and is stolen.
  */
 const LOCK_DIR = STATE_FILE + ".lock";
-const LOCK_WAIT_MS = 15_000;
+// The wait must outlast the staleness window, otherwise a crashed process's
+// lock cannot be stolen before the waiter gives up and tells the user to delete
+// it by hand.
 const LOCK_STALE_MS = 30_000;
+const LOCK_WAIT_MS = LOCK_STALE_MS + 10_000;
 let lockHeld = false;
 
 function sleepSync(ms: number): void {
@@ -174,11 +177,20 @@ function acquireLock(): void {
       process.on("exit", releaseLock);
       return;
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") {
+        // A permissions/IO/path failure is a real error, not lock contention:
+        // report it as a clean message instead of a raw stack trace.
+        console.error(`Error: cannot create state lock ${LOCK_DIR} (${code}); check that the state directory exists and is writable.`);
+        process.exit(1);
+      }
       try {
         if (Date.now() - statSync(LOCK_DIR).mtimeMs > LOCK_STALE_MS) {
-          try { rmdirSync(LOCK_DIR); } catch { /* another waiter stole it first */ }
-          continue;
+          // Steal the stale lock and retry immediately. If the removal fails
+          // (the path is a file or a non-empty directory, not our mkdir'd
+          // lock), fall through to the deadline check + sleep instead of
+          // spinning forever at 100% CPU.
+          try { rmdirSync(LOCK_DIR); continue; } catch { /* not removable: fall through */ }
         }
       } catch { continue; /* lock vanished between mkdir and stat: retry */ }
       if (Date.now() > deadline) {
@@ -259,7 +271,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-// --- Termination gates 6-10 switchboard (plan v3.4 §6) ---
+// --- Termination gates 6-11 switchboard (plan v3.4 §6) ---
 // Required-field checks (hypothesisNotes, supports, falsification, verified
 // trio) are definition-layer and always on; only the TERMINATION gates are
 // switchable so evaluation can ablate them. THINK_GATES_OFF accepts a
@@ -270,6 +282,7 @@ const GATES = {
   lenses: true,
   convergence: true,
   falsificationResult: true,
+  branchClosure: true,
 } as const;
 
 type GateName = keyof typeof GATES;
@@ -307,6 +320,19 @@ function quoteBlock(text: string): string {
 }
 
 /**
+ * Neutralize line-leading markdown headings in user-supplied text so a value
+ * like "...\n## Confidence Assessment" cannot forge a card section. Only the
+ * line-start `#` run is escaped; ordinary prose is untouched.
+ *
+ * Threat model: guards the heading structure of the human-readable lint report.
+ * Other line-level markers (`-`/`*`/`+` lists, `|` tables, ``` fences) are
+ * intentionally not escaped — the report is plain text for a reader, not HTML.
+ */
+function escapeHeadings(text: string): string {
+  return text.split("\n").map(l => l.replace(/^(\s*)(#+)/, "$1\\$2")).join("\n");
+}
+
+/**
  * Coverage marker: a surviving hypothesis whose load-bearing proposition was
  * reached by reasoning rather than retrieval must carry this token in its
  * notes, so the absence of external coverage is an explicit, machine-visible
@@ -329,8 +355,11 @@ function declaresInference(h: Hypothesis): boolean {
  * This is a self-reported linkage label — the script cannot judge claim
  * relevance; final confidence is decided when the model writes the answer.
  */
-function linkStatus(hyp: Hypothesis, claims: Claim[]): string {
-  const linked = claims.filter(c => c.supports === hyp.id);
+function linkStatus(hyp: Hypothesis, claims: Claim[], allHyps: Hypothesis[]): string {
+  // A merged hypothesis's claims back the same load-bearing proposition, now
+  // carried by the survivor, so they count as coverage for it.
+  const ids = new Set<string>([hyp.id, ...allHyps.filter(x => x.mergedInto === hyp.id).map(x => x.id)]);
+  const linked = claims.filter(c => c.supports != null && ids.has(c.supports));
   if (linked.length === 0) return "No external coverage";
   if (linked.every(c => c.status === "verified" && c.quote != null && c.quote.trim().length > 0)) {
     return "Linked-verified";
@@ -399,6 +428,11 @@ function buildLintReport(state: State): string {
   }
   info.push(`auditTrail recorded ${audit.length} operation(s); ${changes} status change(s) on previously-seen targets (observational only, does not block termination)`);
 
+  // A merged hypothesis's claims cover its survivor too (same load-bearing
+  // proposition); expand the id set before deciding "no claim support".
+  const coveredIds = (h: Hypothesis): Set<string> =>
+    new Set<string>([h.id, ...hypotheses.filter(x => x.mergedInto === h.id).map(x => x.id)]);
+
   // WARN: self-report heuristics — raise fabrication cost, never block (§0.1).
   for (const h of hypotheses) {
     if (h.falsification != null && h.falsification.trim().length > 0 && h.falsification.trim().length < 20) {
@@ -407,7 +441,7 @@ function buildLintReport(state: State): string {
     // Only survivors matter: a rejected/merged hypothesis carries no load-bearing
     // proposition forward, so warning it is a contradiction (mirrors the Blind
     // Spots survivor filter below).
-    if ((h.status === "selected" || h.status === "synthesized") && claims.every(c => c.supports !== h.id)) {
+    if ((h.status === "selected" || h.status === "synthesized") && !claims.some(c => c.supports != null && coveredIds(h).has(c.supports))) {
       const marker = declaresInference(h) ? "marked [INFERENCE]" : "NOT marked [INFERENCE]";
       warn.push(`'${h.id}' has no claim support (${marker}); its load-bearing proposition is unverified — cite as inference, not fact`);
     }
@@ -474,16 +508,16 @@ function buildLintReport(state: State): string {
     "## Acceptance Checklist",
     state.acceptanceCriteria.length > 0
       ? state.acceptanceCriteria.map(cr =>
-          `- ${cr.id} "${cr.criterion}" → ${cr.met === true ? `met ✅${(cr.checkedAtHistoryIndex ?? cr.checkedAtThought) != null ? ` (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought})` : ""}` : cr.met === false ? `unmet ❌ (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? "?"})` : "un-checked ⚠️"}`)
+          `- ${cr.id} "${escapeHeadings(cr.criterion)}" → ${cr.met === true ? `met ✅${(cr.checkedAtHistoryIndex ?? cr.checkedAtThought) != null ? ` (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought})` : ""}` : cr.met === false ? `unmet ❌ (checkedAtThought=${cr.checkedAtHistoryIndex ?? cr.checkedAtThought ?? "?"})` : "un-checked ⚠️"}`)
           .join("\n")
       : "- None registered.",
     "",
     "## Hypotheses",
     hypotheses.length > 0
       ? hypotheses.map(h => {
-          const link = linkStatus(h, claims);
-          const lines = [`- ${h.id} [${h.status}] "${h.statement}"${h.notes ? ` — why: ${h.notes}` : ""}${h.mergedInto ? ` (merged → ${h.mergedInto})` : ""}`];
-          if (h.falsification) lines.push(`  - falsification: "${h.falsification}"${h.falsificationResult ? ` → falsificationResult: "${h.falsificationResult}"` : " → falsificationResult: (none)"}`);
+          const link = linkStatus(h, claims, hypotheses);
+          const lines = [`- ${h.id} [${h.status}] "${escapeHeadings(h.statement)}"${h.notes ? ` — why: ${escapeHeadings(h.notes)}` : ""}${h.mergedInto ? ` (merged → ${h.mergedInto})` : ""}`];
+          if (h.falsification) lines.push(`  - falsification: "${escapeHeadings(h.falsification)}"${h.falsificationResult ? ` → falsificationResult: "${escapeHeadings(h.falsificationResult)}"` : " → falsificationResult: (none)"}`);
           lines.push(`  - link-status: ${link}`);
           return lines.join("\n");
         }).join("\n")
@@ -492,17 +526,17 @@ function buildLintReport(state: State): string {
     "## Claims",
     claims.length > 0
       ? claims.map(c => {
-          const parts = [`- ${c.id} [${c.status === "pending" ? "pending, unverified" : c.status}] "${c.statement}"${c.supports ? ` supports ${c.supports}` : ""}`];
-          if (c.quote) parts.push(`  quote: "${c.quote}"`);
-          if (c.negativeQuery || c.negativeFinding) parts.push(`  negative: "${c.negativeQuery ?? ""}" → "${c.negativeFinding ?? ""}"`);
+          const parts = [`- ${c.id} [${c.status === "pending" ? "pending, unverified" : c.status}] "${escapeHeadings(c.statement)}"${c.supports ? ` supports ${c.supports}` : ""}`];
+          if (c.quote) parts.push(`  quote: "${escapeHeadings(c.quote)}"`);
+          if (c.negativeQuery || c.negativeFinding) parts.push(`  negative: "${escapeHeadings(c.negativeQuery ?? "")}" → "${escapeHeadings(c.negativeFinding ?? "")}"`);
           if (c.sources.length > 0) parts.push(`  sources: ${c.sources.join(", ")}`);
-          if (c.notes) parts.push(`  notes: ${c.notes}`);
+          if (c.notes) parts.push(`  notes: ${escapeHeadings(c.notes)}`);
           return parts.join("\n");
         }).join("\n")
       : isPathA ? "- No external claims (Path A; n/a closed-form)." : "- No claims registered.",
     "",
     "## Lens Findings → Residual Uncertainty",
-    state.lenses.length > 0 ? state.lenses.map(l => `- ${l.lens}: "${l.finding}" (at thought ${l.atThought})`).join("\n") : "- None recorded.",
+    state.lenses.length > 0 ? state.lenses.map(l => `- ${escapeHeadings(l.lens)}: "${escapeHeadings(l.finding)}" (at thought ${l.atThought})`).join("\n") : "- None recorded.",
   ];
 
   // For backward compatibility with tests asserting on "Merged: hyp-X → hyp-Y"
@@ -510,7 +544,7 @@ function buildLintReport(state: State): string {
     sections.push(
       "",
       "## Merged Hypotheses",
-      ...merged.map(h => `- Merged: ${h.id} → ${h.mergedInto ?? "?"} — ${h.statement}${h.notes ? ` (${h.notes})` : ""}`),
+      ...merged.map(h => `- Merged: ${h.id} → ${h.mergedInto ?? "?"} — ${escapeHeadings(h.statement)}${h.notes ? ` (${escapeHeadings(h.notes)})` : ""}`),
     );
   }
 
@@ -535,7 +569,7 @@ function buildLintReport(state: State): string {
   // either as an explicit inference (marked) or as an uncovered violation.
   const survivors = hypotheses.filter(h => h.status === "selected" || h.status === "synthesized");
   for (const h of survivors) {
-    if (claims.some(c => c.supports === h.id)) continue;
+    if (claims.some(c => c.supports != null && coveredIds(h).has(c.supports))) continue;
     residual.push(
       declaresInference(h)
         ? `- [Inference] ${h.id} is not backed by any claim; declared as inference from reasoning, not retrieved evidence`
@@ -674,6 +708,23 @@ try {
 } catch (err: unknown) {
   const e = err as Error;
   fail(`Invalid arguments: ${e.message}`);
+}
+
+// parseArgs keeps the last value for a repeated non-multiple option and never
+// complains, so `--registerClaim A --registerClaim B` silently drops A. Catch
+// the repeat explicitly; only --claimSource/--claimTier are legitimately multiple.
+{
+  const seen = new Set<string>();
+  for (const arg of process.argv.slice(2)) {
+    const m = /^--([A-Za-z][A-Za-z0-9-]*)(=|$)/.exec(arg);
+    if (!m) continue;
+    const name = m[1];
+    if (name === "claimSource" || name === "claimTier") continue;
+    if (seen.has(name)) {
+      fail(`--${name} was supplied more than once; the earlier value would be silently discarded. Repeatable flags are only --claimSource and --claimTier.`);
+    }
+    seen.add(name);
+  }
 }
 
 if (values.help) {
@@ -837,6 +888,19 @@ if (values.thought != null) {
   if (conflicting.length > 0) {
     fail(`--thought cannot be combined with ${conflicting.join(", ")}; the thought would be silently discarded. Submit the thought alone, then run the side-command.`);
   }
+}
+
+// Side-commands each dispatch to a handler that early-exits. Supplying two at
+// once means the first handler exits and the rest are silently discarded (e.g.
+// --registerClaim … --registerHypothesis … keeps only the claim). Reject the
+// combination explicitly rather than dropping half the invocation.
+const SIDE_COMMANDS: readonly string[] = [
+  "--registerClaim", "--verifyClaim", "--registerHypothesis", "--resolveHypothesis",
+  "--addCriterion", "--checkCriterion", "--recordLens",
+];
+const activeSide = otherOps(values).filter(f => SIDE_COMMANDS.includes(f));
+if (activeSide.length > 1) {
+  fail(`only one side-command per invocation is allowed; got ${activeSide.join(", ")}. Run them separately.`);
 }
 
 // --- Command: Status ---
@@ -1082,10 +1146,10 @@ if (values.checkCriterion != null) {
   }
   const crit = state.acceptanceCriteria.find(c => c.id === values.checkCriterion);
   if (!crit) fail(`Criterion ${values.checkCriterion} not found in state`);
-  if (values.met == null || (values.met !== "true" && values.met !== "false")) {
+  if (values.met == null || (values.met.toLowerCase() !== "true" && values.met.toLowerCase() !== "false")) {
     fail(`--met must be 'true' or 'false' when --checkCriterion is set (got '${values.met ?? ""}'); any other value would silently leave the criterion unchecked.`);
   }
-  crit.met = values.met === "true";
+  crit.met = values.met.toLowerCase() === "true";
   crit.checkedAtHistoryIndex = state.thoughtHistory.length;
   crit.checkedAtThought = state.thoughtHistory.length;
   if (values.criterionNotes != null) crit.notes = values.criterionNotes;
@@ -1220,6 +1284,15 @@ function rootDomain(urlStr: string): string {
   }
   // "example.com." (FQDN root dot) is the same host as "example.com".
   hostname = hostname.replace(/\.+$/, "");
+  // Loopback and reserved hostnames are not independent origins: localhost,
+  // *.localhost, 127.0.0.0/8, ::1, *.invalid and *.test all denote "here", so
+  // they collapse to one sentinel and can never satisfy the 2-domain requirement.
+  if (/^(localhost|.*\.localhost)$/.test(hostname)
+      || /^127\.(\d{1,3}\.){2}\d{1,3}$/.test(hostname)
+      || hostname === "::1" || hostname === "[::1]"
+      || /(^|\.)(invalid|test)$/.test(hostname)) {
+    return "\0local";
+  }
   // A bare IPv4/IPv6 host is its own domain — never join its "last two labels".
   if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(":")) return hostname;
   const parts = hostname.split(".");
@@ -1313,9 +1386,17 @@ if (values.verifyClaim != null) {
     fail(`Claim ${claim.id} cannot demote verified claim to ${status}; verification results are final.`);
   }
 
-  // Guardrail 2: negative resolutions require a recorded caveat
-  if ((status === "single_source" || status === "unverified" || status === "not_found") && !values.claimNotes) {
+  // Guardrail 2: negative resolutions require a recorded caveat. Whitespace-only
+  // notes are not a caveat (matches the --hypothesisNotes trim check).
+  if ((status === "single_source" || status === "unverified" || status === "not_found")
+      && (values.claimNotes == null || values.claimNotes.trim() === "")) {
     fail(`--claimStatus ${status} requires --claimNotes explaining why the claim could not be fully verified`);
+  }
+
+  // Guardrail 2b: single_source means exactly one source; zero sources is
+  // 'not_found'/'unverified' territory, several is a claim about multiple origins.
+  if (status === "single_source" && sources.length !== 1) {
+    fail(`--claimStatus single_source requires exactly 1 --claimSource; found ${sources.length}.`);
   }
 
   // Project a clean claim per target status: fields that do not belong to the
@@ -1323,13 +1404,16 @@ if (values.verifyClaim != null) {
   // a non-pending re-verify cannot strand stale verification fields.
   const projected: Claim = {
     id: claim.id, statement: claim.statement, registeredAtThought: claim.registeredAtThought,
-    sources: status === "pending" && sources.length === 0 ? claim.sources : sources,
+    sources: sources.length === 0 ? (claim.sources ?? []) : sources,
     status,
   };
   if (claim.supports != null) projected.supports = claim.supports;
   if (status !== "pending") {
+    // Tiers only attach to the sources they classify. A re-verify that supplies
+    // tiers replaces them; one that omits tiers keeps whatever was persisted,
+    // mirroring the sources rule above so the two never drift apart.
     if (tiers.length > 0) projected.tiers = tiers;
-    else if (claim.tiers != null) projected.tiers = claim.tiers; // un-tiered re-verify keeps prior tiers
+    else if (claim.tiers != null) projected.tiers = claim.tiers;
     if (values.claimNotes) projected.notes = values.claimNotes;
     if (values.claimQuote != null) projected.quote = values.claimQuote;
     if (values.negativeQuery != null) projected.negativeQuery = values.negativeQuery;
@@ -1375,7 +1459,7 @@ const nextThoughtNeeded = nextRaw === "true";
 // --newInsight is the convergence declaration: only 'false' (with optional
 // --newInsightNotes) is a valid terminating/explanatory value. 'true' just
 // duplicates --nextThoughtNeeded true and would silently skip gate 9.
-if (values.newInsight != null && values.newInsight !== "false") {
+if (values.newInsight != null && values.newInsight.toLowerCase() !== "false") {
   fail(`--newInsight must be 'false' when set (got '${values.newInsight}'); a 'true' value duplicates --nextThoughtNeeded and is not a convergence declaration.`);
 }
 
@@ -1460,7 +1544,7 @@ if (!nextThoughtNeeded) {
       fail(`Cannot terminate with --nextThoughtNeeded false: the previous thought (${previousThought.thoughtNumber}) set --needsMoreThoughts, signalling new insight was still being sought. Submit at least one more thought.`);
     }
 
-    // --- Reasoning-Depth Hard Gates 6-10 (plan v3.4 §6) ---
+    // --- Reasoning-Depth Hard Gates 6-11 (plan v3.4 §6) ---
 
     // Gate 6 (criteria): ≥1 acceptance criterion registered, and ALL must be checked
     const critList = state.acceptanceCriteria;
@@ -1512,7 +1596,7 @@ if (!nextThoughtNeeded) {
     const hasBranchOrRevision = state.thoughtHistory.some(
       t => t.isRevision || t.branchFromThought != null,
     );
-    const declaredConvergence = values.newInsight === "false" && values.newInsightNotes != null && values.newInsightNotes.trim().length > 0;
+    const declaredConvergence = values.newInsight?.toLowerCase() === "false" && values.newInsightNotes != null && values.newInsightNotes.trim().length > 0;
     if (!hasBranchOrRevision && !declaredConvergence) {
       enforceGate(
         "convergence",
@@ -1527,6 +1611,28 @@ if (!nextThoughtNeeded) {
         enforceGate(
           "falsificationResult",
           `Hypothesis ${h.id} is resolved (${h.status}) but lacks a non-empty falsificationResult in state.`,
+        );
+      }
+    }
+
+    // Gate 11 (branch closure): an opened branch must be followed by a return
+    // to the main line before the session concludes, otherwise a strand of
+    // reasoning was abandoned silently. A branch is closed when a non-branch
+    // thought is recorded after its last entry.
+    const branchIds = Object.keys(state.branches);
+    if (branchIds.length > 0) {
+      const lastMainIndex = state.thoughtHistory
+        .filter(t => t.branchFromThought == null)
+        .reduce((m, t) => Math.max(m, t.historyIndex ?? 0), 0);
+      const unclosed = branchIds.filter(id => {
+        const entries = state.branches[id];
+        const last = entries[entries.length - 1];
+        return (last.historyIndex ?? 0) >= lastMainIndex;
+      });
+      if (unclosed.length > 0) {
+        enforceGate(
+          "branchClosure",
+          `Branch(es) ${unclosed.join(", ")} were opened but the main line never resumed before termination; return to the main line or drop the branch.`,
         );
       }
     }
@@ -1577,8 +1683,22 @@ if (values.newInsightNotes != null && values.newInsightNotes.trim() !== "") {
   thoughtData.newInsightNotes = values.newInsightNotes;
 }
 
+// A non-revision thought needs a fresh thoughtNumber. Revisions are exempt by
+// design: they carry their temporal position in historyIndex and reuse the
+// number of the thought they revise (see round-8 review in tests/round3).
 if (!thoughtData.isRevision && state.thoughtHistory.some(t => t.thoughtNumber === thoughtNumber)) {
   fail(`thought ${thoughtNumber} already exists in history`);
+}
+
+// Non-revision numbering must be monotonically increasing so the history stays
+// a readable sequence (1,2,9,4 is not).
+if (!thoughtData.isRevision) {
+  const maxNum = state.thoughtHistory
+    .filter(t => !t.isRevision)
+    .reduce((m, t) => Math.max(m, t.thoughtNumber), 0);
+  if (thoughtNumber <= maxNum) {
+    fail(`--thoughtNumber ${thoughtNumber} must be greater than the last thought (${maxNum}); numbers must not go backwards.`);
+  }
 }
 
 state.thoughtHistory.push(thoughtData);

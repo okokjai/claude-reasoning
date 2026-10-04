@@ -1,4 +1,4 @@
-# claude-reasoning 3.0.6
+# claude-reasoning 3.0.7
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
@@ -6,7 +6,7 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
 - **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected; depth beyond 5 is rejected. Claims and hypotheses are forbidden in Path A.
-- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes` and `--falsificationResult`) → 2–4 critical lenses chosen for the task, recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, merges leave fewer than 2 distinct surviving hypotheses, **every resolved hypothesis is `rejected`** (at least one must be `selected` or `synthesized`), or any of gates 6–10 fails (unchecked acceptance criteria, unmet criterion without a revision, fewer than 2 lens names, no convergence declaration, resolved hypothesis without a falsification result). Acceptance criteria and lens records are Path B constructs and are forbidden in Path A.
+- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes` and `--falsificationResult`) → 2–4 critical lenses chosen for the task, recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, merges leave fewer than 2 distinct surviving hypotheses, **every resolved hypothesis is `rejected`** (at least one must be `selected` or `synthesized`), or any of gates 6–11 fails (unchecked acceptance criteria, an unmet criterion without revision or `--newInsightNotes`, fewer than 2 distinct lens names, no convergence declaration with history lacking a revision/branch, a resolved non-merged hypothesis without `falsificationResult`, or a branch opened with no main-line thought after it).
 - **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search (with a required `--supports <hyp-id>` link), ≥2 independent sources for `verified` classified by `--claimTier` against `references/source-tiers.md` (at least two from Tier 1/2), plus a recorded `--claimQuote`, `--negativeQuery`, and `--negativeFinding`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
 - **Tier shape validation on every status.** A `--claimTier` supplied with any `--claimStatus` must be an integer 1–4 and one per `--claimSource`; a non-conforming vector exits 1 rather than persisting `NaN`/out-of-range tiers on a `single_source`, `unverified`, or `not_found` claim.
 - **Lint-report card.** `--export` (and session termination) prints a `buildLintReport` fact sheet: CRIT residuals that an active gate should have blocked, WARN entries (missing rationale, disabled gates, thin lens coverage), INFO escape surfaces, acceptance-criterion status, lens findings, and the block-quoted final thought — headed by the standing warning that this is the script's view of state, not the final answer.
@@ -97,7 +97,7 @@ bun scripts/think.ts --resolveHypothesis hyp-3 --hypothesisStatus merged --merge
 # --needsMoreThoughts flag on the last thought blocks termination too)
 bun scripts/think.ts --thought "Critique + verify against lenses" --thoughtNumber 2 --totalThoughts 5 --nextThoughtNeeded true
 
-# Conclude — declare convergence; gates 6-10 are checked here
+# Conclude — declare convergence; termination gates 6-11 are checked here
 # (THINK_GATES_OFF=criteria,lenses disables individual gates for ablation)
 bun scripts/think.ts --thought "Synthesize into Conclusion Card" --thoughtNumber 5 --totalThoughts 5 \
   --nextThoughtNeeded false --newInsight false --newInsightNotes "first synthesis round surfaced no new insight"
@@ -151,12 +151,12 @@ These are checked in code, not just documented:
 | `--checkCriterion` with an unknown id, or without `--met true`/`--met false` | Exit code 1 |
 | `--recordLens` without `--lens` or without `--finding` | Exit code 1 |
 | `--newInsight` set to anything other than `false` | Exit code 1 — `true` would duplicate `--nextThoughtNeeded` and silently skip the convergence gate |
-| `--nextThoughtNeeded false` in `path-b` failing termination gate 6 (≥ 1 acceptance criterion, all checked), 7 (unmet criterion without later revision or `--newInsightNotes`), 8 (< 2 distinct lens names), 9 (no `--newInsight false` and no revision/branch in history), or 10 (resolved non-merged hypothesis without `falsificationResult`) | Exit code 1 — gates 6–10 are switchable via `THINK_GATES_OFF` (names or `all`); a disabled gate's violation surfaces as `[WARN]` in the lint report instead |
+| `--nextThoughtNeeded false` in `path-b` failing termination gate 6 (≥ 1 acceptance criterion, all checked), 7 (unmet criterion without later revision or `--newInsightNotes`), 8 (< 2 distinct lens names), 9 (no `--newInsight false` with non-empty notes and no revision/branch in history), 10 (resolved non-merged hypothesis without `falsificationResult`), or 11 (a branch opened with no main-line thought after it) | Exit code 1 — gates 6–11 are switchable via `THINK_GATES_OFF` (names or `all`); a disabled gate's violation surfaces as `[WARN]` in the lint report instead |
 | Side-commands (`--addCriterion` / `--checkCriterion` / `--recordLens` included) submitted after the session terminated | Exit code 1 — terminated sessions are immutable; `--reset` starts a new one |
 | `--isRevision` without `--revisesThought` | Exit code 1 |
 | `--isRevision` together with `--branchFromThought` | Exit code 1 — mutually exclusive |
 | `--revisesThought` referencing a nonexistent thought | Exit code 1 |
-| A non-revision `--thoughtNumber` that already exists in history | Exit code 1 |
+| A non-revision `--thoughtNumber` that already exists in history, or that does not exceed every prior non-revision number | Exit code 1 — revisions are exempt: a revision reuses the number it revises and keeps its timeline position in `historyIndex` |
 | `--branchFromThought` without `--branchId` | Exit code 1 |
 | `--branchFromThought` referencing a nonexistent thought | Exit code 1 |
 | `--mergedInto` referencing an already-rejected hypothesis | Exit code 1 |
@@ -175,7 +175,7 @@ These are checked in code, not just documented:
 
 ## State file
 
-`scripts/.think_state.json` is schema **`v3`**. `ThoughtData` carries `historyIndex` — the 1-based position in the *timeline*, distinct from the caller-supplied `thoughtNumber` (a revision re-enters history without renumbering it). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. A `v2` file (no `historyIndex`) is migrated to `v3` automatically on load. Tools reading the file directly should key on `historyIndex`, not `thoughtNumber`.
+`scripts/.think_state.json` is schema **`v3`**. `ThoughtData` carries `historyIndex` — the 1-based position in the *timeline*, distinct from the caller-supplied `thoughtNumber` (a revision re-enters history without renumbering it). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. Any file whose `schemaVersion` differs from the current `SCHEMA_VERSION` (v1 or v2) is migrated automatically on load and written back in the current form. Tools reading the file directly should key on `historyIndex`, not `thoughtNumber`.
 
 ## Tests
 

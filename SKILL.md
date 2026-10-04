@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 3.0.6
+version: 3.0.7
 description: "Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or an open-ended question needing verified external facts — before answering, not after. Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 3.0.6
+# claude-reasoning 3.0.7
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -21,7 +21,7 @@ they were read, so this is the one ordering the model must enforce on itself:
 |---|---|
 | `references/critical-lenses.md` | choosing `--recordLens` names |
 | `references/source-tiers.md` | any `--claimStatus verified` |
-| `references/hallucination-gates.md` | the termination audit (gates 6–10) |
+| `references/hallucination-gates.md` | the termination audit (gates 6–11) |
 | `references/conclusion-card.md` | writing the final delivery |
 
 Reading them late (or not at all) is the failure this checklist exists to prevent:
@@ -52,7 +52,7 @@ Announce the classification in Thought 1 so the routing is inspectable. Pass it 
 3. **Thought 3** — **Independently cross-validate with a different method**: reverse deduction, extreme-value substitution, set/complement enumeration, or brute-force state space.
 4. **Thoughts 4–5** — Only when Steps 2 and 3 disagree. Resolve the conflict, then terminate immediately.
 
-**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, any external search, depth expansion beyond 5. All seven side-commands are rejected with a Path A error — acceptance criteria and lens records are Path B constructs.
+**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, any external search, depth expansion beyond 5. All seven side-commands (`--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`) are rejected with a Path A error — criteria (`--addCriterion`/`--checkCriterion`) and lens records (`--recordLens`) are Path B constructs.
 
 Terminate as soon as the two independent methods agree: `--nextThoughtNeeded false`.
 
@@ -153,17 +153,18 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
    **Coverage caveat.** Termination gates track *registered* claims only. Registering a weak but verifiable claim is not a substitute for covering the hypothesis's actual load-bearing proposition — the script cannot check relevance (`--supports` validates only that the target hypothesis exists). Zero-claim Path B sessions terminate successfully; they are reported as unverified coverage, not blocked.
 
-   ### Termination gates 6–10 (Path B)
+   ### Termination gates 6–11 (Path B)
 
    | # | Gate name | Blocks termination while… |
    |---|---|---|
    | 6 | `criteria` | no `--addCriterion` entry exists, or any criterion is unchecked |
    | 7 | `criteriaRevision` | a criterion is `met=false` with no later `--isRevision` thought and the terminating thought carries no `--newInsightNotes` |
    | 8 | `lenses` | fewer than 2 distinct `--lens` names recorded via `--recordLens` |
-   | 9 | `convergence` | the terminating thought does not declare `--newInsight false` and history has no revision/branch |
+   | 9 | `convergence` | the terminating thought does not declare `--newInsight false` **with a non-empty `--newInsightNotes`** and history has no revision/branch |
    | 10 | `falsificationResult` | any resolved (non-`merged`) hypothesis lacks a non-empty `--falsificationResult` |
+   | 11 | `branchClosure` | a branch was opened but no non-branch thought followed it before termination |
 
-   These five gates are switchable for evaluation ablation: `THINK_GATES_OFF` accepts a comma-separated list of gate names or `all`. A disabled gate's would-be violation is recorded and surfaced as a `[WARN]` line in the lint report instead of failing. The earlier gates (pending claims/hypotheses, minimum thought count, `--needsMoreThoughts`) are always on and cannot be disabled.
+   These six gates are switchable for evaluation ablation: `THINK_GATES_OFF` accepts a comma-separated list of gate names or `all`. A disabled gate's would-be violation is recorded and surfaced as a `[WARN]` line in the lint report instead of failing. The earlier gates (pending claims/hypotheses, minimum thought count, `--needsMoreThoughts`) are always on and cannot be disabled.
 
 ---
 
@@ -198,7 +199,7 @@ bun scripts/think.ts --registerHypothesis "<competing option or hypothesis>" --f
 bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected \
   --hypothesisNotes "wins on latency and ops cost" --falsificationResult broken
 
-# Acceptance criteria and lenses (termination gates 6-8)
+# Acceptance criteria and lenses (termination gates 6-8; convergence 9-11 checked at the end)
 bun scripts/think.ts --addCriterion "<target requirement>"
 bun scripts/think.ts --checkCriterion crit-1 --met true --criterionNotes "backed by two sources"
 bun scripts/think.ts --recordLens --lens "<lens name>" --finding "<residual uncertainty>"
@@ -209,15 +210,17 @@ bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimSource "https://a.example" --claimSource "https://b.example" \
   --claimTier 1 --claimTier 1 \
   --claimQuote "<verbatim quote>" --negativeQuery "<counter-evidence query>" \
+  --negativeFinding "<counter-evidence result>"
+
 bun scripts/think.ts --verifyClaim claim-2 --claimStatus single_source \
   --claimSource "https://c.example" --claimNotes "only one source"
 bun scripts/think.ts --verifyClaim claim-3 --claimStatus not_found --claimNotes "no public record"
 bun scripts/think.ts --verifyClaim claim-4 --claimStatus unverified --claimNotes "no search tool in session"
 
-# Converge and terminate (gate 9: declare --newInsight false, optional notes)
+# Converge and terminate (gate 9: --newInsight false + non-empty --newInsightNotes)
 bun scripts/think.ts --thought "<synthesis>" --thoughtNumber 5 --totalThoughts 5 \
   --nextThoughtNeeded false --newInsight false --newInsightNotes "<why exploration is complete>"
-# Ablation: disable gates 6-10 for evaluation runs
+# Ablation: disable gates 6-11 for evaluation runs
 # THINK_GATES_OFF=criteria,lenses  or  THINK_GATES_OFF=all
 
 # Inspect full state (thoughts, branches, claims)
@@ -236,7 +239,7 @@ Status line returned after each thought:
 |---|---|---|
 | `--mode` | enum | `path-a` \| `path-b` — **required on the first thought**; immutable for the session |
 | `--thought` | string | Thought content; a value starting with `-` needs `--thought=<value>`. **Standalone**: cannot be combined with any side-command (`--recordLens`, `--resolveHypothesis`, `--status`, …) — the thought would be silently discarded, so the combination exits 1 |
-| `--thoughtNumber` | int ≥ 1 | Current index |
+| `--thoughtNumber` | int ≥ 1 | Current index; non-revisions must exceed every prior non-revision number (no repeats, no going backwards). A `--isRevision` thought may reuse the number it revises, and may carry any number — its position is `historyIndex`, not `thoughtNumber`; the next non-revision still has to exceed every prior non-revision |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
 | `--nextThoughtNeeded` | `true`\|`false` | `false` terminates — blocked while claims are pending or termination gates fail; any other value (e.g. `ture`, `yes`) exits 1 |
 | `--isRevision` | flag | Marks this thought as a revision; requires `--revisesThought` |
@@ -244,7 +247,7 @@ Status line returned after each thought:
 | `--branchFromThought` | int | Target thought index to branch from; requires `--branchId`; must exist in history |
 | `--branchId` | string | Branch label; **requires `--branchFromThought`** |
 | `--needsMoreThoughts` | flag | Signals depth expansion |
-| `--newInsight` | `true`\|`false` | Path B convergence gate 9: declaring `false` signals convergence; can include `--newInsightNotes` |
+| `--newInsight` | `true`\|`false` | Path B convergence gate 9: declaring `false` **requires a non-empty `--newInsightNotes`** — together they declare convergence, unless history already contains a revision or a branch (then `--newInsightNotes` is optional) |
 | `--newInsightNotes` | string | Rationale for convergence or absence of new insight |
 | `--registerHypothesis` | string | Registers a competing hypothesis; assigns `hyp-N`, status `pending`; **requires `--falsification`** |
 | `--falsification` | string | Concrete condition that would falsify the hypothesis; **requires `--registerHypothesis`** |
@@ -264,7 +267,7 @@ Status line returned after each thought:
 | `--supports` | string | Target hypothesis id this claim provides evidence for; **requires `--registerClaim`** (required on registration in Path B) |
 | `--verifyClaim` | string | Target claim id |
 | `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found`; **requires `--verifyClaim`** — `verified` claims are final; re-verification to any other status is rejected |
-| `--claimSource` | string, repeatable | **Requires `--verifyClaim`**; ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; a trailing root dot is normalised (`example.com.` = `example.com`); each value must be an http(s) URL or a bare `host/path` that names a domain (a `file:///`/`data:`/`foo/file`/single-label value is rejected); recorded `sources` are kept on a `pending` re-verify unless new ones are supplied |
+| `--claimSource` | string, repeatable | **Requires `--verifyClaim`**; ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; loopback/reserved hosts (`localhost`, `*.localhost`, `127.x.x.x`, `::1`, `*.invalid`, `*.test`) collapse to one origin and can never satisfy the 2-domain rule; a trailing root dot is normalised (`example.com.` = `example.com`); each value must be an http(s) URL or a bare `host/path` that names a domain (a `file:///`/`data:`/`foo/file`/single-label value is rejected); recorded `sources` are kept on a `pending` re-verify unless new ones are supplied |
 | `--claimTier` | int 1-4, repeatable | **Requires `--verifyClaim`**; **required** for `verified`, one per `--claimSource` in the same order: the i-th tier classifies the i-th source against `references/source-tiers.md`. `verified` needs ≥ 2 sources at Tier 1/2 (multiple Tier 3/4 sources cannot elevate a claim). Optional for `single_source` / `unverified` / `not_found`, but whenever supplied it must be a canonical integer `1`–`4` (digits only — `1e0`/`0x1`/`+1`/`01` rejected) and one per `--claimSource` — a malformed vector exits 1 rather than being persisted; on a `pending` re-verify the recorded tiers are cleared |
 | `--claimQuote` | string | Verbatim quote from source (required for `verified`); **requires `--verifyClaim`**; cleared on a `pending` re-verify |
 | `--negativeQuery` | string | Search query targeting counter-evidence (required for `verified`); **requires `--verifyClaim`**; cleared on a `pending` re-verify |
@@ -298,7 +301,7 @@ Status line returned after each thought:
 
 `scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
 
-**Schema `v3`.** `ThoughtData` carries `historyIndex` — the 1-based position of the thought in the *timeline*, which is distinct from the caller-supplied `thoughtNumber` (revisions re-enter the history without renumbering it, so the two diverge). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. A `v2` state file is migrated to `v3` automatically on load; the version is stored in the file as `schemaVersion`.
+**Schema `v3`.** `ThoughtData` carries `historyIndex` — the 1-based position of the thought in the *timeline*, which is distinct from the caller-supplied `thoughtNumber` (revisions re-enter the history without renumbering it, so the two diverge). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. Any state file whose `schemaVersion` differs from the current `SCHEMA_VERSION` (v1 or v2) is migrated automatically on load and written back in the current form; the version is stored in the file as `schemaVersion`.
 
 Two guards protect the file itself:
 
