@@ -20,9 +20,11 @@ Before delivering the final conclusion on any **Path B** reasoning task, execute
 ---
 
 ## Gate 3: Temporal Currency & Version Alignment
-- **Recency check**: When evaluating fast-moving technologies or APIs, verify the timestamp of the source.
+- **Reference date**: the only "today" is the script's `today` field (printed by `--status` / `--reset`, UTC `YYYY-MM-DD`). Compare every source age against it — never against a date read off a search snippet, a page's last-modified stamp, or memory. The lint report warns when a `verified` claim's newest `--claimDate` is more than 180 days before `today`.
+- **Recency check**: When evaluating fast-moving technologies or APIs, verify the timestamp of the source and record it as `--claimDate` (one per `--claimSource`, publish date of that source).
 - **Version binding**: Explicitly tie claims to specific software versions (e.g., "In Claude 3.5 Sonnet (2024-10-22 release)...", "As of AWS Bedrock API v2...").
-- **Stale assumption check**: If a source is > 6 months old in an active field, formulate a negative verification query (Gate 4) to ensure the feature has not been deprecated or altered.
+- **Stale assumption check**: If a source is > 6 months old (measured against `today`) in an active field, formulate a negative verification query (Gate 4) to ensure the feature has not been deprecated or altered.
+- **"Latest" queries carry the current month**: a freshness query must include the current year-month from `today`. If the window returns nothing, report "no result in window" — never substitute an older result and imply it is current.
 
 ---
 

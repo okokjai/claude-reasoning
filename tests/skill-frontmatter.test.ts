@@ -68,3 +68,12 @@ describe("State file schema v3 documentation", () => {
   });
 });
 
+describe("SKILL.md: clock calibration and claim dates", () => {
+  it("documents clock calibration (Step -2) and the --claimDate flag", () => {
+    const t = readFileSync(join(CWD, "SKILL.md"), "utf-8");
+    expect(t).toMatch(/## Step -2: Calibrate clock/);
+    expect(t).toMatch(/`today`[\s\S]*?only[\s\S]*?date source/i);
+    expect(t).toMatch(/\| `--claimDate` \|/);
+  });
+});
+

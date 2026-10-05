@@ -12,6 +12,18 @@ State machine: `scripts/think.ts` (TypeScript, runs on `bun` or `npx tsx`). Pers
 
 ---
 
+## Step -2: Calibrate clock
+
+Before the first thought, run `bun scripts/think.ts --status`. Its output carries
+`today` — the script's date, in UTC `YYYY-MM-DD`. That value is the **only**
+date source for this session: every freshness judgement (Gate 3's six-month
+window, `--claimDate` comparisons, the card's "as of" line) references it, never
+a date inferred from search results, a source page, or memory. When a query needs
+recency, carry the current month; when the window returns nothing, report
+"no result in window" rather than substituting an older date.
+
+---
+
 ## Step -1: Load Contract (Path B)
 
 Load these before the first Path B thought — the state machine cannot check that
@@ -83,7 +95,7 @@ Do not send the first Path B thought until the four reference files in **Step -1
    - Temporal currency (verify version and recency).
    - **Negative search & disconfirmation** (actively query for counter-evidence via `--negativeQuery` and `--negativeFinding`).
    - Honest tool absence reporting.
-6. **Standardized Conclusion Card** — Output final delivery using the calibrated structure from `references/conclusion-card.md` with explicit tags (`[Confirmed]`, `[Probable]`, `[Plausible]`, `[Contested]`, `[Unverified]`), qualitative confidence, and residual uncertainty. Never emit numeric scores. Session termination auto-emits the `buildLintReport` card summary.
+6. **Standardized Conclusion Card** — Output final delivery using the calibrated structure from `references/conclusion-card.md` with explicit tags (`[Confirmed]`, `[Probable]`, `[Plausible]`, `[Contested]`, `[Unverified]`), qualitative confidence, and residual uncertainty. Never emit numeric scores. The card **must contain the Reasoning Trace**: after terminating, run `--export` and paste its `## Reasoning Trace` tables (hypotheses, lenses, criteria) verbatim — do not summarize them away. Session termination auto-emits the `buildLintReport` card summary.
 
 ---
 
@@ -273,12 +285,13 @@ Status line returned after each thought:
 | `--negativeQuery` | string | Search query targeting counter-evidence (required for `verified`); **requires `--verifyClaim`**; cleared on a `pending` re-verify |
 | `--negativeFinding` | string | Caveats/contradictions found or statement of none (required for `verified`); **requires `--verifyClaim`**; cleared on a `pending` re-verify. Record it as two lines — `--negativeFinding "<command>\n<output>"` — so the search is auditable; the lint report flags single-line values, but only checks for the newline, it cannot verify a command ran |
 | `--claimNotes` | string | **Requires `--verifyClaim`**; **required** for `single_source` / `unverified` / `not_found`; optional for `verified`; cleared on a `pending` re-verify |
+| `--claimDate` | string, repeatable | **Requires `--verifyClaim`**; one per `--claimSource` in the same order: the i-th date is the i-th source's publish date as `YYYY-MM-DD` (digits-only ISO; a value after `today` exits 1; count must match `--claimSource`, else exit 1). Recorded as `claimDates[]`. The lint report warns when a `verified` claim's newest source is older than 180 days, and notes when dates were never recorded |
 | `--status` | flag | Full JSON state. Must run alone — combining with any other operation exits 1 |
 | `--export` | flag | Prints a **lint report / fact sheet** (`buildLintReport`) derived from persisted state (CRIT/WARN/INFO sections, residuals, trace shape, evidence). Must run alone. Also auto-emitted after status line on termination |
 | `--reset` | flag | Clears state for a new session; **must run alone** — combined with any other flag it exits 1 |
 | `--help` | flag | Prints CLI usage summary and exits 0 |
 
-**Verification-only flags require `--verifyClaim`.** `--claimStatus`, `--claimSource`, `--claimTier`, `--claimQuote`, `--negativeQuery`, `--negativeFinding`, and `--claimNotes` only have meaning inside the claim-verification branch; supplying any of them without `--verifyClaim` exits 1 rather than being parsed and ignored.
+**Verification-only flags require `--verifyClaim`.** `--claimStatus`, `--claimSource`, `--claimTier`, `--claimDate`, `--claimQuote`, `--negativeQuery`, `--negativeFinding`, and `--claimNotes` only have meaning inside the claim-verification branch; supplying any of them without `--verifyClaim` exits 1 rather than being parsed and ignored.
 
 ---
 
@@ -289,6 +302,8 @@ Status line returned after each thought:
 3. **No fixed framework quota.** Path A stops at agreement; Path B stops at the first round without new insight.
 4. **No fabricated capabilities.** Use only tools demonstrably present in the session. A missing tool is reported, not simulated.
 5. **No unbacked claims in documentation.** This skill's docs describe what `think.ts` and the tests actually do. They are not benchmarked or eval-scored.
+6. **Dates come from the script.** The only "today" is the `today` field emitted by `--status` / `--reset` (UTC). Never date a claim from a page's last-modified stamp, a search snippet, or memory; source publication dates are passed explicitly as `--claimDate`. A missing date is reported as missing, not guessed.
+
 
 ---
 

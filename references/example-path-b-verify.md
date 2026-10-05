@@ -104,7 +104,7 @@ bun scripts/think.ts \
 ## Thought 4: Anti-Hallucination Semantic Gates
 ```bash
 bun scripts/think.ts \
-  --thought 'Executing references/hallucination-gates.md P0 audit: (1) Entity & Metric: $3/$15 confirmed via Tier 1 docs; (2) Dual-source: Both claims backed by distinct authoritative endpoints; (3) Temporal: Verified as of late 2024 / current releases; (4) Negative search: Executed and surfaced regional routing constraints; (5) Tool compliance: Real results reported without embellishment. All 5 gates passed.' \
+  --thought 'Executing references/hallucination-gates.md P0 audit: (1) Entity & Metric: $3/$15 confirmed via Tier 1 docs; (2) Dual-source: Both claims backed by distinct authoritative endpoints; (3) Temporal: Reference date is the today field emitted by --status; every source age measured against it, source publish dates recorded via --claimDate as <YYYY-MM-DD>; (4) Negative search: Executed and surfaced regional routing constraints; (5) Tool compliance: Real results reported without embellishment. All 5 gates passed.' \
   --thoughtNumber 4 --totalThoughts 6 --nextThoughtNeeded true
 ```
 
@@ -157,28 +157,59 @@ bun scripts/think.ts \
 # stdout: a `💭 Thought 6/6` block then the Reasoning Lint & Fact Sheet.
 ```
 
+> **Dates in this example are `<YYYY-MM-DD>` placeholders — copy the pattern, never the value.**
+> The real card uses `today` from `--status` and each source's `--claimDate`.
+
 ---
 
 ### 📋 Standardized Conclusion Card (Delivered to User)
 
-- **Primary Recommendation**:
-  - `[Confirmed]` 若貴團隊已有 AWS 基礎設施且重視合規/企業帳單，**建議優先採用 AWS Bedrock**；若講求最快獲得新功能更新且架構為多雲/輕量部署，直接呼叫 Anthropic API 更加靈活。
+> 本範例統一使用**繁體中文**（單一語言，不簡繁混用）；標籤 `[Confirmed]` 等保持原樣不翻譯。
 
-- **Calibrated Findings**:
-  - `[Confirmed]` **計費標準**：Base Token 價格完全一致（Input $3/M, Output $15/M）。（來源：Anthropic Pricing, AWS Bedrock Pricing）
-  - `[Confirmed]` **Prompt Caching**：AWS Bedrock 已支援 Claude 3.5 Sonnet Prompt Caching，但限制於特定區域（如 us-east-1 / us-west-2）。（來源：AWS Bedrock User Guide, AWS What's New）
-  - `[Probable]` **台灣連線延遲**：若使用 Bedrock US 節點進行 Prompt Caching，連線延遲與直接連至 Anthropic US 伺服器相仿（約 150–180ms RTT）；若 Anthropic 直連支援近端（如日本/新加坡），則直連延遲顯著較低（約 35–60ms）。
-  - `[Plausible]` **營運開銷**：Bedrock 透過 AWS IAM 與 VPC Endpoint 提供更高等級的網路隔離，能省去金鑰外洩與額外合規審查的治理成本。
+**as of `<YYYY-MM-DD>`**（抄自 `--status` 的 `today` 欄位）
+
+- **Primary Recommendation / Finding**:
+  - `[Probable]` 若貴團隊已有 AWS 基礎設施且重視合規/企業帳單，**建議優先採用 AWS Bedrock**；若講求最快獲得新功能更新且架構為多雲/輕量部署，直接呼叫 Anthropic API 更加靈活。
+
+**Calibrated Findings**
+
+| Tag | Finding | Sources | Source date |
+|---|---|---|---|
+| `[Confirmed]` | **計費標準**：Base Token 價格完全一致（Input $3/M, Output $15/M） | Anthropic Pricing, AWS Bedrock Pricing | `<YYYY-MM-DD>` |
+| `[Confirmed]` | **Prompt Caching**：AWS Bedrock 已支援 Claude 3.5 Sonnet Prompt Caching，限於 us-east-1 / us-west-2 | AWS Bedrock User Guide, AWS What's New | `<YYYY-MM-DD>` |
+| `[Probable]` | **台灣連線延遲**：Bedrock US 節點約 150–180ms RTT；若 Anthropic 直連近端（日本/新加坡）約 35–60ms | — | — |
+| `[Plausible]` | **營運開銷**：Bedrock 透過 IAM 與 VPC Endpoint 提供更高等級網路隔離 | — | — |
 
 - **Confidence Assessment**:
   - **Level**: `High`
   - **Rationale**: 核心價格與功能支援度均取得 AWS 與 Anthropic 雙重 Tier 1 官方文檔驗證，且透過反向搜索釐清了區域限制與邊界條件。
 
+**Reasoning Trace**（執行 `bun scripts/think.ts --export` 後逐字貼入，不得摘要或省略）
+
+```markdown
+## Reasoning Trace
+### Hypotheses
+| id | statement | falsification | result | status | reason |
+| --- | --- | --- | --- | --- | --- |
+| hyp-1 | Direct Anthropic API is optimal for agile startup speed... | Anthropic direct API lags Bedrock by more than one release cycle... | Falsification clause did not hold: no evidence of a >1 release-cycle lag... | selected | H1 selected for agility and feature velocity... |
+| hyp-2 | AWS Bedrock is superior for enterprise compliance... | Bedrock cannot satisfy the required data-residency or IAM isolation controls... | Falsification clause held: Bedrock compliance controls were achievable... | rejected | H2 rejected for this team's lightweight cloud-agnostic profile... |
+### Lenses
+| lens | finding |
+| --- | --- |
+| Sensitivity Analysis | Token volume ±20% and caching hit rate swing the cost gap by under 5%... |
+| Pre-Mortem Red Team | Single-vendor lock-in is the main failure mode... |
+| Blast Radius & Degraded Mode | Failover between direct API and Bedrock is a config change... |
+### Criteria
+| id | criterion | met | reason |
+| --- | --- | --- | --- |
+| crit-1 | Recommendation states an explicit provider choice with the pricing and caching evidence behind it | true |  |
+```
+
 - **Key Evidence Sources**:
-  - `claim-1`: `https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html` (Tier 1)
-  - `claim-1`: `https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching` (Tier 1)
-  - `claim-2`: `https://www.anthropic.com/pricing` (Tier 1)
-  - `claim-2`: `https://aws.amazon.com/bedrock/pricing/` (Tier 1)
+  - `claim-1`: <https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html> (Tier 1, `<YYYY-MM-DD>`)
+  - `claim-1`: <https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching> (Tier 1, `<YYYY-MM-DD>`)
+  - `claim-2`: <https://www.anthropic.com/pricing> (Tier 1, `<YYYY-MM-DD>`)
+  - `claim-2`: <https://aws.amazon.com/bedrock/pricing/> (Tier 1, `<YYYY-MM-DD>`)
 
 - **Residual Uncertainty & Blind Spots**:
   - AWS Bedrock 亞太區域（如東京 ap-northeast-1）未來開放 Prompt Caching 的確切時程未公開。
