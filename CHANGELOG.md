@@ -3,6 +3,24 @@
 All notable changes to this skill are documented here.
 
 
+## [3.0.8] - 2026-10-05
+
+### Added
+
+- **Session clock.** Every thought now stamps the session: `State.startedAt` on the first thought and `State.endedAt` when the session terminates, alongside a `today()` helper emitting the UTC date (`YYYY-MM-DD`). `--status` and `--reset` expose `today` in their JSON, and `buildLintReport` prints a `Session Clock: started <d> · ended <d> · today <d>` line as the second section of the fact sheet. The clock is the single reference date for every freshness judgement — it is never inferred from a source page or memory.
+- **`--claimDate` per-source publication dates.** `--verifyClaim` accepts `--claimDate <YYYY-MM-DD>`, repeatable and aligned one-to-one with `--claimSource` (mirroring `--claimTier`). Every date is validated (`YYYY-MM-DD` regex plus `Date.parse`); a date later than the session's `today` exits 1, and a count that does not match `--claimSource` exits 1. Recorded as `Claim.claimDates[]` and projected only for non-`pending` statuses. The lint report warns `'<id>' newest source is N days old (>180d)` when a verified claim's newest date is more than 180 days before `today`, and notes when dates were never recorded.
+- **`## Reasoning Trace` tables in `--export`.** `buildLintReport` now emits a `## Reasoning Trace` section with three machine-derived sub-tables — `### Hypotheses` (statement, falsification clause, result, status, decision reason), `### Lenses` (lens, finding), and `### Criteria` (criterion, met, reason) — each rendered only when its collection is non-empty. A new `escapeCell` helper neutralizes headings, escapes `|`, and collapses newlines so user text cannot split a row or forge a section. The trace is the evidence that reasoning happened; the conclusion card must paste it verbatim.
+
+### Changed
+
+- **The conclusion card is now conclusion-first.** `references/conclusion-card.md` reorders every Path B delivery: primary recommendation, then a Calibrated Findings table with a `Source date` column fed by `claimDates`, then the mandatory `Reasoning Trace`, then residuals and next steps. New layout rules enforce one row per entity in comparisons, no raw long URLs mid-sentence, and a single language per card. The old `- Thoughts: N` counter block in the fact sheet was renamed `## Session Trace` so the spec-mandated `## Reasoning Trace` heading unambiguously names the paste target (the `## Primary Finding` splice anchors were re-pointed to `## Session Trace`).
+
+### Documentation
+
+- **SKILL.md gains `## Step -2: Calibrate clock`** (run `--status`; its `today` is the only date source), a `--claimDate` flag-reference row, a new Ground Rule ("dates come from the script"), and a Path B step 6 that requires the card to contain the reasoning trace.
+- **`references/hallucination-gates.md` Gate 3** now names the script's `today` as the reference date, requires source publish dates as `--claimDate`, states that a "latest" query carries the current month, and reports an empty window as "no result in window" rather than substituting an older result.
+- **`references/example-path-b-verify.md`** replaces the literal `late 2024` with `<YYYY-MM-DD>` placeholders and refreshes the worked card to the conclusion-first format with the mandatory trace and source dates.
+
 ## [3.0.7] - 2026-10-05
 
 ### Fixed
