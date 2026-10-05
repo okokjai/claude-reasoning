@@ -852,6 +852,7 @@ function otherOps(v: ParsedArgs): string[] {
     v.claimStatus != null && "--claimStatus",
     v.claimSource != null && "--claimSource",
     v.claimTier != null && "--claimTier",
+    v.claimDate != null && "--claimDate",
     v.claimNotes != null && "--claimNotes",
     v.supports != null && "--supports",
     v.claimQuote != null && "--claimQuote",

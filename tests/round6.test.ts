@@ -88,6 +88,15 @@ describe("--claimDate", () => {
     const s = JSON.parse(readFileSync(STATE,"utf-8"));
     expect(s.claims["claim-1"].claimDates).toEqual(["2025-06-01"]);
   });
+
+  it("--reset combined with --claimDate is rejected (not a silent state wipe)", () => {
+    // --claimDate must be registered in the reset-combination scan alongside
+    // --claimTier/--claimQuote, or `--reset --claimDate X` wipes state with exit 0.
+    seed();
+    const r = run(["--reset","--claimDate","2025-06-01"]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("--claimDate");
+  });
 });
 
 describe("Reasoning trace", () => {

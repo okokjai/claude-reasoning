@@ -140,7 +140,7 @@ These are checked in code, not just documented:
 | `--falsificationResult` passed with `--hypothesisStatus merged` | Exit code 1 — a merge is documented by `--mergedInto` alone; the survivor keeps the falsification outcome |
 | `--resolveHypothesis` re-resolving a node to a non-`merged` status | Clears stale `mergedInto`/`notes`/`falsificationResult` — a node only carries the fields its current resolution wrote |
 | `--resolveHypothesis` to `merged` on a node that already resolved | Clears stale `falsificationResult` — the absorbed node has no falsification outcome of its own |
-| `--verifyClaim` re-verifying a claim back to `pending` | Clears resolution-scoped `tiers`/`notes`/`quote`/`negativeQuery`/`negativeFinding` — a pending claim carries no verification outcome (recorded `sources` and `claimDates` are kept) |
+| `--verifyClaim` re-verifying a claim back to `pending` | Clears resolution-scoped `tiers`/`claimDates`/`notes`/`quote`/`negativeQuery`/`negativeFinding` — a pending claim carries no verification outcome (recorded `sources` are kept, since re-verification reuses them) |
 | `--nextThoughtNeeded false` in `path-b` when merges leave fewer than 2 distinct hypotheses | Exit code 1 — Path B requires ≥ 2 distinct hypotheses after merges |
 | `--nextThoughtNeeded false` with any `pending` claim | Exit code 1, lists the pending claim ids |
 | `--registerHypothesis` without a non-empty `--falsification` | Exit code 1 — a hypothesis without a falsification clause cannot be tested |
