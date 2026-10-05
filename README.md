@@ -7,15 +7,15 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
 - **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected; depth beyond 5 is rejected. Claims and hypotheses are forbidden in Path A.
 - **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes` and `--falsificationResult`) → 2–4 critical lenses chosen for the task, recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, merges leave fewer than 2 distinct surviving hypotheses, **every resolved hypothesis is `rejected`** (at least one must be `selected` or `synthesized`), or any of gates 6–11 fails (unchecked acceptance criteria, an unmet criterion without revision or `--newInsightNotes`, fewer than 2 distinct lens names, no convergence declaration with history lacking a revision/branch, a resolved non-merged hypothesis without `falsificationResult`, or a branch opened with no main-line thought after it).
-- **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search (with a required `--supports <hyp-id>` link), ≥2 independent sources for `verified` classified by `--claimTier` against `references/source-tiers.md` (at least two from Tier 1/2), plus a recorded `--claimQuote`, `--negativeQuery`, and `--negativeFinding`, explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
+- **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search (with a required `--supports <hyp-id>` link), ≥2 independent sources for `verified` classified by `--claimTier` against `references/source-tiers.md` (at least two from Tier 1/2), plus a recorded `--claimQuote`, `--negativeQuery`, and `--negativeFinding`, per-source publication dates via `--claimDate` (aligned to `--claimSource`; the lint warns when a verified claim's newest date is >180 days old), explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
 - **Tier shape validation on every status.** A `--claimTier` supplied with any `--claimStatus` must be an integer 1–4 and one per `--claimSource`; a non-conforming vector exits 1 rather than persisting `NaN`/out-of-range tiers on a `single_source`, `unverified`, or `not_found` claim.
-- **Lint-report card.** `--export` (and session termination) prints a `buildLintReport` fact sheet: CRIT residuals that an active gate should have blocked, WARN entries (missing rationale, disabled gates, thin lens coverage), INFO escape surfaces, acceptance-criterion status, lens findings, and the block-quoted final thought — headed by the standing warning that this is the script's view of state, not the final answer.
+- **Session clock & reasoning trace.** Every session is stamped (`startedAt`/`endedAt`) with a `today()` UTC date exposed via `--status`. `--export` (and termination) prints a `buildLintReport` fact sheet led by a `Session Clock` line and, when a hypothesis/lens/criterion exists, a `## Reasoning Trace` section of machine-derived tables (hypotheses with their falsification outcomes, lens findings, criteria). The fact sheet also carries CRIT residuals an active gate should have blocked, WARN entries (missing rationale, disabled gates, thin lens coverage, stale source dates), INFO escape surfaces, acceptance-criterion status, lens findings, and the block-quoted final thought — headed by the standing warning that this is the script's view of state, not the final answer.
 - **Zero MCP.** A single TypeScript state machine (`scripts/think.ts`) persisting to `scripts/.think_state.json`.
 - **Integrated High-Value References (ported & cleaned from 1.2.0):**
   - `references/source-tiers.md`: 4-tier credibility hierarchy (Tier 1 Primary to Tier 4 AI Summaries) with 2-source corroboration rule.
   - `references/critical-lenses.md`: 12 critical red-team evaluation perspectives (First Principles, Red-Team Attack, Edge Case, Pareto, etc.).
   - `references/hallucination-gates.md`: 5 P0 semantic anti-hallucination gates (Verifier Separation, Entity Check, Honest Tool Absence).
-  - `references/conclusion-card.md`: Standardized conclusion card with 5 calibrated confidence levels (`Confirmed`, `Probable`, `Plausible`, `Unverified`, `Contested`).
+  - `references/conclusion-card.md`: conclusion-first card with 5 calibrated confidence labels (`Confirmed`, `Probable`, `Plausible`, `Unverified`, `Contested`), a findings table with per-source dates, and a mandatory verbatim-pasted Reasoning Trace.
 
 ## Install
 
@@ -140,7 +140,7 @@ These are checked in code, not just documented:
 | `--falsificationResult` passed with `--hypothesisStatus merged` | Exit code 1 — a merge is documented by `--mergedInto` alone; the survivor keeps the falsification outcome |
 | `--resolveHypothesis` re-resolving a node to a non-`merged` status | Clears stale `mergedInto`/`notes`/`falsificationResult` — a node only carries the fields its current resolution wrote |
 | `--resolveHypothesis` to `merged` on a node that already resolved | Clears stale `falsificationResult` — the absorbed node has no falsification outcome of its own |
-| `--verifyClaim` re-verifying a claim back to `pending` | Clears resolution-scoped `tiers`/`notes`/`quote`/`negativeQuery`/`negativeFinding` — a pending claim carries no verification outcome (recorded `sources` are kept) |
+| `--verifyClaim` re-verifying a claim back to `pending` | Clears resolution-scoped `tiers`/`notes`/`quote`/`negativeQuery`/`negativeFinding` — a pending claim carries no verification outcome (recorded `sources` and `claimDates` are kept) |
 | `--nextThoughtNeeded false` in `path-b` when merges leave fewer than 2 distinct hypotheses | Exit code 1 — Path B requires ≥ 2 distinct hypotheses after merges |
 | `--nextThoughtNeeded false` with any `pending` claim | Exit code 1, lists the pending claim ids |
 | `--registerHypothesis` without a non-empty `--falsification` | Exit code 1 — a hypothesis without a falsification clause cannot be tested |
@@ -148,6 +148,7 @@ These are checked in code, not just documented:
 | `--registerClaim` without `--supports <hyp-id>`, or with a nonexistent target | Exit code 1 |
 | `--claimStatus verified` without `--claimQuote`, `--negativeQuery`, or `--negativeFinding` | Exit code 1 — verified claims record verbatim evidence and the counter-evidence search |
 | `--claimStatus verified` without `--claimTier`, with a tier outside 1-4, or with a tier count ≠ source count | Exit code 1 |
+| `--claimDate` not `YYYY-MM-DD`, later than the session's `today`, or a count ≠ `--claimSource` count | Exit code 1 — dates must be real, non-future, and positionally aligned with the sources |
 | `--checkCriterion` with an unknown id, or without `--met true`/`--met false` | Exit code 1 |
 | `--recordLens` without `--lens` or without `--finding` | Exit code 1 |
 | `--newInsight` set to anything other than `false` | Exit code 1 — `true` would duplicate `--nextThoughtNeeded` and silently skip the convergence gate |
@@ -175,6 +176,8 @@ These are checked in code, not just documented:
 
 ## State file
 
+The session clock is stamped by the script: `startedAt` on the first thought, `endedAt` at termination, and a `today()` helper emitting the UTC date (`YYYY-MM-DD`) exposed as `today` in `--status` / `--reset`. Source publication dates are recorded per claim as `claimDates[]` (aligned to `sources[]`); the lint report warns when a verified claim's newest date is more than 180 days before `today`.
+
 `scripts/.think_state.json` is schema **`v3`**. `ThoughtData` carries `historyIndex` — the 1-based position in the *timeline*, distinct from the caller-supplied `thoughtNumber` (a revision re-enters history without renumbering it). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. Any file whose `schemaVersion` differs from the current `SCHEMA_VERSION` (v1 or v2) is migrated automatically on load and written back in the current form. Tools reading the file directly should key on `historyIndex`, not `thoughtNumber`.
 
 ## Tests
@@ -182,7 +185,7 @@ These are checked in code, not just documented:
 ```bash
 bun run typecheck && bun test
 ```
-Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), and the `--thought` standalone-mode guard.
+Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), the `--thought` standalone-mode guard, and the v3.0.8 surfaces (session clock, `--claimDate` alignment/freshness, reasoning-trace tables, `escapeCell` escaping). `bun test` runs 266 tests across 10 files.
 
 ## Design notes
 
