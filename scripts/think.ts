@@ -345,12 +345,13 @@ function escapeHeadings(text: string): string {
 /**
  * Table-cell escaping for the Reasoning Trace tables: heading-neutralize first
  * (a cell can still contain `#`), then protect the column separator so a `|`
- * inside user text cannot shift every later column. One expression, but it is
- * called from every user-text cell of all three trace tables (8 call sites)
- * that must stay in lockstep.
+ * inside user text cannot shift every later column, then collapse newlines so a
+ * multi-line statement stays on its row instead of spilling raw lines. One
+ * expression, but it is called from every user-text cell of all three trace
+ * tables (8 call sites) that must stay in lockstep.
  */
 function escapeCell(text: string): string {
-  return escapeHeadings(text).replace(/\|/g, "\\|");
+  return escapeHeadings(text).replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 /**
@@ -645,7 +646,7 @@ function buildLintReport(state: State): string {
 
   sections.push(
     "",
-    "## Reasoning Trace",
+    "## Session Trace",
     trace,
     "",
     "## Final Thought",
@@ -662,9 +663,9 @@ function buildLintReport(state: State): string {
     nextSteps.length > 0 ? nextSteps.join("\n") : "- None from script gates. The final answer must still be written by the model per references/conclusion-card.md.",
   );
   if (selected.length === 0 && hypotheses.length > 0) {
-    sections.splice(sections.indexOf("## Reasoning Trace"), 0, "", "## Primary Finding", "No hypothesis was selected or synthesized; see final thought below.");
+    sections.splice(sections.indexOf("## Session Trace"), 0, "", "## Primary Finding", "No hypothesis was selected or synthesized; see final thought below.");
   } else if (selected.length === 0 && hypotheses.length === 0 && !isPathA) {
-    sections.splice(sections.indexOf("## Reasoning Trace"), 0, "", "## Primary Finding", "No hypothesis registered; see final thought below.");
+    sections.splice(sections.indexOf("## Session Trace"), 0, "", "## Primary Finding", "No hypothesis registered; see final thought below.");
   }
   return sections.join("\n");
 }

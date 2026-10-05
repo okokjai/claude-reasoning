@@ -116,6 +116,28 @@ describe("Reasoning trace", () => {
     expect(r.out).toContain("a \\| b");
   });
 
+  it("keeps a multi-line statement on a single table row", () => {
+    run(["--mode","path-b","--registerHypothesis","line one\nline two","--falsification","f"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\| hyp-1 \| line one line two \| f \|/);
+    // The raw multi-line form must not survive anywhere in the table region.
+    expect(r.out.slice(r.out.indexOf("## Reasoning Trace"))).not.toContain("line one\nline two");
+  });
+
+  it("anchors ## Primary Finding on the counter block, not the trace tables", () => {
+    // The spec mandates `## Reasoning Trace` for the tables, so a second,
+    // pre-existing counter heading was renamed `## Session Trace`. The splice
+    // must land immediately before that counter / `## Final Thought` block.
+    run(["--mode","path-b","--registerHypothesis","h1","--falsification","f"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/## Primary Finding\nNo hypothesis was selected or synthesized; see final thought below\.\n## Session Trace\n- Thoughts: 0 \(revisions: 0, branches: none\)\n\n## Final Thought/);
+    // The tables block (`## Reasoning Trace`) renders earlier in the report, so
+    // the splice is anchored on the counter block, not spliced into the tables.
+    expect(r.out).toMatch(/## Reasoning Trace\n### Hypotheses[\s\S]*## Primary Finding\n/);
+  });
+
   it("warns when a verified claim's newest source is older than 180 days", () => {
     // Deferred Task-2 Minor: the freshness WARN exists in buildLintReport but
     // nothing exercised it through --export.
@@ -128,6 +150,6 @@ describe("Reasoning trace", () => {
       "--claimDate","2025-01-01","--claimDate","2025-01-01"]);
     const r = run(["--export"]);
     expect(r.code).toBe(0);
-    expect(r.out).toMatch(/newest source.*>180d|180/);
+    expect(r.out).toContain(">180d");
   });
 });
