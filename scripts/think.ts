@@ -343,6 +343,17 @@ function escapeHeadings(text: string): string {
 }
 
 /**
+ * Table-cell escaping for the Reasoning Trace tables: heading-neutralize first
+ * (a cell can still contain `#`), then protect the column separator so a `|`
+ * inside user text cannot shift every later column. One expression, but it is
+ * called from every user-text cell of all three trace tables (8 call sites)
+ * that must stay in lockstep.
+ */
+function escapeCell(text: string): string {
+  return escapeHeadings(text).replace(/\|/g, "\\|");
+}
+
+/**
  * Coverage marker: a surviving hypothesis whose load-bearing proposition was
  * reached by reasoning rather than retrieval must carry this token in its
  * notes, so the absence of external coverage is an explicit, machine-visible
@@ -564,6 +575,24 @@ function buildLintReport(state: State): string {
     "",
     "## Lens Findings → Residual Uncertainty",
     state.lenses.length > 0 ? state.lenses.map(l => `- ${escapeHeadings(l.lens)}: "${escapeHeadings(l.finding)}" (at thought ${l.atThought})`).join("\n") : "- None recorded.",
+    "",
+    "## Reasoning Trace",
+    ...[
+      ...(hypotheses.length > 0
+        ? ["### Hypotheses", "| id | statement | falsification | result | status | reason |", "| --- | --- | --- | --- | --- | --- |",
+            ...hypotheses.map(h =>
+              `| ${h.id} | ${escapeCell(h.statement)} | ${escapeCell(h.falsification ?? "")} | ${escapeCell(h.falsificationResult ?? "")} | ${h.status}${h.mergedInto ? ` → ${h.mergedInto}` : ""} | ${escapeCell(h.notes ?? "")} |`)]
+        : []),
+      ...(state.lenses.length > 0
+        ? ["### Lenses", "| lens | finding |", "| --- | --- |",
+            ...state.lenses.map(l => `| ${escapeCell(l.lens)} | ${escapeCell(l.finding)} |`)]
+        : []),
+      ...(state.acceptanceCriteria.length > 0
+        ? ["### Criteria", "| id | criterion | met | reason |", "| --- | --- | --- | --- |",
+            ...state.acceptanceCriteria.map(cr =>
+              `| ${cr.id} | ${escapeCell(cr.criterion)} | ${cr.met ?? "?"} | ${escapeCell(cr.notes ?? "")} |`)]
+        : []),
+    ],
   ];
 
   // For backward compatibility with tests asserting on "Merged: hyp-X → hyp-Y"

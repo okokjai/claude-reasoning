@@ -89,3 +89,45 @@ describe("--claimDate", () => {
     expect(s.claims["claim-1"].claimDates).toEqual(["2025-06-01"]);
   });
 });
+
+describe("Reasoning trace", () => {
+  beforeEach(() => { if (existsSync(STATE)) unlinkSync(STATE); });
+
+  it("--export emits hypotheses/lenses/criteria tables", () => {
+    run(["--mode","path-b","--registerHypothesis","h1","--falsification","f1"]);
+    run(["--registerHypothesis","h2","--falsification","f2"]);
+    run(["--resolveHypothesis","hyp-1","--hypothesisStatus","selected","--hypothesisNotes","why1","--falsificationResult","held"]);
+    run(["--resolveHypothesis","hyp-2","--hypothesisStatus","rejected","--hypothesisNotes","why2","--falsificationResult","broke"]);
+    run(["--recordLens","--lens","adversarial","--finding","residual-u"]);
+    run(["--addCriterion","crit-x"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/## Reasoning Trace/);
+    expect(r.out).toMatch(/### Hypotheses\n\| id \| statement \|/);
+    expect(r.out).toMatch(/\| hyp-1 \| h1 \|/);
+    expect(r.out).toMatch(/\| adversarial \| residual-u \|/);
+    expect(r.out).toMatch(/\| crit-1 \| crit-x \|/);
+  });
+
+  it("escapes a pipe inside user text so the table does not break", () => {
+    run(["--mode","path-b","--registerHypothesis","a | b","--falsification","f"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("a \\| b");
+  });
+
+  it("warns when a verified claim's newest source is older than 180 days", () => {
+    // Deferred Task-2 Minor: the freshness WARN exists in buildLintReport but
+    // nothing exercised it through --export.
+    run(["--mode","path-b","--registerHypothesis","h1","--falsification","falsification long enough here"]);
+    run(["--registerClaim","c1","--supports","hyp-1"]);
+    run(["--verifyClaim","claim-1","--claimStatus","verified",
+      "--claimSource","https://a.example/x","--claimSource","https://b.example/y",
+      "--claimTier","1","--claimTier","1",
+      "--claimQuote","a verbatim quote from the source","--negativeQuery","nq","--negativeFinding","none found",
+      "--claimDate","2025-01-01","--claimDate","2025-01-01"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/newest source.*>180d|180/);
+  });
+});
