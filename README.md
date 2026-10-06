@@ -1,5 +1,13 @@
 # claude-reasoning 3.0.9
 
+[![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat-square&logo=github)](https://github.com/okokjai/claude-reasoning/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Latest Release](https://img.shields.io/github/v/release/okokjai/claude-reasoning?style=flat-square)](https://github.com/okokjai/claude-reasoning/releases/latest)
+[![CI Status](https://img.shields.io/github/actions/workflow/status/okokjai/claude-reasoning/ci.yml?branch=master&style=flat-square&logo=githubactions&logoColor=white)](https://github.com/okokjai/claude-reasoning/actions)
+[![Last Commit](https://img.shields.io/github/last-commit/okokjai/claude-reasoning?style=flat-square)](https://github.com/okokjai/claude-reasoning/commits/master)
+[![skills.sh](https://img.shields.io/badge/skills.sh-claude--reasoning-brightgreen?style=flat-square)](https://skills.sh)
+
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
 ## What it does
