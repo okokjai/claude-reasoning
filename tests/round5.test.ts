@@ -249,22 +249,24 @@ describe("Bug 11a: loopback and reserved hosts are one origin", () => {
 });
 
 describe("Bug 11b: an unclosed branch blocks termination", () => {
-  it("terminating right after opening a branch fails with branchClosure", () => {
+  it("terminating on a branch fails with branchClosure", () => {
+    buildBody();
+    const branch = T(4, 6, "true", "alternate path", ["--branchFromThought", "1", "--branchId", "alt"]);
+    expect(branch.code).toBe(0);
+    // Terminating thought on the branch itself cannot close the branch
+    const branchEnd = T(5, 6, "false", "terminate on branch", [
+      "--branchFromThought", "4", "--branchId", "alt",
+      "--newInsight", "false", "--newInsightNotes", "settled",
+    ]);
+    expect(branchEnd.code).toBe(1);
+    expect(branchEnd.stderr).toMatch(/branch/);
+  });
+
+  it("a main-line terminating thought after the branch closes it and termination succeeds", () => {
     buildBody();
     const branch = T(4, 6, "true", "alternate path", ["--branchFromThought", "1", "--branchId", "alt"]);
     expect(branch.code).toBe(0);
     const end = T(5, 6, "false", "conclusion", ["--newInsight", "false", "--newInsightNotes", "settled"]);
-    expect(end.code).toBe(1);
-    expect(end.stderr).toMatch(/branch/);
-  });
-
-  it("a main-line thought after the branch closes it and termination succeeds", () => {
-    buildBody();
-    const branch = T(4, 6, "true", "alternate path", ["--branchFromThought", "1", "--branchId", "alt"]);
-    expect(branch.code).toBe(0);
-    const resume = T(5, 6, "true", "back to the main line");
-    expect(resume.code).toBe(0);
-    const end = T(6, 6, "false", "conclusion", ["--newInsight", "false", "--newInsightNotes", "settled"]);
     expect(end.code).toBe(0);
   });
 });

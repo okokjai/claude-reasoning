@@ -264,7 +264,7 @@ Status line returned after each thought:
 | `--registerHypothesis` | string | Registers a competing hypothesis; assigns `hyp-N`, status `pending`; **requires `--falsification`** |
 | `--falsification` | string | Concrete condition that would falsify the hypothesis; **requires `--registerHypothesis`** |
 | `--resolveHypothesis` | string | Target hypothesis id |
-| `--hypothesisStatus` | enum | `selected` \| `rejected` \| `synthesized` \| `merged`; **requires `--resolveHypothesis`** |
+| `--hypothesisStatus` | enum | `pending` \| `selected` \| `rejected` \| `synthesized` \| `merged`; **requires `--resolveHypothesis`** |
 | `--hypothesisNotes` | string | Rationale recorded on the hypothesis; **requires `--resolveHypothesis`**; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`) and `merged` |
 | `--falsificationResult` | string | Outcome of falsification test (`held`/`broken`); **requires `--resolveHypothesis`**; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`); **rejected** on `merged` — a merge is documented by `--mergedInto` alone, and a stale value is cleared when a resolved node is re-resolved to `merged` |
 | `--mergedInto` | string | **Requires `--resolveHypothesis`**; **required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, already-rejected targets, or a resolving hypothesis that already absorbs another merge. A survivor still absorbing a member cannot itself be re-resolved to `rejected`/`pending` (re-point the member first) — `selected`/`synthesized` stay allowed |
@@ -277,7 +277,7 @@ Status line returned after each thought:
 | `--finding` | string | Key finding/residual uncertainty from applying the lens; **requires `--recordLens`** |
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending`; **requires `--supports <hyp-id>`** in Path B |
 | `--supports` | string | Target hypothesis id this claim provides evidence for; **requires `--registerClaim`** (required on registration in Path B) |
-| `--verifyClaim` | string | Target claim id |
+| `--polarity` | `supports`\|`refutes` | Optional on `--registerClaim`; specifies bearing on the linked hypothesis (default `supports`) |
 | `--claimStatus` | enum | `pending` \| `verified` \| `single_source` \| `unverified` \| `not_found`; **requires `--verifyClaim`** — `verified` claims are final; re-verification to any other status is rejected |
 | `--claimSource` | string, repeatable | **Requires `--verifyClaim`**; ≥ 2 from distinct root domains (eTLD+1) required **only** for `verified`; IP literals compare by full address; loopback/reserved hosts (`localhost`, `*.localhost`, `127.x.x.x`, `::1`, `*.invalid`, `*.test`) collapse to one origin and can never satisfy the 2-domain rule; a trailing root dot is normalised (`example.com.` = `example.com`); each value must be an http(s) URL or a bare `host/path` that names a domain (a `file:///`/`data:`/`foo/file`/single-label value is rejected); recorded `sources` are kept on a `pending` re-verify unless new ones are supplied |
 | `--claimTier` | int 1-4, repeatable | **Requires `--verifyClaim`**; **required** for `verified`, one per `--claimSource` in the same order: the i-th tier classifies the i-th source against `references/source-tiers.md`. `verified` needs ≥ 2 sources at Tier 1/2 (multiple Tier 3/4 sources cannot elevate a claim). Optional for `single_source` / `unverified` / `not_found`, but whenever supplied it must be a canonical integer `1`–`4` (digits only — `1e0`/`0x1`/`+1`/`01` rejected) and one per `--claimSource` — a malformed vector exits 1 rather than being persisted; on a `pending` re-verify the recorded tiers are cleared |
@@ -302,7 +302,7 @@ Status line returned after each thought:
 3. **No fixed framework quota.** Path A stops at agreement; Path B stops at the first round without new insight.
 4. **No fabricated capabilities.** Use only tools demonstrably present in the session. A missing tool is reported, not simulated.
 5. **No unbacked claims in documentation.** This skill's docs describe what `think.ts` and the tests actually do. They are not benchmarked or eval-scored.
-6. **Dates come from the script.** The only "today" is the `today` field emitted by `--status` / `--reset` (UTC). Never date a claim from a page's last-modified stamp, a search snippet, or memory; source publication dates are passed explicitly as `--claimDate`. A missing date is reported as missing, not guessed.
+6. **Dates come from the script.** The only "today" is the `today` field emitted by `--status` / `--reset` (local calendar date). Never date a claim from a page's last-modified stamp, a search snippet, or memory; source publication dates are passed explicitly as `--claimDate`. A missing date is reported as missing, not guessed.
 
 
 ---
@@ -314,7 +314,7 @@ Status line returned after each thought:
 
 ## State file
 
-`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
+`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`, `addCriterion`, `checkCriterion`, `recordLens`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
 
 **Schema `v3`.** `ThoughtData` carries `historyIndex` — the 1-based position of the thought in the *timeline*, which is distinct from the caller-supplied `thoughtNumber` (revisions re-enter the history without renumbering it, so the two diverge). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. Any state file whose `schemaVersion` differs from the current `SCHEMA_VERSION` (v1 or v2) is migrated automatically on load and written back in the current form; the version is stored in the file as `schemaVersion`.
 

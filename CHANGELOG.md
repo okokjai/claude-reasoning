@@ -3,6 +3,30 @@
 All notable changes to this skill are documented here.
 
 
+## [3.0.9] - 2026-10-07
+
+### Added
+
+- **`--polarity` support on `--registerClaim`.** `--registerClaim` accepts `--polarity supports|refutes` (default `supports`), allowing claims to explicitly refute a hypothesis rather than implicitly support it. Refuting claims project their polarity through `--verifyClaim` and render `link-status: Linked-refuted` in `--export` when all linked claims refute.
+- **`tests/bugs.test.ts`** — 22 regression tests covering all 15 diagnostic claims, polarity behavior, and concurrency fixes.
+
+### Fixed
+
+- **Gate 11 branch closure pre-push evaluation (B5).** Gate 11's `lastMainIndex` computation now evaluates over `historyWithCurrent` instead of only persisted `state.thoughtHistory`, allowing a concluding mainline thought to close an earlier opened branch without requiring an extra unneeded thought.
+- **`today()` local calendar date (B1).** Replaced UTC slice with local `getFullYear()`, `getMonth()`, and `getDate()` formatting so sessions correctly reflect the local date across timezone boundaries.
+- **SSRF / host validation on non-verified claim statuses (B2).** Guardrail 0 now runs `rootDomain` on every provided `--claimSource` eagerly before status branching, preventing invalid or malicious hostnames on `pending`, `single_source`, `unverified`, or `not_found` claims.
+- **Section heading injection in `--export` sources and branches (B2, B3).** User-supplied sources in claim listings and branch identifiers in Session Trace are now escaped via `escapeHeadings`, preventing markdown heading spoofing.
+- **Stale `claimDates` on source swap (B4).** Swapping sources in `--verifyClaim` without supplying new `--claimDate` values now drops the previous dates instead of misaligning them with the new sources.
+- **Terminating thought `--isRevision` support in Gates 7 and 9 (B6).** Gates 7 and 9 evaluate against `historyWithCurrent`, allowing a concluding thought to resolve an unmet criterion revision requirement.
+- **Acceptance criteria mid-session warning severity (B7).** Mid-session unmet criteria now emit `[INFO]` instead of `[CRIT]`, reserving `[CRIT]` for terminated sessions where gates should have blocked conclusion.
+- **Hypothesis `notes` and `falsificationResult` preservation on `pending` (B9).** Re-resolving or projecting a hypothesis as `pending` preserves its recorded notes and falsification results.
+- **Empty `## Reasoning Trace` omitted (B10).** The `## Reasoning Trace` heading in `--export` is now conditionally emitted only when hypotheses, lenses, or acceptance criteria actually exist in state.
+- **Rollover date bypass prevention (B11).** Added strict ISO date round-trip validation (`YYYY-MM-DD` matched against parsed UTC ISO date string) to reject invalid dates like `2026-02-31`.
+- **Migration write isolation in `loadState` (B12).** Schema migration save failure is now isolated with try-catch so a transient disk/write issue does not cause valid existing state to be backed up and wiped.
+- **Process signal handlers for lock release (B13).** Registered `SIGINT`, `SIGTERM`, and `SIGHUP` listeners to ensure the `.lock` directory is released if the process receives a termination signal.
+- **`--help` flag conflict guard (B14).** Combining `--help` with operational action flags now exits with code 1 instead of silently executing help and ignoring the action.
+- **TOCTOU race in stale lock reclamation.** Re-verifies lock directory `mtimeMs` before removal during stale lock stealing to prevent races with active processes.
+- **Documentation discrepancies (B15).** Corrected `SKILL.md` to include `pending` in `hypothesisStatus` with properly escaped markdown table pipes, listed all 7 operations in `auditTrail`, documented `--polarity` in README and SKILL, and aligned local date semantics across documents.
 ## [3.0.8] - 2026-10-05
 
 ### Added
