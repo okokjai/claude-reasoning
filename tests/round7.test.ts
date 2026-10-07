@@ -67,3 +67,45 @@ describe("Task 1: Lens catalog and --listLenses", () => {
     }
   });
 });
+
+describe("Task 2: --kind flag on Path B", () => {
+  beforeEach(() => {
+    if (existsSync(STATE)) unlinkSync(STATE);
+  });
+
+  it("Path A rejects --kind with exit 1", () => {
+    const r = run(["--mode", "path-a", "--kind", "decision", "--thought", "test", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Path A");
+  });
+
+  it("Path B accepts --kind on first thought, stores in state", () => {
+    const r = run(["--mode", "path-b", "--kind", "decision", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "5", "--nextThoughtNeeded", "true"]);
+    expect(r.code).toBe(0);
+    const s = run(["--status"]);
+    expect(s.code).toBe(0);
+    const j = JSON.parse(s.out);
+    expect(j.kind).toBe("decision");
+  });
+
+  it("--kind immutable after first thought", () => {
+    const r1 = run(["--mode", "path-b", "--kind", "decision", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "5", "--nextThoughtNeeded", "true"]);
+    expect(r1.code).toBe(0);
+    const r2 = run(["--kind", "diagnostic", "--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "5", "--nextThoughtNeeded", "true"]);
+    expect(r2.code).toBe(1);
+    expect(r2.err).toContain("immutable");
+  });
+
+  it("Path B rejects invalid --kind on thought", () => {
+    const r = run(["--mode", "path-b", "--kind", "invalid-kind", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "5", "--nextThoughtNeeded", "true"]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Invalid --kind");
+  });
+
+  it("--kind cannot be declared on thought 2 if omitted on thought 1", () => {
+    const r1 = run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "5", "--nextThoughtNeeded", "true"]);
+    expect(r1.code).toBe(0);
+    const r2 = run(["--kind", "decision", "--thought", "t2", "--thoughtNumber", "2", "--totalThoughts", "5", "--nextThoughtNeeded", "true"]);
+    expect(r2.code).toBe(1);
+  });
+});

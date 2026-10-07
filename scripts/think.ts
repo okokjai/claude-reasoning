@@ -237,6 +237,7 @@ export interface AuditEntry {
 export interface State {
   schemaVersion: number;       // 3; files without it are treated as v1 and migrated on load
   mode?: ThinkingMode;
+  kind?: ProblemKind;
   acceptanceCriteria: AcceptanceCriterion[];
   thoughtHistory: ThoughtData[];
   branches: Record<string, ThoughtData[]>;
@@ -274,6 +275,7 @@ function loadState(): State {
       const migrated: State = {
         schemaVersion: SCHEMA_VERSION,
         mode: data.mode,
+        kind: data.kind,
         acceptanceCriteria: (data.acceptanceCriteria || []).map((c: AcceptanceCriterion) =>
           c.checkedAtHistoryIndex == null && c.checkedAtThought != null
             ? { ...c, checkedAtHistoryIndex: c.checkedAtThought }
@@ -422,6 +424,7 @@ function makeStatusResponse(state: State) {
 
   const base = {
     mode: state.mode,
+    kind: state.kind,
     branches: branchIds,
     thoughtHistoryLength: historyLength,
     claims: claimIds,
@@ -1070,6 +1073,7 @@ function otherOps(v: ParsedArgs): string[] {
     v.newInsight != null && "--newInsight",
     v.newInsightNotes != null && "--newInsightNotes",
     v.mode != null && "--mode",
+    v.kind != null && "--kind",
     v.registerClaim != null && "--registerClaim",
     v.verifyClaim != null && "--verifyClaim",
     v.claimStatus != null && "--claimStatus",
@@ -1167,6 +1171,7 @@ const THOUGHT_FLAGS: Record<string, true> = {
   "--nextThoughtNeeded": true, "--isRevision": true, "--revisesThought": true,
   "--branchFromThought": true, "--branchId": true, "--needsMoreThoughts": true,
   "--newInsight": true, "--newInsightNotes": true, "--mode": true,
+  "--kind": true,
 };
 if (values.thought != null) {
   const conflicting = otherOps(values).filter(f => THOUGHT_FLAGS[f] !== true);
@@ -1202,6 +1207,7 @@ if (values.status) {
   }
   const response = {
     ...makeStatusResponse(state),
+    kind: state.kind,
     schemaVersion: state.schemaVersion,
     acceptanceCriteria: state.acceptanceCriteria,
     lenses: state.lenses,
@@ -1812,6 +1818,18 @@ if (state.thoughtHistory.length === 0 && values.mode == null) {
 const resolvedMode = resolveMode(state, values.mode);
 if (resolvedMode == null) {
   fail("--mode is required on the first thought of a session: 'path-a' (closed-form) or 'path-b' (open-ended). Step 0 classification is mandatory.");
+}
+
+if (values.kind != null) {
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) does not accept --kind; problem kinds only apply to Path B.");
+  }
+  if (state.thoughtHistory.length > 0) {
+    fail(`--kind is immutable after the first thought (session already at thought ${thoughtNumber}).`);
+  }
+  state.kind = parseKind(values.kind);
+} else if (state.thoughtHistory.length > 0 && state.kind == null) {
+  // If kind was omitted on thought 1, it cannot be added later (checked when values.kind != null above).
 }
 
 // Path A hard cap: depth expansion beyond 5 thoughts is prohibited
