@@ -9,3 +9,4 @@ scripts/.think_state.json.lock/
 scripts/.think_state.json.*.tmp
 tests/.think_state.*.json.lock/
 tests/.think_state.*.json.*.tmp
+.worktrees/
