@@ -109,3 +109,94 @@ describe("Task 2: --kind flag on Path B", () => {
     expect(r2.code).toBe(1);
   });
 });
+describe("Task 3: pendingActions pure function + integration", () => {
+  beforeEach(() => {
+    if (existsSync(STATE)) unlinkSync(STATE);
+  });
+
+  it("thought status line includes ready= and blockers=", () => {
+    const r = run([
+      "--mode", "path-b",
+      "--thought", "t1",
+      "--thoughtNumber", "1",
+      "--totalThoughts", "5",
+      "--nextThoughtNeeded", "true",
+    ]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/ready=(yes|no) blockers=\d+/);
+  });
+
+  it("side-command JSON includes next array", () => {
+    run([
+      "--mode", "path-b",
+      "--thought", "t1",
+      "--thoughtNumber", "1",
+      "--totalThoughts", "5",
+      "--nextThoughtNeeded", "true",
+    ]);
+    const r = run(["--registerHypothesis", "test", "--falsification", "f"]);
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(Array.isArray(j.next)).toBe(true);
+    expect(j.next.length).toBeGreaterThan(0);
+  });
+
+  it("--status includes pending array", () => {
+    const s = run(["--status"]);
+    expect(s.code).toBe(0);
+    const j = JSON.parse(s.out);
+    expect(Array.isArray(j.pending)).toBe(true);
+  });
+
+  it("pendingActions returns blockers for incomplete session", () => {
+    run([
+      "--mode", "path-b",
+      "--thought", "t1",
+      "--thoughtNumber", "1",
+      "--totalThoughts", "5",
+      "--nextThoughtNeeded", "true",
+    ]);
+    const s = run(["--status"]);
+    const j = JSON.parse(s.out);
+    expect(j.pending.length).toBeGreaterThan(0);
+
+    // Termination should fail
+    const term = run([
+      "--thought", "conclude early",
+      "--thoughtNumber", "2",
+      "--totalThoughts", "5",
+      "--nextThoughtNeeded", "false",
+    ]);
+    expect(term.code).toBe(1);
+  });
+
+  it("pendingActions empty ⇔ termination succeeds", () => {
+    // Build a complete Path B session (hyps resolved, criteria checked, lenses recorded, convergence declared)
+    run(["--mode", "path-b", "--thought", "t1 decompose", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1", "--falsification", "falsify H1 condition"]);
+    run(["--registerHypothesis", "H2", "--falsification", "falsify H2 condition"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "notes 1", "--falsificationResult", "held"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "notes 2", "--falsificationResult", "broken"]);
+    run(["--addCriterion", "crit 1"]);
+    run(["--checkCriterion", "crit-1", "--met", "true"]);
+    run(["--recordLens", "--lens", "first-principles", "--finding", "Irreducible constraint findings"]);
+    run(["--recordLens", "--lens", "premortem", "--finding", "Red team catastrophic collapse findings"]);
+    run(["--thought", "t2 explore", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true", "--isRevision", "--revisesThought", "1"]);
+
+    const s = run(["--status"]);
+    expect(s.code).toBe(0);
+    const j = JSON.parse(s.out);
+    expect(j.pending).toEqual([]);
+
+    // Now terminate with convergence declaration
+    const term = run([
+      "--thought", "t3 conclude",
+      "--thoughtNumber", "3",
+      "--totalThoughts", "4",
+      "--nextThoughtNeeded", "false",
+      "--newInsight", "false",
+      "--newInsightNotes", "converged and stable",
+    ]);
+    expect(term.code).toBe(0);
+  });
+});

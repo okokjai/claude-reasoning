@@ -223,6 +223,145 @@ export function parseKind(raw: unknown): ProblemKind {
   }
   return raw as ProblemKind;
 }
+/**
+ * Returns pending action descriptions for the current state.
+ * Lists unmet prerequisites previewing what gates 3-11 check at termination,
+ * but reported non-blockingly as guidance.
+ */
+export function pendingActions(state: State): string[] {
+  const pending: string[] = [];
+
+  // Path A: minimum 3 thoughts (including the current/next thought)
+  if (state.mode === "path-a") {
+    if (state.thoughtHistory.length < 2) {
+      pending.push(`Path A requires at least 3 thoughts (current history: ${state.thoughtHistory.length})`);
+    }
+    return pending;
+  }
+
+  // Pending claims (unverified/pending status)
+  const pendingClaimsList = Object.values(state.claims).filter(c => c.status === "pending");
+  if (pendingClaimsList.length > 0) {
+    pending.push(`Resolve ${pendingClaimsList.length} pending claim(s): ${pendingClaimsList.map(c => c.id).join(", ")} via --verifyClaim`);
+  }
+
+  // Path B checks
+  const hypList = Object.values(state.hypotheses || {});
+  if (hypList.length < 2) {
+    pending.push(`Register at least 2 hypotheses via --registerHypothesis (found ${hypList.length})`);
+  }
+  const pendingHyps = hypList.filter(h => h.status === "pending");
+  if (pendingHyps.length > 0) {
+    pending.push(`Resolve ${pendingHyps.length} pending hypothesis(es): ${pendingHyps.map(h => h.id).join(", ")} via --resolveHypothesis`);
+  }
+
+  const distinctHyps = hypList.filter(h => h.status !== "merged");
+  if (hypList.length >= 2 && distinctHyps.length < 2) {
+    pending.push(`Requires at least 2 distinct hypotheses after merges (currently ${distinctHyps.length})`);
+  }
+
+  const carried = hypList.filter(h => h.status === "selected" || h.status === "synthesized");
+  if (hypList.length >= 2 && pendingHyps.length === 0 && carried.length === 0) {
+    pending.push("Select or synthesize at least one hypothesis");
+  }
+
+  // Gate 4: at least 2 prior thoughts before termination
+  if (state.thoughtHistory.length < 2) {
+    pending.push(`Requires at least 2 prior thoughts before termination (current: ${state.thoughtHistory.length})`);
+  }
+
+  // Gate 5: previous thought flagged needsMoreThoughts
+  const prevThought = state.thoughtHistory[state.thoughtHistory.length - 1];
+  if (prevThought && prevThought.needsMoreThoughts) {
+    pending.push(`Previous thought ${prevThought.thoughtNumber} flagged --needsMoreThoughts; submit expansion thought`);
+  }
+
+  // Gate 6: Criteria count == 0 or unchecked criteria
+  const critList = state.acceptanceCriteria;
+  if (critList.length === 0) {
+    pending.push("Register at least 1 acceptance criterion via --addCriterion");
+  } else {
+    const unchecked = critList.filter(c => c.met === undefined);
+    if (unchecked.length > 0) {
+      pending.push(`Check ${unchecked.length} criterion(a): ${unchecked.map(c => c.id).join(", ")} via --checkCriterion`);
+    }
+  }
+
+  // Gate 7: Unmet criteria missing revision or newInsightNotes rationale
+  const unmetList = critList.filter(c => c.met === false);
+  if (unmetList.length > 0) {
+    for (const unmet of unmetList) {
+      const checkedAt = unmet.checkedAtHistoryIndex ?? unmet.checkedAtThought ?? -1;
+      const subsequentRevision = state.thoughtHistory.some(
+        t => t.isRevision && (t.historyIndex ?? 0) > checkedAt,
+      );
+      if (!subsequentRevision) {
+        pending.push(`Criterion ${unmet.id} unmet without a subsequent --isRevision thought or --newInsightNotes rationale`);
+        break;
+      }
+    }
+  }
+
+  // Gate 8: Distinct lenses < 2
+  const distinctLenses = new Set(state.lenses.map(l => l.lens.normalize("NFKC").toLowerCase()));
+  if (distinctLenses.size < 2) {
+    pending.push(`Record at least 2 distinct perspective lenses via --recordLens (found ${distinctLenses.size})`);
+  }
+
+  // If state.kind set: missing core lenses for that kind
+  if (state.kind) {
+    const core = KIND_CORE_LENSES[state.kind] || [];
+    const missingCore: string[] = [];
+    for (const coreId of core) {
+      const entry = LENS_CATALOG.find(l => l.id === coreId);
+      if (!entry) continue;
+      const names = [entry.id, entry.name.toLowerCase(), ...entry.aliases.map(a => a.toLowerCase())];
+      const matched = state.lenses.some(l => {
+        const norm = l.lens.normalize("NFKC").toLowerCase();
+        return names.includes(norm);
+      });
+      if (!matched) {
+        missingCore.push(entry.name);
+      }
+    }
+    if (missingCore.length > 0) {
+      pending.push(`Missing core lenses for ${state.kind}: ${missingCore.join(", ")}`);
+    }
+  }
+
+  // Gate 9: Convergence declaration or prior exploration
+  const hasBranchOrRevision = state.thoughtHistory.some(
+    t => t.isRevision || t.branchFromThought != null,
+  );
+  if (!hasBranchOrRevision) {
+    pending.push("Declare convergence (--newInsight false --newInsightNotes '...') or explore via --isRevision / --branchFromThought");
+  }
+
+  // Gate 10: Resolved hypothesis missing falsificationResult
+  for (const h of hypList) {
+    if (h.status !== "pending" && h.status !== "merged" && (!h.falsificationResult || h.falsificationResult.trim().length === 0)) {
+      pending.push(`Hypothesis ${h.id} resolved (${h.status}) but missing falsificationResult`);
+    }
+  }
+
+  // Gate 11: Unclosed branch
+  const branchIds = Object.keys(state.branches);
+  if (branchIds.length > 0) {
+    const lastMainIndex = state.thoughtHistory
+      .filter(t => t.branchFromThought == null)
+      .reduce((m, t) => Math.max(m, t.historyIndex ?? 0), 0);
+    const unclosed = branchIds.filter(id => {
+      const entries = state.branches[id];
+      const last = entries[entries.length - 1];
+      return (last.historyIndex ?? 0) >= lastMainIndex;
+    });
+    if (unclosed.length > 0) {
+      pending.push(`Close open branch(es): ${unclosed.join(", ")} by returning to the main line`);
+    }
+  }
+
+  return pending;
+}
 
 
 export type ThinkingMode = "path-a" | "path-b";
@@ -431,8 +570,8 @@ function makeStatusResponse(state: State) {
     pendingClaims,
     hypotheses: hypothesisIds,
     pendingHypotheses,
+    pending: pendingActions(state),
   };
-
   if (historyLength === 0) {
     return {
       ...base,
@@ -1273,7 +1412,7 @@ if (values.registerClaim != null) {
   state.claims[claimId] = claim;
   recordAudit(state, { op: "registerClaim", target: claimId, detail: values.registerClaim });
   saveState(state);
-  console.log(JSON.stringify({ registered: claimId, statement: values.registerClaim, status: "pending" }, null, 2));
+  console.log(JSON.stringify({ registered: claimId, statement: values.registerClaim, status: "pending", next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -1300,7 +1439,7 @@ if (values.registerHypothesis != null) {
   state.hypotheses[hypId] = hyp;
   recordAudit(state, { op: "registerHypothesis", target: hypId, detail: values.registerHypothesis });
   saveState(state);
-  console.log(JSON.stringify({ registered: hypId, statement: values.registerHypothesis, status: "pending" }, null, 2));
+  console.log(JSON.stringify({ registered: hypId, statement: values.registerHypothesis, status: "pending", next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -1422,7 +1561,7 @@ if (values.resolveHypothesis != null) {
 
   recordAudit(state, { op: "resolveHypothesis", target: hyp.id, detail: status === "merged" ? `merged->${values.mergedInto}` : status });
   saveState(state);
-  console.log(JSON.stringify({ resolved: hyp.id, status: updated.status, mergedInto: updated.mergedInto, notes: updated.notes }, null, 2));
+  console.log(JSON.stringify({ resolved: hyp.id, status: updated.status, mergedInto: updated.mergedInto, notes: updated.notes, next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -1438,7 +1577,7 @@ if (values.addCriterion != null) {
   state.acceptanceCriteria.push({ id, criterion: values.addCriterion.trim() });
   recordAudit(state, { op: "addCriterion", target: id, detail: values.addCriterion.trim() });
   saveState(state);
-  console.log(JSON.stringify({ added: id, criterion: values.addCriterion.trim(), met: null }, null, 2));
+  console.log(JSON.stringify({ added: id, criterion: values.addCriterion.trim(), met: null, next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -1460,7 +1599,7 @@ if (values.checkCriterion != null) {
   if (values.criterionNotes != null) crit.notes = values.criterionNotes;
   recordAudit(state, { op: "checkCriterion", target: crit.id, detail: values.met });
   saveState(state);
-  console.log(JSON.stringify({ checked: crit.id, met: crit.met, checkedAtThought: crit.checkedAtHistoryIndex, notes: crit.notes }, null, 2));
+  console.log(JSON.stringify({ checked: crit.id, met: crit.met, checkedAtThought: crit.checkedAtHistoryIndex, notes: crit.notes, next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -1477,7 +1616,7 @@ if (values.recordLens) {
   state.lenses.push(entry);
   recordAudit(state, { op: "recordLens", target: entry.lens, detail: entry.finding });
   saveState(state);
-  console.log(JSON.stringify({ recorded: entry }, null, 2));
+  console.log(JSON.stringify({ recorded: entry, next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -1759,7 +1898,7 @@ if (values.verifyClaim != null) {
 
   recordAudit(state, { op: "verifyClaim", target: claim.id, detail: status });
   saveState(state);
-  console.log(JSON.stringify({ verified: claim.id, status: projected.status, sources: projected.sources, notes: projected.notes }, null, 2));
+  console.log(JSON.stringify({ verified: claim.id, status: projected.status, sources: projected.sources, notes: projected.notes, next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -2089,7 +2228,9 @@ const branchList = status.branches.length > 0 ? ` branches=${status.branches.joi
 const claimList = status.claims.length > 0 ? ` claims=${status.claims.join(",")}` : "";
 const hypList = status.hypotheses.length > 0 ? ` hypotheses=${status.hypotheses.join(",")}` : "";
 const modeStr = status.mode ? ` mode=${status.mode}` : "";
-console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.thoughtHistoryLength}${modeStr}${branchList}${claimList}${hypList} next=${status.nextThoughtNeeded}`);
+const pendingList = pendingActions(state);
+const readyStr = pendingList.length === 0 ? "yes" : "no";
+console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.thoughtHistoryLength}${modeStr}${branchList}${claimList}${hypList} next=${status.nextThoughtNeeded} ready=${readyStr} blockers=${pendingList.length}`);
 
 if (!nextThoughtNeeded) {
   console.log("");
