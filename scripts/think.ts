@@ -76,6 +76,154 @@ export interface LensFinding {
   finding: string;
   atThought: number;
 }
+export type ProblemKind = "diagnostic" | "decision" | "design" | "optimization" | "innovation" | "planning";
+
+export const VALID_KINDS: readonly ProblemKind[] = [
+  "diagnostic",
+  "decision",
+  "design",
+  "optimization",
+  "innovation",
+  "planning",
+] as const;
+
+export interface LensCatalogEntry {
+  id: string;
+  name: string;
+  aliases: string[];
+  type: "computed" | "state-delta" | "prose";
+  primaryKinds: ProblemKind[];
+  requiredArtifact: string;
+  description: string;
+}
+
+export const KIND_CORE_LENSES: Record<ProblemKind, string[]> = {
+  diagnostic: ["lens-8", "lens-1"],
+  decision: ["lens-6", "lens-10", "lens-3"],
+  design: ["lens-7", "lens-5", "lens-11"],
+  optimization: ["lens-7", "lens-6", "lens-5"],
+  innovation: ["lens-1", "lens-4", "lens-3"],
+  planning: ["lens-9", "lens-2", "lens-10"],
+};
+
+export const KIND_OPTIONAL_LENSES: Record<ProblemKind, string[]> = {
+  diagnostic: ["lens-5", "lens-11"],
+  decision: ["lens-2", "lens-9"],
+  design: ["lens-2", "lens-10"],
+  optimization: ["lens-1"],
+  innovation: ["lens-2"],
+  planning: ["lens-3"],
+};
+
+export const LENS_CATALOG: readonly LensCatalogEntry[] = [
+  {
+    id: "lens-1",
+    name: "First Principles & Constraint Reduction",
+    aliases: ["first-principles", "first_principles", "constraint-reduction", "first principles"],
+    type: "prose",
+    primaryKinds: ["diagnostic", "innovation", "optimization"],
+    requiredArtifact: "Irreducible physical, computational, or legal constraints",
+    description: "Strip away conventions, analogies, and industry best practices to identify irreducible physical, computational, or legal constraints.",
+  },
+  {
+    id: "lens-2",
+    name: "Pre-Mortem & Active Red Team",
+    aliases: ["pre-mortem", "premortem", "red-team", "red_team", "pre mortem"],
+    type: "state-delta",
+    primaryKinds: ["decision", "design", "innovation", "planning"],
+    requiredArtifact: "Catastrophic failure modes and unmonitored collapse triggers",
+    description: "Assume the chosen approach has failed catastrophically 12 months in the future; identify what single unmonitored assumption caused collapse.",
+  },
+  {
+    id: "lens-3",
+    name: "Contrarian & Worst-Option Defense",
+    aliases: ["contrarian", "worst-option", "worst_option", "devil", "devil's advocate"],
+    type: "state-delta",
+    primaryKinds: ["decision", "innovation", "planning"],
+    requiredArtifact: "Boundary conditions under which the worst option becomes optimal",
+    description: "Forcibly argue the strongest possible case for the option initially ranked worst.",
+  },
+  {
+    id: "lens-4",
+    name: "Reversal & Assumption Inversion",
+    aliases: ["reversal", "inversion", "assumption-inversion"],
+    type: "state-delta",
+    primaryKinds: ["innovation"],
+    requiredArtifact: "Inverted load-bearing assumptions and alternative architectures",
+    description: "Take the central load-bearing assumption and invert it.",
+  },
+  {
+    id: "lens-5",
+    name: "Scale & Boundary Stress",
+    aliases: ["scale-stress", "boundary-stress", "scale", "boundary"],
+    type: "prose",
+    primaryKinds: ["diagnostic", "design", "optimization"],
+    requiredArtifact: "Extremes evaluation (0.01x / 100x) and non-linear cliff identification",
+    description: "Evaluate the system at extremes (0.01x and 100x) to find non-linear cliffs or degenerate failure modes.",
+  },
+  {
+    id: "lens-6",
+    name: "Sensitivity Analysis",
+    aliases: ["sensitivity", "sensitivity-analysis", "jitter"],
+    type: "computed",
+    primaryKinds: ["decision", "optimization"],
+    requiredArtifact: "Winner stability under +/-20% parameter perturbation",
+    description: "Perturb key quantitative assumptions by +/-20% to test whether option rankings flip.",
+  },
+  {
+    id: "lens-7",
+    name: "Pareto Frontier",
+    aliases: ["pareto", "pareto-frontier", "trade-off"],
+    type: "computed",
+    primaryKinds: ["design", "optimization"],
+    requiredArtifact: "Explicit trade-offs and non-dominated candidate frontier",
+    description: "Identify the efficient frontier where no attribute can improve without degrading another; flag dominated choices.",
+  },
+  {
+    id: "lens-8",
+    name: "Differential Elimination / ACH",
+    aliases: ["ach", "differential-elimination", "differential"],
+    type: "computed",
+    primaryKinds: ["diagnostic"],
+    requiredArtifact: "Evidence x Hypotheses inconsistency matrix with >=1 eliminated",
+    description: "Analysis of Competing Hypotheses: evaluate diagnostic evidence inconsistency across competing explanations.",
+  },
+  {
+    id: "lens-9",
+    name: "Second-Order & Incentive Effects",
+    aliases: ["second-order", "second_order", "incentives", "incentive-effects"],
+    type: "state-delta",
+    primaryKinds: ["decision", "planning"],
+    requiredArtifact: "Downstream behavioral shifts and perverse incentives analysis",
+    description: "Analyze human and downstream system behaviors and perverse incentives once a choice is active.",
+  },
+  {
+    id: "lens-10",
+    name: "Reversibility & One-Way Doors",
+    aliases: ["reversibility", "one-way-door", "one_way_door", "type-1-type-2"],
+    type: "state-delta",
+    primaryKinds: ["decision", "design", "planning"],
+    requiredArtifact: "Type 1 vs Type 2 classification and unwind cost assessment",
+    description: "Assess unwind cost and speed; determine if a bounded experiment can precede commitment.",
+  },
+  {
+    id: "lens-11",
+    name: "Blast Radius & Degraded Mode",
+    aliases: ["blast-radius", "blast_radius", "degraded-mode", "degraded_mode"],
+    type: "state-delta",
+    primaryKinds: ["diagnostic", "design"],
+    requiredArtifact: "Degraded mode behavior and failure containment boundaries",
+    description: "Determine whether the system fails safe, fails silent, or cascades when dependencies crash.",
+  },
+];
+
+export function parseKind(raw: unknown): ProblemKind {
+  if (typeof raw !== "string" || !VALID_KINDS.includes(raw as ProblemKind)) {
+    fail(`Invalid --kind: ${raw}. Must be one of: ${VALID_KINDS.join(", ")}`);
+  }
+  return raw as ProblemKind;
+}
+
 
 export type ThinkingMode = "path-a" | "path-b";
 
@@ -744,6 +892,8 @@ export interface ParsedArgs {
   reset?: boolean;
   export?: boolean;
   help?: boolean;
+  listLenses?: boolean;
+  kind?: string;
 }
 
 // --- Parse CLI args ---
@@ -794,6 +944,8 @@ try {
     reset: { type: "boolean", default: false },
     export: { type: "boolean", default: false },
     help: { type: "boolean", default: false },
+    listLenses: { type: "boolean", default: false },
+    kind: { type: "string" },
   },
   strict: true,
 }) as unknown as { values: ParsedArgs });
@@ -823,7 +975,7 @@ if (values.help) {
   // --help answers a question about usage; combining it with an action flag
   // would silently drop the action (or the help), so refuse the combination.
   const actionFlags = ["reset", "export", "status", "thought", "registerClaim", "verifyClaim",
-    "registerHypothesis", "resolveHypothesis", "addCriterion", "checkCriterion", "recordLens"] as const;
+    "registerHypothesis", "resolveHypothesis", "addCriterion", "checkCriterion", "recordLens", "listLenses"] as const;
   const combined = actionFlags.filter(f => values[f] != null && values[f] !== false);
   if (combined.length > 0) {
     fail(`--help cannot be combined with ${combined.map(f => `--${f}`).join(", ")}; pass --help alone.`);
@@ -831,6 +983,36 @@ if (values.help) {
   console.log("Usage: bun scripts/think.ts [options]\nRun `bun scripts/think.ts --status` or pass `--thought` to begin.");
   process.exit(0);
 }
+if (values.listLenses) {
+  let targetKind: ProblemKind | undefined;
+  if (values.kind != null) {
+    targetKind = parseKind(values.kind);
+  }
+  let sortedLenses = [...LENS_CATALOG];
+  if (targetKind != null) {
+    const core = KIND_CORE_LENSES[targetKind] || [];
+    sortedLenses.sort((a, b) => {
+      const aCore = core.indexOf(a.id);
+      const bCore = core.indexOf(b.id);
+      if (aCore !== -1 && bCore !== -1) return aCore - bCore;
+      if (aCore !== -1) return -1;
+      if (bCore !== -1) return 1;
+      return 0;
+    });
+  }
+  const output = {
+    lenses: sortedLenses.map(l => ({
+      id: l.id,
+      name: l.name,
+      type: l.type,
+      kinds: l.primaryKinds,
+      requiredArtifact: l.requiredArtifact,
+    })),
+  };
+  console.log(JSON.stringify(output, null, 2));
+  process.exit(0);
+}
+
 
 const VALID_MODES: ThinkingMode[] = ["path-a", "path-b"];
 
