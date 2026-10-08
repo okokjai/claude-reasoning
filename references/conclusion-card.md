@@ -68,6 +68,7 @@ follows for anyone auditing it.
 - **Residual Uncertainty & Blind Spots**:
   - What remains unknown or unverified?
   - What condition or future change would invalidate this conclusion?
+  - What observable condition would overturn each selected hypothesis (`--flipIf`)?
 
 - **Actionable Next Steps / Exit Conditions**:
   - 1. Concrete verification or implementation action.
@@ -95,7 +96,8 @@ persisted state. After the terminating thought, run `bun scripts/think.ts --expo
 and paste the `## Reasoning Trace` block verbatim into the card. It contains:
 
 - **Hypotheses** — every registered hypothesis: statement, falsification clause,
-  falsification result, verdict, and the reason it was kept or dropped.
+  falsification result, verdict, observable reversal condition (`flipIf`), and the
+  reason it was kept or dropped.
 - **Lenses** — each recorded critical lens and its residual uncertainty finding.
 - **Criteria** — each acceptance criterion and whether it was met.
 

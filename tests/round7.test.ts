@@ -200,3 +200,36 @@ describe("Task 3: pendingActions pure function + integration", () => {
     expect(term.code).toBe(0);
   });
 });
+
+describe("Task 5: --flipIf flag + trace column", () => {
+  beforeEach(() => {
+    if (existsSync(STATE)) unlinkSync(STATE);
+  });
+
+  it("selected hypothesis without --flipIf triggers WARN", () => {
+    run(["--mode", "path-b", "--registerHypothesis", "h1", "--falsification", "if x then not h1"]);
+    run(["--registerHypothesis", "h2", "--falsification", "if y then not h2"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "chosen", "--falsificationResult", "survived"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/WARN.*flipIf/i);
+  });
+
+  it("--flipIf stored on hypothesis and shown in trace", () => {
+    run(["--mode", "path-b", "--registerHypothesis", "h1", "--falsification", "if x then not h1"]);
+    run(["--registerHypothesis", "h2", "--falsification", "if y then not h2"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "chosen", "--falsificationResult", "survived", "--flipIf", "price drops below $10"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/flipIf/);
+    expect(r.out).toMatch(/price drops below \$10/);
+    const s = run(["--status"]);
+    const j = JSON.parse(s.out);
+    expect(j.hypothesisDetails["hyp-1"].flipIf).toBe("price drops below $10");
+  });
+
+  it("conclusion-card template includes flipIf row", () => {
+    const card = require("fs").readFileSync(join(ROOT, "references", "conclusion-card.md"), "utf-8");
+    expect(card).toMatch(/flipIf/);
+  });
+});

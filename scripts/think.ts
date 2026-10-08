@@ -58,6 +58,7 @@ export interface Hypothesis {
   falsificationResult?: string; // required at resolution
   notes?: string;
   mergedInto?: string;
+  flipIf?: string;
 }
 
 export interface AcceptanceCriterion {
@@ -789,6 +790,11 @@ function buildLintReport(state: State): string {
       warn.push(`'${h.id}' has no claim support (${marker}); its load-bearing proposition is unverified — cite as inference, not fact`);
     }
   }
+  for (const h of hypotheses) {
+    if ((h.status === "selected" || h.status === "synthesized") && (h.flipIf == null || h.flipIf.trim().length === 0)) {
+      warn.push(`'${h.id}' is ${h.status} but missing --flipIf (observable reversal condition); what evidence would overturn this choice?`);
+    }
+  }
   for (const c of claims) {
     if (c.status === "verified" && c.quote != null && c.quote.trim().length > 0 && c.quote.trim().length < 10) {
       warn.push(`'${c.id}' quote is very short (<10 chars; self-reported)`);
@@ -900,9 +906,9 @@ function buildLintReport(state: State): string {
     ...(hypotheses.length > 0 || state.lenses.length > 0 || state.acceptanceCriteria.length > 0
       ? ["", "## Reasoning Trace", ...[
           ...(hypotheses.length > 0
-            ? ["### Hypotheses", "| id | statement | falsification | result | status | reason |", "| --- | --- | --- | --- | --- | --- |",
+            ? ["### Hypotheses", "| id | statement | falsification | result | status | flipIf | reason |", "| --- | --- | --- | --- | --- | --- | --- |",
                 ...hypotheses.map(h =>
-                  `| ${h.id} | ${escapeCell(h.statement)} | ${escapeCell(h.falsification ?? "")} | ${escapeCell(h.falsificationResult ?? "")} | ${h.status}${h.mergedInto ? ` → ${h.mergedInto}` : ""} | ${escapeCell(h.notes ?? "")} |`)]
+                  `| ${h.id} | ${escapeCell(h.statement)} | ${escapeCell(h.falsification ?? "")} | ${escapeCell(h.falsificationResult ?? "")} | ${h.status}${h.mergedInto ? ` → ${h.mergedInto}` : ""} | ${escapeCell(h.flipIf ?? "")} | ${escapeCell(h.notes ?? "")} |`)]
             : []),
           ...(state.lenses.length > 0
             ? ["### Lenses", "| lens | finding |", "| --- | --- |",
@@ -1023,6 +1029,7 @@ export interface ParsedArgs {
   falsification?: string;
   falsificationResult?: string;
   mergedInto?: string;
+  flipIf?: string;
   addCriterion?: string;
   checkCriterion?: string;
   met?: string;
@@ -1075,6 +1082,7 @@ try {
     falsification: { type: "string" },
     falsificationResult: { type: "string" },
     mergedInto: { type: "string" },
+    flipIf: { type: "string" },
     addCriterion: { type: "string" },
     checkCriterion: { type: "string" },
     met: { type: "string" },
@@ -1275,6 +1283,7 @@ const FLAG_REQUIRES: [keyof ParsedArgs, string][] = [
   ["hypothesisNotes", "--resolveHypothesis"],
   ["mergedInto", "--resolveHypothesis"],
   ["falsificationResult", "--resolveHypothesis"],
+  ["flipIf", "--resolveHypothesis"],
   ["met", "--checkCriterion"],
   ["criterionNotes", "--checkCriterion"],
   ["lens", "--recordLens"],
@@ -1453,7 +1462,7 @@ if (values.registerHypothesis != null) {
 function projectHypothesisForStatus(
   base: Pick<Hypothesis, "id" | "statement" | "falsification">,
   status: HypothesisStatus,
-  fields: { notes?: string; falsificationResult?: string; mergedInto?: string },
+  fields: { notes?: string; falsificationResult?: string; mergedInto?: string; flipIf?: string },
 ): Hypothesis {
   const out: Hypothesis = { id: base.id, statement: base.statement, status, falsification: base.falsification };
   if (status === "merged") {
@@ -1465,6 +1474,7 @@ function projectHypothesisForStatus(
     // silently (the projection would otherwise discard user input).
     if (fields.notes != null) out.notes = fields.notes;
     if (fields.falsificationResult != null) out.falsificationResult = fields.falsificationResult;
+    if (fields.flipIf != null) out.flipIf = fields.flipIf;
   }
   return out;
 }
@@ -1535,7 +1545,7 @@ if (values.resolveHypothesis != null) {
     // Project a clean object: mergedInto/notes/falsificationResult are only
     // written when valid for this status, never deleted after the fact.
     state.hypotheses![hyp.id] = projectHypothesisForStatus(hyp, status, {
-      notes: values.hypothesisNotes, falsificationResult: values.falsificationResult,
+      notes: values.hypothesisNotes, falsificationResult: values.falsificationResult, flipIf: values.flipIf,
     });
   }
 
