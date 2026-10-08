@@ -1013,7 +1013,7 @@ function buildLintReport(state: State): string {
     const newest = c.claimDates.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b));
     const ageDays = Math.floor((Date.parse(today()) - Date.parse(newest)) / 86_400_000);
     if (ageDays > 180) {
-      warn.push(`'${c.id}' newest source is ${ageDays} days old (>180d); re-check for updates (Gate 3)`);
+      warn.push(`'${c.id}' newest source is ${ageDays} days old (>180d); re-check for updates (freshness-window)`);
     }
   }
   const dupSeen: Record<string, string[]> = {};
@@ -1033,7 +1033,7 @@ function buildLintReport(state: State): string {
   }
   if (lastThought != null && lastThought.newInsightNotes != null && lastThought.newInsightNotes.trim().length > 0) {
     const unmet = state.acceptanceCriteria.some(cr => cr.met === false);
-    if (unmet) warn.push(`termination used --newInsightNotes exemption: "${lastThought.newInsightNotes}"`);
+    if (unmet) warn.push(`termination used --newInsightNotes exemption: "${escapeHeadings(lastThought.newInsightNotes)}"`);
   }
   // Weak lens content: short findings, duplicates across lenses, unknown names,
   // and findings that never anchor to a hypothesis or criterion (§Task-4).
@@ -1069,7 +1069,7 @@ function buildLintReport(state: State): string {
   // Short --newInsightNotes: the convergence rationale must be substantive.
   for (const t of history) {
     if (t.newInsightNotes != null && t.newInsightNotes.trim().length > 0 && t.newInsightNotes.trim().length < 20) {
-      warn.push(`--newInsightNotes at thought ${t.thoughtNumber ?? "?"} is short (<20 chars): "${t.newInsightNotes.trim()}" — the convergence rationale should state why termination is safe`);
+      warn.push(`--newInsightNotes at thought ${t.thoughtNumber ?? "?"} is short (<20 chars): "${escapeHeadings(t.newInsightNotes.trim())}" — the convergence rationale should state why termination is safe`);
     }
   }
   // Falsification convention: resolution result must match terminal status.

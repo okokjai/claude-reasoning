@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { execFileSync } from "child_process";
-import { unlinkSync, existsSync, readFileSync } from "fs";
+import { unlinkSync, existsSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
 
 const ROOT = join(__dirname, "..");
@@ -161,4 +161,9 @@ describe("Reasoning trace", () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain(">180d");
   });
+});
+
+afterAll(() => {
+  for (const f of [STATE, STATE + ".bak"]) rmSync(f, { force: true });
+  rmSync(STATE + ".lock", { force: true, recursive: true });
 });

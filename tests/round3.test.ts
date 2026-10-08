@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { spawnSync } from "child_process";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
@@ -476,4 +476,9 @@ describe("round-8 review: temporal-index gates and flag-pair silent drops", () =
     // The caller-supplied thoughtNumber diverges from the physical timeline.
     expect(s.thoughtHistory.map((t: { thoughtNumber: number }) => t.thoughtNumber)).toEqual([1, 5]);
   });
+});
+
+afterAll(() => {
+  for (const f of [STATE_FILE, STATE_FILE + ".bak"]) rmSync(f, { force: true });
+  rmSync(STATE_FILE + ".lock", { force: true, recursive: true });
 });

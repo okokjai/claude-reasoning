@@ -18,6 +18,9 @@ All notable changes to this skill are documented here.
 ### Fixed
 
 - **`pendingActions` convergence check ignored the terminating thought's declaration.** The gate-9 preview listed "Declare convergence…" even after the final thought recorded `--newInsight false` with notes; it now treats a recorded convergence declaration like a revision/branch in history, so `ready=yes blockers=0` is reachable after a converged termination.
+- **`--newInsightNotes` heading injection in `--export`.** The termination-exemption `[WARN]` line (line 1036) and short convergence rationale warning (line 1072) embedded `--newInsightNotes` verbatim, allowing line-start markdown headings (`#`/`##`) to forge section titles in the lint report. Both lines now sanitize input with `escapeHeadings`. Pinned by `tests/round8.test.ts`.
+- **Ambiguous `(Gate 3)` label on source-freshness warning.** The `>180d` source age warning at line 1016 was labeled `(Gate 3)`, colliding with the Path B hypothesis-count termination gate. The label is now `(freshness-window)`, matching `references/hallucination-gates.md` Gate 3 (Temporal Currency) without ambiguity. Pinned by `tests/round8.test.ts`.
+- **Orphaned test state and lock files under `tests/`.** Test suites lacked `afterAll` hooks, causing `.think_state.*.json` and `.lock` directories to accumulate across runs. Registered `afterAll` cleanup in `round7`, `bugs`, `example-replay`, `issues`, `round3`, `round4`, `round5`, `round6`, `think`, and `round8`.
 
 ### Documentation
 

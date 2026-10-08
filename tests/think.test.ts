@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { spawnSync } from "child_process";
-import { unlinkSync, existsSync, readFileSync, writeFileSync } from "fs";
+import { unlinkSync, existsSync, readFileSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
@@ -763,4 +763,9 @@ describe("think.ts 2.2.5: conclusion card is a fact sheet, not a verdict", () =>
     const res = run(["--verifyClaim", "claim-1", "--claimStatus", "verified", "--claimSource", "https://example.com./a", "--claimSource", "https://example.com/b", "--claimQuote", "q", "--negativeQuery", "nq", "--negativeFinding", "nf"]);
     expect(res.code).toBe(1);
   });
+});
+
+afterAll(() => {
+  for (const f of [STATE_FILE, STATE_FILE + ".bak"]) rmSync(f, { force: true });
+  rmSync(STATE_FILE + ".lock", { force: true, recursive: true });
 });

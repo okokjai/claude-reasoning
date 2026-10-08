@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { spawnSync } from "child_process";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -25,6 +25,7 @@ function clean(): void {
   rmSync(LOCK_DIR, { force: true, recursive: true });
 }
 beforeEach(clean);
+afterAll(clean);
 
 function T(n: number, total: number, next: string, text: string, extra: string[] = [], env?: Record<string, string>) {
   return run(["--thought", text, "--thoughtNumber", String(n), "--totalThoughts", String(total), "--nextThoughtNeeded", next, ...extra], env);

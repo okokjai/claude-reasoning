@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { execFileSync } from "child_process";
 import { unlinkSync, existsSync, readFileSync, writeFileSync, chmodSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
@@ -330,4 +330,9 @@ describe("TOCTOU: stale lock race", () => {
     child.kill("SIGKILL");
     rmSync(lockDir, { recursive: true, force: true });
   });
+});
+
+afterAll(() => {
+  for (const f of [STATE, STATE + ".bak"]) rmSync(f, { force: true });
+  rmSync(STATE + ".lock", { force: true, recursive: true });
 });

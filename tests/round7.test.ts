@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { execFileSync } from "child_process";
-import { unlinkSync, existsSync } from "fs";
+import { unlinkSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 
 const ROOT = join(__dirname, "..");
@@ -16,6 +16,11 @@ function run(args: string[]): { code: number; out: string; err: string } {
     return { code: err.status ?? 1, out: err.stdout?.toString() ?? "", err: err.stderr?.toString() ?? "" };
   }
 }
+
+afterAll(() => {
+  for (const f of [STATE, STATE + ".bak"]) rmSync(f, { force: true });
+  rmSync(STATE + ".lock", { force: true, recursive: true });
+});
 
 describe("Task 1: Lens catalog and --listLenses", () => {
   beforeEach(() => {

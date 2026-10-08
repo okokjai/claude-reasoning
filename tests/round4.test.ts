@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { spawn, spawnSync } from "child_process";
 import { existsSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
@@ -24,6 +24,7 @@ function clean(): void {
 }
 
 beforeEach(clean);
+afterAll(clean);
 
 function startPathB(): void {
   run(["--mode", "path-b", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
