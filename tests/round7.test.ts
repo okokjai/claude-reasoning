@@ -325,3 +325,122 @@ describe("Task 4: weak-content WARNs + falsification convention", () => {
     expect(r.out).not.toMatch(/\[INFO\].*anchor|hyp-N|crit-N/i);
   });
 });
+
+describe("Task 6: --analyze sensitivity/pareto/ach", () => {
+  beforeEach(() => {
+    if (existsSync(STATE)) unlinkSync(STATE);
+  });
+
+  const SENS_STABLE = JSON.stringify({
+    candidates: [
+      { id: "A", scores: { cost: 0.9, speed: 0.8 } },
+      { id: "B", scores: { cost: 0.7, speed: 0.6 } },
+    ],
+    criteria: [
+      { name: "cost", weight: 0.6, direction: "max" },
+      { name: "speed", weight: 0.4, direction: "max" },
+    ],
+  });
+  const SENS_FLIP = JSON.stringify({
+    candidates: [
+      { id: "A", scores: { cost: 0.9, speed: 0.65 } },
+      { id: "B", scores: { cost: 0.9, speed: 0.525 } },
+    ],
+    criteria: [
+      { name: "cost", weight: 0.6, direction: "max" },
+      { name: "speed", weight: 0.4, direction: "max" },
+    ],
+  });
+  const PARETO = JSON.stringify({
+    candidates: [
+      { id: "A", metrics: { quality: 9, cost: 2 } },
+      { id: "B", metrics: { quality: 7, cost: 5 } },
+      { id: "C", metrics: { quality: 8, cost: 1 } },
+    ],
+    objectives: [
+      { name: "quality", direction: "max" },
+      { name: "cost", direction: "min" },
+    ],
+  });
+  const ACH = JSON.stringify({
+    hypotheses: [
+      { id: "H1", statement: "insider theft" },
+      { id: "H2", statement: "external attacker" },
+      { id: "H3", statement: "accidental leak" },
+    ],
+    evidence: [
+      { id: "E1", description: "logs wiped", matrix: { H1: "I", H2: "C", H3: "N" } },
+      { id: "E2", description: "USB device seen", matrix: { H1: "I", H2: "N", H3: "C" } },
+      { id: "E3", description: "no malware found", matrix: { H1: "C", H2: "I", H3: "C" } },
+    ],
+  });
+
+  it("--analyze sensitivity with known input produces deterministic output", () => {
+    const r1 = run(["--mode", "path-b", "--analyze", "sensitivity", "--data", SENS_STABLE]);
+    expect(r1.code).toBe(0);
+    const j1 = JSON.parse(r1.out);
+    expect(j1.analysis.flips).toBe(false);
+    expect(j1.analysis.stableRank).toBe("A");
+    expect(Array.isArray(j1.analysis.perturbations)).toBe(true);
+    // Stable case: perturbations array enumerates only rank-flipping perturbations.
+    expect(j1.analysis.perturbations).toEqual([]);
+    expect(j1.recorded.computed).toBe(true);
+    // Determinism: identical input → identical stdout on a second invocation.
+    const r2 = run(["--mode", "path-b", "--analyze", "sensitivity", "--data", SENS_STABLE]);
+    expect(r2.out).toBe(r1.out);
+    // Persisted lens entry carries computed flag + analysis object.
+    const s = run(["--status"]);
+    const st = JSON.parse(s.out);
+    const lens = st.lenses.find((l: { computed?: boolean }) => l.computed === true);
+    expect(lens).toBeDefined();
+    expect(lens.analysis).toBeDefined();
+    expect(lens.analysis.stableRank).toBe("A");
+  });
+
+  it("--analyze sensitivity detects a rank flip under perturbation", () => {
+    const r = run(["--mode", "path-b", "--analyze", "sensitivity", "--data", SENS_FLIP]);
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.analysis.flips).toBe(true);
+    expect(j.analysis.stableRank).toBe("A");
+    expect(j.analysis.perturbations.some((p: { newWinner: string }) => p.newWinner === "B")).toBe(true);
+  });
+
+  it("--analyze pareto identifies non-dominated set", () => {
+    const r = run(["--mode", "path-b", "--analyze", "pareto", "--data", PARETO]);
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.analysis.frontier.map((f: { id: string }) => f.id)).toEqual(["A", "C"]);
+    expect(j.analysis.dominated).toEqual([{ id: "B", dominatedBy: "A" }]);
+  });
+
+  it("--analyze ach ranks hypotheses by least contradiction", () => {
+    const r = run(["--mode", "path-b", "--analyze", "ach", "--data", ACH]);
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.analysis.ranking.map((x: { id: string }) => x.id)).toEqual(["H3", "H2", "H1"]);
+    expect(j.analysis.ranking[0]).toEqual({ id: "H3", inconsistencies: 0, consistent: 2, neutral: 1 });
+    expect(j.analysis.eliminated.map((e: { id: string }) => e.id)).toEqual(["H2", "H1"]);
+  });
+
+  it("--analyze writes to Reasoning Trace", () => {
+    run(["--mode", "path-b", "--analyze", "pareto", "--data", PARETO]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("Computed Analysis");
+    expect(r.out).toContain("pareto");
+  });
+
+  it("--analyze rejected in Path A", () => {
+    run(["--mode", "path-a", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "3", "--nextThoughtNeeded", "true"]);
+    const r = run(["--analyze", "pareto", "--data", PARETO]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toMatch(/Path A/);
+  });
+
+  it("--analyze with unknown subcommand fails", () => {
+    const r = run(["--mode", "path-b", "--analyze", "bogus", "--data", "{}"]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toMatch(/Invalid --analyze|sensitivity|pareto|ach/);
+  });
+});

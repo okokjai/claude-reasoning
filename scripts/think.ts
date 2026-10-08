@@ -76,6 +76,191 @@ export interface LensFinding {
   lens: string;
   finding: string;
   atThought: number;
+  /** True when produced by a computed lens via --analyze (not --recordLens). */
+  computed?: boolean;
+  /** Structured result payload for computed lens entries. */
+  analysis?: Record<string, unknown>;
+}
+
+export type AnalyzeKind = "sensitivity" | "pareto" | "ach";
+
+interface AnalyzeInput {
+  candidates?: { id: string; scores?: Record<string, number>; metrics?: Record<string, number> }[];
+  criteria?: { name: string; weight: number; direction: "max" | "min" }[];
+  objectives?: { name: string; direction: "max" | "min" }[];
+  hypotheses?: { id: string; statement?: string }[];
+  evidence?: { id: string; description?: string; matrix: Record<string, "C" | "I" | "N"> }[];
+}
+
+/** Weighted-score total for a candidate under a criterion set. */
+function weightedScore(
+  scores: Record<string, number>,
+  criteria: { name: string; weight: number; direction: "max" | "min" }[],
+): number {
+  let total = 0;
+  for (const c of criteria) {
+    const v = scores[c.name] ?? 0;
+    total += (c.direction === "min" ? -v : v) * c.weight;
+  }
+  return total;
+}
+
+/** First-ranked candidate id by descending score; ties broken by input order. */
+function topCandidate(
+  candidates: { id: string; scores: Record<string, number> }[],
+  criteria: { name: string; weight: number; direction: "max" | "min" }[],
+): string {
+  let best = candidates[0].id;
+  let bestScore = weightedScore(candidates[0].scores, criteria);
+  for (const c of candidates.slice(1)) {
+    const s = weightedScore(c.scores, criteria);
+    if (s > bestScore) { best = c.id; bestScore = s; }
+  }
+  return best;
+}
+
+/**
+ * Sensitivity analysis: perturb each weight and each score by ±20%; a
+ * perturbation only counts when the resulting score span across candidates is
+ * >= 5% of the max score ((max-min)/max < 0.05 → candidates are equivalent).
+ */
+function analyzeSensitivity(input: AnalyzeInput): Record<string, unknown> {
+  const candidates = input.candidates;
+  const criteria = input.criteria;
+  if (!Array.isArray(candidates) || candidates.length < 2) {
+    fail("--analyze sensitivity requires at least 2 candidates in --data");
+  }
+  if (!Array.isArray(criteria) || criteria.length === 0) {
+    fail("--analyze sensitivity requires at least 1 criterion in --data");
+  }
+  const norm = candidates.map(c => ({ id: c.id, scores: c.scores ?? {} }));
+
+  const spanOk = (crits: typeof criteria, cands: typeof norm): boolean => {
+    const scores = cands.map(c => weightedScore(c.scores, crits));
+    const max = Math.max(...scores);
+    const min = Math.min(...scores);
+    return max === 0 ? (max - min) > 0 : (max - min) / Math.abs(max) >= 0.05;
+  };
+
+  const baseline = topCandidate(norm, criteria);
+  const perturbations: { param: string; delta: number; newWinner: string }[] = [];
+
+  for (let ci = 0; ci < criteria.length; ci++) {
+    for (const delta of [0.2, -0.2]) {
+      const crits = criteria.map((c, i) => i === ci ? { ...c, weight: c.weight * (1 + delta) } : c);
+      if (!spanOk(crits, norm)) continue;
+      const winner = topCandidate(norm, crits);
+      if (winner !== baseline) {
+        perturbations.push({ param: `weight:${criteria[ci].name}`, delta, newWinner: winner });
+      }
+    }
+  }
+  for (let ci = 0; ci < norm.length; ci++) {
+    for (const crit of criteria) {
+      const original = norm[ci].scores[crit.name];
+      if (original == null) continue;
+      for (const delta of [0.2, -0.2]) {
+        const cands = norm.map((c, i) =>
+          i === ci ? { ...c, scores: { ...c.scores, [crit.name]: original * (1 + delta) } } : c);
+        if (!spanOk(criteria, cands)) continue;
+        const winner = topCandidate(cands, criteria);
+        if (winner !== baseline) {
+          perturbations.push({ param: `score:${norm[ci].id}:${crit.name}`, delta, newWinner: winner });
+        }
+      }
+    }
+  }
+
+  return { flips: perturbations.length > 0, stableRank: baseline, perturbations };
+}
+
+/** True when candidate a dominates b under the objectives. */
+function dominates(
+  a: Record<string, number>,
+  b: Record<string, number>,
+  objectives: { name: string; direction: "max" | "min" }[],
+): boolean {
+  let strictlyBetter = false;
+  for (const o of objectives) {
+    const av = a[o.name] ?? 0;
+    const bv = b[o.name] ?? 0;
+    const better = o.direction === "max" ? av > bv : av < bv;
+    const worse = o.direction === "max" ? av < bv : av > bv;
+    if (worse) return false;
+    if (better) strictlyBetter = true;
+  }
+  return strictlyBetter;
+}
+
+/** Non-dominated sort: frontier + dominated list with a witness dominator. */
+function analyzePareto(input: AnalyzeInput): Record<string, unknown> {
+  const candidates = input.candidates;
+  const objectives = input.objectives;
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    fail("--analyze pareto requires at least 1 candidate in --data");
+  }
+  if (!Array.isArray(objectives) || objectives.length === 0) {
+    fail("--analyze pareto requires at least 1 objective in --data");
+  }
+  const frontier: { id: string; metrics: Record<string, number> }[] = [];
+  const dominated: { id: string; dominatedBy: string }[] = [];
+  for (const c of candidates) {
+    const metrics = c.metrics ?? {};
+    const dominator = candidates.find(o => o.id !== c.id && dominates(o.metrics ?? {}, metrics, objectives));
+    if (dominator) {
+      dominated.push({ id: c.id, dominatedBy: dominator.id });
+    } else {
+      frontier.push({ id: c.id, metrics });
+    }
+  }
+  return { frontier, dominated };
+}
+
+/** ACH: rank hypotheses by inconsistency count; eliminate all but rank 1. */
+function analyzeAch(input: AnalyzeInput): Record<string, unknown> {
+  const hypotheses = input.hypotheses;
+  const evidence = input.evidence;
+  if (!Array.isArray(hypotheses) || hypotheses.length < 2) {
+    fail("--analyze ach requires at least 2 hypotheses in --data");
+  }
+  if (!Array.isArray(evidence) || evidence.length === 0) {
+    fail("--analyze ach requires at least 1 evidence item in --data");
+  }
+  const rows = hypotheses.map(h => {
+    let inconsistencies = 0, consistent = 0, neutral = 0;
+    for (const e of evidence) {
+      const mark = e.matrix?.[h.id];
+      if (mark === "I") inconsistencies++;
+      else if (mark === "C") consistent++;
+      else neutral++;
+    }
+    return { id: h.id, inconsistencies, consistent, neutral };
+  });
+  const ranking = [...rows].sort((a, b) =>
+    a.inconsistencies - b.inconsistencies ||
+    hypotheses.findIndex(h => h.id === a.id) - hypotheses.findIndex(h => h.id === b.id));
+  const eliminated = ranking.slice(1).map(r => ({
+    id: r.id,
+    reason: `${r.inconsistencies} inconsistent evidence item(s) vs ${ranking[0].inconsistencies} for ${ranking[0].id}`,
+  }));
+  return { ranking, eliminated };
+}
+
+/** Human-readable one-line summary stored as the lens finding text. */
+function analyzeFinding(kind: AnalyzeKind, a: Record<string, unknown>): string {
+  if (kind === "sensitivity") {
+    const flips = a.flips === true;
+    const n = (a.perturbations as unknown[]).length;
+    return `Sensitivity: winner ${a.stableRank} ${flips ? `flips under ${n} ±20% perturbation(s)` : "stable under ±20% perturbation"}`;
+  }
+  if (kind === "pareto") {
+    const f = (a.frontier as { id: string }[]).map(x => x.id).join(", ");
+    const d = (a.dominated as { id: string }[]).map(x => x.id).join(", ") || "none";
+    return `Pareto: frontier {${f}}; dominated {${d}}`;
+  }
+  const r = a.ranking as { id: string; inconsistencies: number }[];
+  const e = (a.eliminated as { id: string }[]).map(x => x.id).join(", ") || "none";
+  return `ACH: top ${r[0].id} (${r[0].inconsistencies} inconsistencies); eliminated {${e}}`;
 }
 export type ProblemKind = "diagnostic" | "decision" | "design" | "optimization" | "innovation" | "planning";
 
@@ -368,7 +553,7 @@ export function pendingActions(state: State): string[] {
 export type ThinkingMode = "path-a" | "path-b";
 
 export interface AuditEntry {
-  op: "registerClaim" | "verifyClaim" | "registerHypothesis" | "resolveHypothesis" | "addCriterion" | "checkCriterion" | "recordLens";
+  op: "registerClaim" | "verifyClaim" | "registerHypothesis" | "resolveHypothesis" | "addCriterion" | "checkCriterion" | "recordLens" | "analyze";
   target: string;
   detail?: string;
   atThought?: number;
@@ -954,7 +1139,12 @@ function buildLintReport(state: State): string {
             : []),
           ...(state.lenses.length > 0
             ? ["### Lenses", "| lens | finding |", "| --- | --- |",
-                ...state.lenses.map(l => `| ${escapeCell(l.lens)} | ${escapeCell(l.finding)} |`)]
+                ...state.lenses.map(l => `| ${escapeCell(l.lens)} | ${escapeCell(l.finding)} |`),
+                ...(state.lenses.some(l => l.computed && l.analysis != null)
+                  ? ["", "### Computed Analysis",
+                      ...state.lenses.filter(l => l.computed && l.analysis != null).map(l =>
+                        `- **${escapeHeadings(l.lens)}**: \`${escapeCell(JSON.stringify(l.analysis))}\``)]
+                  : [])]
             : []),
           ...(state.acceptanceCriteria.length > 0
             ? ["### Criteria", "| id | criterion | met | reason |", "| --- | --- | --- | --- |",
@@ -1085,6 +1275,8 @@ export interface ParsedArgs {
   help?: boolean;
   listLenses?: boolean;
   kind?: string;
+  analyze?: string;
+  data?: string;
 }
 
 // --- Parse CLI args ---
@@ -1138,6 +1330,8 @@ try {
     help: { type: "boolean", default: false },
     listLenses: { type: "boolean", default: false },
     kind: { type: "string" },
+    analyze: { type: "string" },
+    data: { type: "string" },
   },
   strict: true,
 }) as unknown as { values: ParsedArgs });
@@ -1167,7 +1361,7 @@ if (values.help) {
   // --help answers a question about usage; combining it with an action flag
   // would silently drop the action (or the help), so refuse the combination.
   const actionFlags = ["reset", "export", "status", "thought", "registerClaim", "verifyClaim",
-    "registerHypothesis", "resolveHypothesis", "addCriterion", "checkCriterion", "recordLens", "listLenses"] as const;
+    "registerHypothesis", "resolveHypothesis", "addCriterion", "checkCriterion", "recordLens", "listLenses", "analyze"] as const;
   const combined = actionFlags.filter(f => values[f] != null && values[f] !== false);
   if (combined.length > 0) {
     fail(`--help cannot be combined with ${combined.map(f => `--${f}`).join(", ")}; pass --help alone.`);
@@ -1288,6 +1482,8 @@ function otherOps(v: ParsedArgs): string[] {
     v.recordLens && "--recordLens",
     v.lens != null && "--lens",
     v.finding != null && "--finding",
+    v.analyze != null && "--analyze",
+    v.data != null && "--data",
   ].filter((x): x is string => typeof x === "string");
 }
 
@@ -1330,6 +1526,7 @@ const FLAG_REQUIRES: [keyof ParsedArgs, string][] = [
   ["criterionNotes", "--checkCriterion"],
   ["lens", "--recordLens"],
   ["finding", "--recordLens"],
+  ["data", "--analyze"],
   ["branchId", "--branchFromThought"],
   ["revisesThought", "--isRevision"],
   ["thoughtNumber", "--thought"],
@@ -1376,7 +1573,7 @@ if (values.thought != null) {
 // combination explicitly rather than dropping half the invocation.
 const SIDE_COMMANDS: readonly string[] = [
   "--registerClaim", "--verifyClaim", "--registerHypothesis", "--resolveHypothesis",
-  "--addCriterion", "--checkCriterion", "--recordLens",
+  "--addCriterion", "--checkCriterion", "--recordLens", "--analyze",
 ];
 const activeSide = otherOps(values).filter(f => SIDE_COMMANDS.includes(f));
 if (activeSide.length > 1) {
@@ -1669,6 +1866,43 @@ if (values.recordLens) {
   recordAudit(state, { op: "recordLens", target: entry.lens, detail: entry.finding });
   saveState(state);
   console.log(JSON.stringify({ recorded: entry, next: pendingActions(state) }, null, 2));
+  process.exit(0);
+}
+
+// --- Command: Computed Lens Analysis ---
+
+if (values.analyze != null) {
+  requireModeEstablished(state, values.mode);
+  if (state.mode === "path-a") {
+    fail("Path A (closed-form) forbids computed lens analysis — it is a Path B construct.");
+  }
+  const kind = values.analyze;
+  if (kind !== "sensitivity" && kind !== "pareto" && kind !== "ach") {
+    fail(`Invalid --analyze: ${kind}. Must be one of: sensitivity, pareto, ach.`);
+  }
+  if (values.data == null) {
+    fail(`--data '<json>' is required when --analyze is set; the ${kind} input would otherwise be missing.`);
+  }
+  let input: AnalyzeInput;
+  try {
+    input = JSON.parse(values.data) as AnalyzeInput;
+  } catch {
+    fail(`--data is not valid JSON: could not parse the ${kind} input.`);
+  }
+  const analysis = kind === "sensitivity" ? analyzeSensitivity(input)
+    : kind === "pareto" ? analyzePareto(input)
+    : analyzeAch(input);
+  const entry: LensFinding = {
+    lens: `analyze:${kind}`,
+    finding: analyzeFinding(kind, analysis),
+    atThought: state.thoughtHistory.length,
+    computed: true,
+    analysis,
+  };
+  state.lenses.push(entry);
+  recordAudit(state, { op: "analyze", target: entry.lens, detail: entry.finding });
+  saveState(state);
+  console.log(JSON.stringify({ recorded: entry, analysis, next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
