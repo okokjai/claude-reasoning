@@ -55,6 +55,18 @@ describe("Task 1: Lens catalog and --listLenses", () => {
     expect(r.err + r.out).toContain("Invalid --kind");
   });
 
+  it("--listLenses combined with an action flag fails instead of silently dropping it", () => {
+    const r = run(["--listLenses", "--registerClaim", "x"]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toContain("--listLenses cannot be combined");
+  });
+
+  it("--listLenses combined with --analyze fails instead of silently dropping it", () => {
+    const r = run(["--listLenses", "--analyze", "pareto", "--data", "{}"]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toContain("--listLenses cannot be combined");
+  });
+
   it("lenses have required fields: id, name, type, kinds, requiredArtifact", () => {
     const r = run(["--listLenses"]);
     const j = JSON.parse(r.out);
@@ -481,5 +493,33 @@ describe("Task 6: --analyze sensitivity/pareto/ach", () => {
     const r = run(["--mode", "path-b", "--analyze", "bogus", "--data", "{}"]);
     expect(r.code).toBe(1);
     expect(r.err + r.out).toMatch(/Invalid --analyze|sensitivity|pareto|ach/);
+  });
+
+  it("computed --analyze lens satisfies kind-core coverage in pending", () => {
+    // kind=decision core lenses: lens-6 (Sensitivity), lens-10 (Reversibility), lens-3 (Contrarian).
+    run(["--mode", "path-b", "--kind", "decision", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    // Before --analyze: all three core lenses missing.
+    const before = JSON.parse(run(["--status"]).out);
+    const missingBefore = before.pending.find((p: string) => p.startsWith("Missing core lenses"));
+    expect(missingBefore).toContain("Sensitivity Analysis");
+    expect(missingBefore).toContain("Reversibility & One-Way Doors");
+    expect(missingBefore).toContain("Contrarian & Worst-Option Defense");
+    // After --analyze sensitivity: lens-6 counted via its 'analyze:sensitivity' alias.
+    run(["--analyze", "sensitivity", "--data", SENS_STABLE]);
+    run(["--recordLens", "--lens", "reversibility", "--finding", "reversible config change finding"]);
+    run(["--recordLens", "--lens", "contrarian", "--finding", "worst option defense finding"]);
+    const after = JSON.parse(run(["--status"]).out);
+    expect(after.pending.find((p: string) => p.startsWith("Missing core lenses"))).toBeUndefined();
+  });
+
+  it("computed lens entries trigger no unknown-lens or missing-anchor INFO", () => {
+    run(["--mode", "path-b", "--kind", "decision", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--analyze", "sensitivity", "--data", SENS_STABLE]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    // 'analyze:sensitivity' is not in LENS_CATALOG and its finding cites no
+    // hyp-N/crit-N — computed entries must skip both INFO checks.
+    expect(r.out).not.toMatch(/lens 'analyze:sensitivity' is not in LENS_CATALOG/);
+    expect(r.out).not.toMatch(/lens 'analyze:sensitivity' finding cites no/);
   });
 });

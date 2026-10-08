@@ -503,7 +503,13 @@ export function pendingActions(state: State): string[] {
       if (!entry) continue;
       const names = [entry.id, entry.name.toLowerCase(), ...entry.aliases.map(a => a.toLowerCase())];
       const matched = state.lenses.some(l => {
-        const norm = l.lens.normalize("NFKC").toLowerCase();
+        // Computed --analyze entries are recorded as 'analyze:<name>'; the
+        // suffix (sensitivity/pareto/ach) aliases the corresponding catalog
+        // lens, so they satisfy core coverage the same as a --recordLens name.
+        const raw = l.computed === true && l.lens.startsWith("analyze:")
+          ? l.lens.slice("analyze:".length)
+          : l.lens;
+        const norm = raw.normalize("NFKC").toLowerCase();
         return names.includes(norm);
       });
       if (!matched) {
@@ -1045,6 +1051,10 @@ function buildLintReport(state: State): string {
       warn.push(`lens '${l.lens}' finding is short (<20 chars, self-reported): "${text}"`);
     }
     if (text.length > 0) (seenFindings[text] ||= []).push(l.lens);
+    // Computed --analyze entries (lens 'analyze:<kind>', computed: true) are
+    // script-generated, not user-declared — the unknown-name and missing-anchor
+    // INFO hints don't apply to them.
+    if (l.computed === true) continue;
     if (!knownLensNames.has(l.lens.normalize("NFKC").toLowerCase())) {
       info.push(`lens '${l.lens}' is not in LENS_CATALOG — see --listLenses for the catalog`);
     }
@@ -1373,6 +1383,19 @@ if (values.help) {
   console.log("Usage: bun scripts/think.ts [options]\nRun `bun scripts/think.ts --status` or pass `--thought` to begin.\nPath B helpers: --kind <kind> (first thought), --listLenses [--kind <kind>], --analyze <sensitivity|pareto|ach> --data '<json>', --flipIf '<condition>' on --resolveHypothesis.");
   process.exit(0);
 }
+if (values.listLenses) {
+  // --listLenses is a read-only catalog query; combining it with an action flag
+  // would silently drop the action (it exits before the state machinery runs),
+  // so refuse the combination the same way --help does. --kind is its sort
+  // sub-flag, not an action.
+  const actionFlags = ["reset", "export", "status", "thought", "registerClaim", "verifyClaim",
+    "registerHypothesis", "resolveHypothesis", "addCriterion", "checkCriterion", "recordLens", "analyze", "help"] as const;
+  const combined = actionFlags.filter(f => values[f] != null && values[f] !== false);
+  if (combined.length > 0) {
+    fail(`--listLenses cannot be combined with ${combined.map(f => `--${f}`).join(", ")}; pass --listLenses alone (optionally with --kind).`);
+  }
+}
+
 if (values.listLenses) {
   let targetKind: ProblemKind | undefined;
   if (values.kind != null) {

@@ -83,11 +83,8 @@ bun scripts/think.ts --analyze sensitivity --data '{"candidates":[{"id":"direct"
 ```
 
 ### Prose Lenses
-Lens findings reference the hypothesis or criterion they bear on (`hyp-N`/`crit-N`) — unanchored findings are flagged by the lint report. The computed result is also recorded under its catalog name so the kind-core coverage check sees it.
+Lens findings reference the hypothesis or criterion they bear on (`hyp-N`/`crit-N`) — unanchored findings are flagged by the lint report. The computed `analyze:sensitivity` entry already satisfies the lens-6 core-lens coverage, so only the remaining kind-core lenses need `--recordLens`.
 ```bash
-bun scripts/think.ts --recordLens --lens "Sensitivity Analysis" --finding "±20% perturbation on the cost weight (0.48–0.72) and every score leaves hyp-1 (direct) the winner — stableRank=direct, 0 flips, so crit-1's price-parity evidence is robust."
-# Output: {"recorded": ..., "next": [...]}
-
 bun scripts/think.ts --recordLens --lens "Reversibility & One-Way Doors" --finding "Both hyp-1 and hyp-2 are Type 2 (reversible): provider choice is endpoint+credential config, not a one-way door; a bounded Bedrock experiment can precede commitment."
 # Output: {"recorded": ..., "next": [...]}
 
@@ -235,8 +232,8 @@ bun scripts/think.ts \
 | lens | finding |
 | --- | --- |
 | analyze:sensitivity | Sensitivity: winner direct stable under ±20% perturbation |
-| Pre-Mortem & Active Red Team | Single-vendor lock-in undermines hyp-1 and hyp-2 alike... |
-| Blast Radius & Degraded Mode | Failover between direct API and Bedrock is a config change for hyp-1... |
+| Reversibility & One-Way Doors | Both hyp-1 and hyp-2 are Type 2 (reversible): provider choice is endpoint+credential config, not a one-way door; a bounded Bedrock experiment can precede commitment. |
+| Contrarian & Worst-Option Defense | Worst-ranked hyp-2 becomes optimal only if the team already runs AWS VPC with IAM mandates — under that boundary crit-1 would favor Bedrock despite the latency penalty. |
 ### Criteria
 | id | criterion | met | reason |
 | --- | --- | --- | --- |

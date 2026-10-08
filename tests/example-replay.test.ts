@@ -112,7 +112,7 @@ describe("references/example-path-b-verify.md is executable", () => {
       }
     }
 
-    expect(commandCount).toBe(22);
+    expect(commandCount).toBe(21);
     expect(failures).toEqual([]);
   });
 
