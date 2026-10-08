@@ -840,7 +840,49 @@ function buildLintReport(state: State): string {
     const unmet = state.acceptanceCriteria.some(cr => cr.met === false);
     if (unmet) warn.push(`termination used --newInsightNotes exemption: "${lastThought.newInsightNotes}"`);
   }
+  // Weak lens content: short findings, duplicates across lenses, unknown names,
+  // and findings that never anchor to a hypothesis or criterion (§Task-4).
+  const knownLensNames = new Set<string>();
+  for (const e of LENS_CATALOG) {
+    knownLensNames.add(e.id.toLowerCase());
+    knownLensNames.add(e.name.toLowerCase());
+    for (const a of e.aliases) knownLensNames.add(a.toLowerCase());
+  }
   const lensNames = new Set(state.lenses.map(l => l.lens.normalize("NFKC").toLowerCase()));
+  const seenFindings: Record<string, string[]> = {};
+  for (const l of state.lenses) {
+    const text = l.finding.trim();
+    if (text.length > 0 && text.length < 20) {
+      warn.push(`lens '${l.lens}' finding is short (<20 chars, self-reported): "${text}"`);
+    }
+    if (text.length > 0) (seenFindings[text] ||= []).push(l.lens);
+    if (!knownLensNames.has(l.lens.normalize("NFKC").toLowerCase())) {
+      info.push(`lens '${l.lens}' is not in LENS_CATALOG — see --listLenses for the catalog`);
+    }
+    if (text.length > 0 && !/\b(?:hyp|crit)-\d+\b/i.test(text)) {
+      info.push(`lens '${l.lens}' finding cites no hyp-N or crit-N anchor — tie the observation to a registered artifact`);
+    }
+  }
+  for (const [text, lenses] of Object.entries(seenFindings)) {
+    const distinct = new Set(lenses.map(n => n.normalize("NFKC").toLowerCase()));
+    if (distinct.size > 1) warn.push(`lenses ${[...distinct].join(" and ")} share an identical finding text (copy-paste suspected)`);
+  }
+  // Short --newInsightNotes: the convergence rationale must be substantive.
+  for (const t of history) {
+    if (t.newInsightNotes != null && t.newInsightNotes.trim().length > 0 && t.newInsightNotes.trim().length < 20) {
+      warn.push(`--newInsightNotes at thought ${t.thoughtNumber ?? "?"} is short (<20 chars): "${t.newInsightNotes.trim()}" — the convergence rationale should state why termination is safe`);
+    }
+  }
+  // Falsification convention: resolution result must match terminal status.
+  for (const h of hypotheses) {
+    const res = h.falsificationResult?.trim().toLowerCase() ?? "";
+    if ((h.status === "selected" || h.status === "synthesized") && res.startsWith("falsified:")) {
+      warn.push(`'${h.id}' is ${h.status} but falsificationResult starts 'falsified:' — a falsified hypothesis should not survive resolution`);
+    }
+    if (h.status === "rejected" && res.startsWith("survived:") && !(h.notes ?? "").includes("[PREFERENCE]")) {
+      warn.push(`'${h.id}' rejected but falsificationResult starts 'survived:' with no [PREFERENCE] in notes — rejection of a surviving hypothesis needs an explicit preference rationale`);
+    }
+  }
   if (!isPathA && terminated && lensNames.size < 2) {
     if (!disabledGateViolations.some(v => v.startsWith("gate lenses"))) {
       warn.push(`only ${lensNames.size} distinct lens name(s) recorded`);

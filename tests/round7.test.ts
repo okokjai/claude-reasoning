@@ -233,3 +233,95 @@ describe("Task 5: --flipIf flag + trace column", () => {
     expect(card).toMatch(/flipIf/);
   });
 });
+
+describe("Task 4: weak-content WARNs + falsification convention", () => {
+  beforeEach(() => {
+    if (existsSync(STATE)) unlinkSync(STATE);
+  });
+
+  it("lens finding <20 chars triggers WARN", () => {
+    run(["--mode", "path-b", "--recordLens", "--lens", "first-principles", "--finding", "x"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\[WARN\].*finding.*<20|finding.*short/i);
+  });
+
+  it("short --newInsightNotes triggers WARN", () => {
+    // Build a complete session so the terminating thought is recorded.
+    run(["--mode", "path-b", "--thought", "t1 decompose", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1", "--falsification", "falsify H1 condition"]);
+    run(["--registerHypothesis", "H2", "--falsification", "falsify H2 condition"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "n", "--falsificationResult", "held", "--flipIf", "x"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "n", "--falsificationResult", "broken"]);
+    run(["--recordLens", "--lens", "first-principles", "--finding", "Constraint findings anchored to hyp-1"]);
+    run(["--recordLens", "--lens", "premortem", "--finding", "Collapse findings anchored to hyp-1"]);
+    run(["--addCriterion", "crit 1"]);
+    run(["--checkCriterion", "crit-1", "--met", "true"]);
+    run(["--thought", "t2 synthesize", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    const term = run([
+      "--thought", "conclude",
+      "--thoughtNumber", "3",
+      "--totalThoughts", "4",
+      "--nextThoughtNeeded", "false",
+      "--newInsight", "false",
+      "--newInsightNotes", "done",
+    ]);
+    expect(term.code).toBe(0);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\[WARN\].*newInsightNotes/i);
+  });
+
+  it("duplicate findings across different lenses trigger WARN", () => {
+    run(["--mode", "path-b", "--recordLens", "--lens", "first-principles", "--finding", "Identical finding text across lenses"]);
+    run(["--recordLens", "--lens", "premortem", "--finding", "Identical finding text across lenses"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\[WARN\].*identical finding|duplicate.*finding/i);
+  });
+
+  it("unknown lens name triggers INFO suggesting catalog", () => {
+    run(["--mode", "path-b", "--recordLens", "--lens", "nonexistent-lens-xyz", "--finding", "A reasonably long finding text mentioning hyp-1"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\[INFO\].*nonexistent-lens-xyz.*catalog|catalog.*nonexistent-lens-xyz/i);
+  });
+
+  it("selected hypothesis with 'falsified:' falsificationResult triggers WARN", () => {
+    run(["--mode", "path-b", "--registerHypothesis", "h1", "--falsification", "if x then not h1"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "chosen", "--falsificationResult", "falsified: the clause broke", "--flipIf", "reversal"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\[WARN\].*hyp-1.*falsif/i);
+  });
+
+  it("rejected hypothesis with 'survived:' and no [PREFERENCE] triggers WARN", () => {
+    run(["--mode", "path-b", "--registerHypothesis", "h1", "--falsification", "if x then not h1"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "notes", "--falsificationResult", "survived: held up"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\[WARN\].*hyp-1.*survived|PREFERENCE/i);
+  });
+
+  it("rejected hypothesis with 'survived:' and [PREFERENCE] note does NOT trigger that WARN", () => {
+    run(["--mode", "path-b", "--registerHypothesis", "h1", "--falsification", "if x then not h1"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "rejected", "--hypothesisNotes", "[PREFERENCE] chose simpler option", "--falsificationResult", "survived: held up"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/\[WARN\].*survived/i);
+  });
+
+  it("lens finding without hyp-N or crit-N reference triggers INFO", () => {
+    run(["--mode", "path-b", "--recordLens", "--lens", "premortem", "--finding", "A long finding without any artifact reference"]);
+    const r = run(["--export"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/\[INFO\].*hyp-N|crit-N|artifact|anchor/i);
+  });
+
+  it("lens finding citing hyp-1 does NOT trigger the missing-ID INFO", () => {
+    run(["--mode", "path-b", "--recordLens", "--lens", "premortem", "--finding", "Failure mode undermines hyp-1 directly"]);
+    const r = run("--export".split(" "));
+    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/\[INFO\].*anchor|hyp-N|crit-N/i);
+  });
+});
