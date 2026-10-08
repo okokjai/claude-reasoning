@@ -201,6 +201,45 @@ describe("Task 3: pendingActions pure function + integration", () => {
   });
 });
 
+describe("Task 7: help text + converged-session pending", () => {
+  beforeEach(() => {
+    if (existsSync(STATE)) unlinkSync(STATE);
+  });
+
+  it("--help mentions --listLenses, --kind, --analyze, --flipIf", () => {
+    const r = run(["--help"]);
+    expect(r.code).toBe(0);
+    for (const flag of ["--listLenses", "--kind", "--analyze", "--flipIf"]) {
+      expect(r.out).toContain(flag);
+    }
+  });
+
+  it("pending is empty after a converged termination (ready=yes reachable)", () => {
+    run(["--mode", "path-b", "--thought", "t1 decompose", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    run(["--registerHypothesis", "H1", "--falsification", "falsify H1 condition"]);
+    run(["--registerHypothesis", "H2", "--falsification", "falsify H2 condition"]);
+    run(["--resolveHypothesis", "hyp-1", "--hypothesisStatus", "selected", "--hypothesisNotes", "notes 1", "--falsificationResult", "survived: x", "--flipIf", "reversal"]);
+    run(["--resolveHypothesis", "hyp-2", "--hypothesisStatus", "rejected", "--hypothesisNotes", "notes 2", "--falsificationResult", "falsified: y"]);
+    run(["--addCriterion", "crit 1"]);
+    run(["--checkCriterion", "crit-1", "--met", "true"]);
+    run(["--recordLens", "--lens", "first-principles", "--finding", "Irreducible constraint findings for hyp-1"]);
+    run(["--recordLens", "--lens", "premortem", "--finding", "Red team catastrophic collapse findings for hyp-2"]);
+    run(["--thought", "t2 explore", "--thoughtNumber", "2", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);
+    const term = run([
+      "--thought", "t3 conclude",
+      "--thoughtNumber", "3",
+      "--totalThoughts", "4",
+      "--nextThoughtNeeded", "false",
+      "--newInsight", "false",
+      "--newInsightNotes", "converged: no new insight this round",
+    ]);
+    expect(term.code).toBe(0);
+    expect(term.out).toMatch(/ready=yes blockers=0/);
+    const s = run(["--status"]);
+    expect(JSON.parse(s.out).pending).toEqual([]);
+  });
+});
+
 describe("Task 5: --flipIf flag + trace column", () => {
   beforeEach(() => {
     if (existsSync(STATE)) unlinkSync(STATE);

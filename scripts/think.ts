@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.0.8 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.2.0 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -515,11 +515,15 @@ export function pendingActions(state: State): string[] {
     }
   }
 
-  // Gate 9: Convergence declaration or prior exploration
+  // Gate 9: Convergence declaration or prior exploration. The terminating
+  // thought itself satisfies the gate when it declares --newInsight false with
+  // non-empty notes, so inspect the last recorded thought too.
   const hasBranchOrRevision = state.thoughtHistory.some(
     t => t.isRevision || t.branchFromThought != null,
   );
-  if (!hasBranchOrRevision) {
+  const declaredConvergence = prevThought != null && prevThought.newInsight === false &&
+    prevThought.newInsightNotes != null && prevThought.newInsightNotes.trim().length > 0;
+  if (!hasBranchOrRevision && !declaredConvergence) {
     pending.push("Declare convergence (--newInsight false --newInsightNotes '...') or explore via --isRevision / --branchFromThought");
   }
 
@@ -1366,7 +1370,7 @@ if (values.help) {
   if (combined.length > 0) {
     fail(`--help cannot be combined with ${combined.map(f => `--${f}`).join(", ")}; pass --help alone.`);
   }
-  console.log("Usage: bun scripts/think.ts [options]\nRun `bun scripts/think.ts --status` or pass `--thought` to begin.");
+  console.log("Usage: bun scripts/think.ts [options]\nRun `bun scripts/think.ts --status` or pass `--thought` to begin.\nPath B helpers: --kind <kind> (first thought), --listLenses [--kind <kind>], --analyze <sensitivity|pareto|ach> --data '<json>', --flipIf '<condition>' on --resolveHypothesis.");
   process.exit(0);
 }
 if (values.listLenses) {

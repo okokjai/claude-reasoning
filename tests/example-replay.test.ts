@@ -112,7 +112,7 @@ describe("references/example-path-b-verify.md is executable", () => {
       }
     }
 
-    expect(commandCount).toBe(20);
+    expect(commandCount).toBe(22);
     expect(failures).toEqual([]);
   });
 
@@ -177,6 +177,52 @@ describe("references/example-path-b-verify.md is executable", () => {
       expect(block).toContain("--negativeQuery");
       expect(block).toContain("--negativeFinding");
     }
+  });
+
+  it("Path B example declares --kind on the first thought and applies lenses before resolution", () => {
+    const text = readFileSync(EXAMPLE, "utf-8");
+    const blocks = bashBlocks(text);
+
+    // The first --thought submission must declare the problem kind so
+    // kind-core lens guidance applies from the start of the session.
+    const firstThought = blocks
+      .flatMap(b => invocations(b))
+      .find(tokens => tokens.join(" ").includes("--thought") && !tokens.join(" ").includes("--isRevision"));
+    expect(firstThought).toBeDefined();
+    expect(firstThought!.join(" ")).toContain("--kind decision");
+
+    // Lens evaluation happens BEFORE hypothesis resolution: recording a lens
+    // after --resolveHypothesis is post-hoc labeling, not evaluation.
+    const joined = blocks.join("\n");
+    const firstLensIdx = Math.min(
+      ...["--recordLens", "--analyze"].map(k => {
+        const i = joined.indexOf(k);
+        return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+      }),
+    );
+    const firstResolveIdx = joined.indexOf("--resolveHypothesis");
+    expect(firstLensIdx).toBeLessThan(firstResolveIdx);
+
+    // Every lens finding anchors to a registered artifact (hyp-N / crit-N) —
+    // the lint report flags unanchored findings with an INFO notice.
+    for (const m of text.matchAll(/--finding "([^"]+)"/g)) {
+      expect(/\b(?:hyp|crit)-\d+\b/i.test(m[1])).toBe(true);
+    }
+
+    // falsificationResult follows the survived:/falsified: convention, and a
+    // selected hypothesis carries its --flipIf reversal condition.
+    for (const m of text.matchAll(/--falsificationResult\s+["']([^"']+)["']/g)) {
+      expect(m[1]).toMatch(/^(survived|falsified):/);
+    }
+    const resolveBlocks = blocks.filter(b => b.includes("--hypothesisStatus selected") || b.includes("--hypothesisStatus synthesized"));
+    expect(resolveBlocks.length).toBeGreaterThan(0);
+    for (const b of resolveBlocks) {
+      expect(b).toContain("--flipIf");
+    }
+
+    // The status-line contract: each thought documents ready=/blockers= so the
+    // reader sees real-time termination readiness, not just next=true.
+    expect(text).toMatch(/# Output:.*ready=(yes|no)/);
   });
 });
 

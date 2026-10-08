@@ -1,4 +1,4 @@
-# claude-reasoning 3.0.9
+# claude-reasoning 3.2.0
 
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat-square&logo=github)](https://github.com/okokjai/claude-reasoning/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
@@ -14,14 +14,14 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
 - **Path A — closed-form.** 3–5 thoughts: restate and surface hidden definitions → derive → cross-validate with an independent method → stop. No claims, no external search, no padding. Termination before 3 thoughts is rejected; depth beyond 5 is rejected. Claims and hypotheses are forbidden in Path A.
-- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes` and `--falsificationResult`) → 2–4 critical lenses chosen for the task, recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, merges leave fewer than 2 distinct surviving hypotheses, **every resolved hypothesis is `rejected`** (at least one must be `selected` or `synthesized`), or any of gates 6–11 fails (unchecked acceptance criteria, an unmet criterion without revision or `--newInsightNotes`, fewer than 2 distinct lens names, no convergence declaration with history lacking a revision/branch, a resolved non-merged hypothesis without `falsificationResult`, or a branch opened with no main-line thought after it).
+- **Path B — open-ended.** Decompose → ≥2 competing hypotheses (registered via `--registerHypothesis` with a required `--falsification` clause, resolved via `--resolveHypothesis` with `--hypothesisNotes`, `--falsificationResult` under the `survived:`/`falsified:` convention, and `--flipIf` on survivors) → 2–4 critical lenses chosen for the task from the 11-lens catalog (`--listLenses`; `--kind <kind>` on the first thought names the kind's core lenses in `pending` guidance; `sensitivity`/`pareto`/`ach` can also be computed deterministically via `--analyze <kind> --data '<json>'`) recorded via `--recordLens --lens … --finding …` → converge at the first round with no new insight. Every command reports real-time readiness (`ready=`/`blockers=` on thought status lines, `next:`/`pending:` in side-command and `--status` JSON). Termination is rejected while fewer than 2 hypotheses exist, any remains `pending`, fewer than 2 thoughts precede the concluding thought, the previous thought flagged `--needsMoreThoughts`, merges leave fewer than 2 distinct surviving hypotheses, **every resolved hypothesis is `rejected`** (at least one must be `selected` or `synthesized`), or any of gates 6–11 fails (unchecked acceptance criteria, an unmet criterion without revision or `--newInsightNotes`, fewer than 2 distinct lens names, no convergence declaration with history lacking a revision/branch, a resolved non-merged hypothesis without `falsificationResult`, or a branch opened with no main-line thought after it).
 - **External verification module.** Fires only when a Path B argument depends on a real-world factual claim. Enforces pre-registration before search (with a required `--supports <hyp-id>` link, and optional `--polarity supports|refutes` to record whether evidence confirms or refutes the hypothesis; refuting claims yield `Linked-refuted` in export), ≥2 independent sources for `verified` classified by `--claimTier` against `references/source-tiers.md` (at least two from Tier 1/2), plus a recorded `--claimQuote`, `--negativeQuery`, and `--negativeFinding`, per-source publication dates via `--claimDate` (aligned to `--claimSource`; the lint warns when a verified claim's newest date is >180 days old), explicit `single_source` / `unverified` / `not_found` outcomes, and blocks termination while any claim is unresolved.
 - **Tier shape validation on every status.** A `--claimTier` supplied with any `--claimStatus` must be an integer 1–4 and one per `--claimSource`; a non-conforming vector exits 1 rather than persisting `NaN`/out-of-range tiers on a `single_source`, `unverified`, or `not_found` claim.
 - **Session clock & reasoning trace.** Every session is stamped (`startedAt`/`endedAt`) with a `today()` local calendar date exposed via `--status`. `--export` (and termination) prints a `buildLintReport` fact sheet led by a `Session Clock` line and, when a hypothesis/lens/criterion exists, a `## Reasoning Trace` section of machine-derived tables (hypotheses with their falsification outcomes, lens findings, criteria). The fact sheet also carries CRIT residuals an active gate should have blocked, WARN entries (missing rationale, disabled gates, thin lens coverage, stale source dates), INFO escape surfaces, acceptance-criterion status, lens findings, and the block-quoted final thought — headed by the standing warning that this is the script's view of state, not the final answer.
 - **Zero MCP.** A single TypeScript state machine (`scripts/think.ts`) persisting to `scripts/.think_state.json`.
 - **Integrated High-Value References (ported & cleaned from 1.2.0):**
   - `references/source-tiers.md`: 4-tier credibility hierarchy (Tier 1 Primary to Tier 4 AI Summaries) with 2-source corroboration rule.
-  - `references/critical-lenses.md`: 12 critical red-team evaluation perspectives (First Principles, Red-Team Attack, Edge Case, Pareto, etc.).
+  - `references/critical-lenses.md`: 11-lens catalog (First Principles, Pre-Mortem & Active Red Team, Contrarian, Reversal, Scale & Boundary Stress, Sensitivity Analysis, Pareto Frontier, Differential Elimination / ACH, Second-Order, Reversibility, Blast Radius) — mirrored by `--listLenses`; `sensitivity`/`pareto`/`ach` are computed via `--analyze`.
   - `references/hallucination-gates.md`: 5 P0 semantic anti-hallucination gates (Verifier Separation, Entity Check, Honest Tool Absence).
   - `references/conclusion-card.md`: conclusion-first card with 5 calibrated confidence labels (`Confirmed`, `Probable`, `Plausible`, `Unverified`, `Contested`), a findings table with per-source dates, and a mandatory verbatim-pasted Reasoning Trace.
 
@@ -66,8 +66,9 @@ bun scripts/think.ts --mode path-a --thought "Restate + implicit definitions" --
 bun scripts/think.ts --thought "Primary derivation"             --thoughtNumber 2 --totalThoughts 3 --nextThoughtNeeded true
 bun scripts/think.ts --thought "Independent cross-validation"   --thoughtNumber 3 --totalThoughts 3 --nextThoughtNeeded false
 
-# Path B: declare --mode path-b on the first thought
-bun scripts/think.ts --mode path-b --thought "Deconstruct open-ended problem" --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true
+# Path B: declare --mode path-b on the first thought (--kind <kind> optional,
+# immutable after thought 1; --listLenses prints the 11-lens catalog)
+bun scripts/think.ts --mode path-b --kind decision --thought "Deconstruct open-ended problem" --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true
 
 # Register ≥2 competing hypotheses with a falsification clause (required before Path B termination)
 bun scripts/think.ts --registerHypothesis "Direct API is superior for developer agility" \
@@ -80,6 +81,9 @@ bun scripts/think.ts --addCriterion "Cost delta backed by two independent source
 bun scripts/think.ts --checkCriterion crit-1 --met true
 bun scripts/think.ts --recordLens --lens "first-principles" --finding "egress is 40% of the delta"
 
+# Computed lenses run deterministically via --analyze (persist as computed findings)
+bun scripts/think.ts --analyze sensitivity --data '{"candidates":[{"id":"a","scores":{"cost":0.9}},{"id":"b","scores":{"cost":0.7}}],"criteria":[{"name":"cost","weight":1,"direction":"max"}]}'
+
 # Pre-register a claim BEFORE searching — --supports links it to a hypothesis
 bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-1
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
@@ -90,11 +94,13 @@ bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --negativeQuery "bedrock prompt caching unsupported regions" \
   --negativeFinding "None found; docs confirm support in all commercial regions."
 
-# Resolve hypotheses before concluding — terminal statuses need notes + falsificationResult
+# Resolve hypotheses before concluding — terminal statuses need notes +
+# falsificationResult (survived:/falsified: convention; --flipIf on survivors)
 bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected \
-  --hypothesisNotes "latency + feature parity" --falsificationResult broken
+  --hypothesisNotes "latency + feature parity" --falsificationResult "survived: no lag found" \
+  --flipIf "managed service ships equivalent latency"
 bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected \
-  --hypothesisNotes "governance edge does not offset lock-in" --falsificationResult held
+  --hypothesisNotes "[PREFERENCE] governance edge does not offset lock-in" --falsificationResult "survived: controls achievable but not needed"
 
 # If two hypotheses turn out to be the same mechanism viewed differently,
 # merge rather than forcing one to "win" — requires --mergedInto + --hypothesisNotes
@@ -193,7 +199,8 @@ The session clock is stamped by the script: `startedAt` on the first thought, `e
 ```bash
 bun run typecheck && bun test
 ```
-Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), the `--thought` standalone-mode guard, and the v3.0.8 surfaces (session clock, `--claimDate` alignment/freshness, reasoning-trace tables, `escapeCell` escaping). `bun test` runs the comprehensive regression suite across 11 files.
+
+Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), the `--thought` standalone-mode guard, the v3.0.8 surfaces (session clock, `--claimDate` alignment/freshness, reasoning-trace tables, `escapeCell` escaping), and the v3.2.0 surfaces (`LENS_CATALOG`/`--listLenses`, `--kind` problem kinds, `pendingActions` per-step guidance, `--analyze sensitivity|pareto|ach`, `--flipIf`, weak-content lint WARNs). `bun test` runs the comprehensive regression suite across 12 files.
 
 ## Design notes
 

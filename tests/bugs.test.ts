@@ -303,20 +303,14 @@ describe("Bug 15: doc drift", () => {
     expect(readme).not.toMatch(/266 tests/);
   });
 
-  it("SKILL:267 hypothesisStatus enum includes pending", () => {
+  it("SKILL hypothesisStatus enum includes pending", () => {
     const skill = readFileSync(join(ROOT, "SKILL.md"), "utf-8");
-    const lines = skill.split("\n");
-    const line267 = lines[266]; // 0-indexed
-    expect(line267).toContain("pending");
+    expect(skill).toMatch(/\| `--hypothesisStatus` \|[^\n]*`pending`/);
   });
 
-  it("SKILL:317 auditTrail lists all 7 ops", () => {
+  it("SKILL auditTrail lists all side-command ops", () => {
     const skill = readFileSync(join(ROOT, "SKILL.md"), "utf-8");
-    const lines = skill.split("\n");
-    const line317 = lines[316];
-    expect(line317).toContain("addCriterion");
-    expect(line317).toContain("checkCriterion");
-    expect(line317).toContain("recordLens");
+    expect(skill).toMatch(/auditTrail[^\n]*addCriterion[^\n]*checkCriterion[^\n]*recordLens/);
   });
 });
 

@@ -5,9 +5,19 @@
 
 ---
 
+## Step -2: Calibrate Clock
+
+`today` is the local calendar date emitted by the script — the only date source for this session.
+
+```bash
+bun scripts/think.ts --status
+```
+
+---
+
 ## Step 0: Classification
 - **Form**: Open-ended (involves architectural tradeoffs, pricing calculations, and operational realities).
-- **Route**: **Path B**.
+- **Route**: **Path B**; **kind**: `decision` — the question asks to choose between two named options.
 
 ---
 
@@ -16,9 +26,10 @@
 bun scripts/think.ts --reset
 bun scripts/think.ts \
   --mode path-b \
-  --thought "Step 0: Open-ended architecture evaluation. Deconstruct into 3 load-bearing sub-questions: (1) Pricing parity and prompt caching support, (2) Multi-region network latency from Taiwan, (3) Enterprise operational overhead. Pre-registering real-world factual claims before performing any web search." \
-  --thoughtNumber 1 --totalThoughts 6 --nextThoughtNeeded true
-# Output: [1/6] history=1 mode=path-b next=true
+  --kind decision \
+  --thought "Step 0: Open-ended architecture evaluation (kind=decision). Deconstruct into 3 load-bearing sub-questions: (1) Pricing parity and prompt caching support, (2) Multi-region network latency from Taiwan, (3) Enterprise operational overhead. Pre-registering real-world factual claims before performing any web search." \
+  --thoughtNumber 1 --totalThoughts 7 --nextThoughtNeeded true
+# Output: [1/7] history=1 mode=path-b next=true ready=no blockers=6
 ```
 
 ### Pre-Registering Hypotheses (Mandatory for Path B)
@@ -38,7 +49,7 @@ bun scripts/think.ts --registerHypothesis "AWS Bedrock is superior for enterpris
 ```bash
 # Claim 1: Bedrock supports prompt caching for Claude 3.5 Sonnet.
 # Every claim must name the hypothesis it bears on via --supports <hyp-id>.
-bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-1
+bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-2
 # Output: {"registered": "claim-1", "statement": "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet", "status": "pending"}
 
 # Claim 2: AWS Bedrock pricing for Claude 3.5 Sonnet matches Anthropic direct API pricing ($3/M input, $15/M output)
@@ -46,13 +57,42 @@ bun scripts/think.ts --registerClaim "AWS Bedrock pricing for Claude 3.5 Sonnet 
 # Output: {"registered": "claim-2", "statement": "AWS Bedrock pricing for Claude 3.5 Sonnet has exact base token price parity with Anthropic API", "status": "pending"}
 ```
 
+### Acceptance Criteria
+```bash
+bun scripts/think.ts --addCriterion "Recommendation states an explicit provider choice with the pricing and caching evidence behind it"
+# Output: {"added": "crit-1", ...}
+```
+
 ---
 
 ## Thought 2: Critical Lenses Selection & Hypothesis Deepening
+Lenses are applied BEFORE any resolution — the `pending` output names the kind-core lenses for `decision` (Sensitivity Analysis, Reversibility & One-Way Doors, Contrarian & Worst-Option Defense).
 ```bash
 bun scripts/think.ts \
-  --thought "Selecting 3 critical lenses from references/critical-lenses.md: (1) Sensitivity Analysis (token volume ±20% and caching hit rate), (2) Blast Radius & Degraded Mode (failover between direct API and cloud provider), (3) Pre-Mortem Red Team (single-vendor lock-in vs multi-region resilience). Evaluating registered hypotheses hyp-1 and hyp-2 against operational reality." \
-  --thoughtNumber 2 --totalThoughts 6 --nextThoughtNeeded true
+  --thought "Selecting the 3 core lenses for kind=decision (see --listLenses --kind decision): (1) Sensitivity Analysis (lens-6, computed — cost/ops weight and score perturbation), (2) Reversibility & One-Way Doors (lens-10 — unwind cost of each provider choice), (3) Contrarian & Worst-Option Defense (lens-3 — argue the case for the initially weaker option). Evaluating registered hypotheses hyp-1 and hyp-2 against operational reality before resolving either." \
+  --thoughtNumber 2 --totalThoughts 7 --nextThoughtNeeded true
+# Output: [2/7] history=2 mode=path-b next=true ready=no blockers=6
+```
+
+### Computed Lens: Sensitivity Analysis (lens-6)
+`--analyze sensitivity` perturbs each weight and each score by ±20% and reports whether the winner flips. Scores are normalized 0–1 per criterion (cost = token-price score, ops = operational-overhead score).
+```bash
+bun scripts/think.ts --analyze sensitivity --data '{"candidates":[{"id":"direct","scores":{"cost":0.9,"ops":0.8}},{"id":"bedrock","scores":{"cost":0.9,"ops":0.6}}],"criteria":[{"name":"cost","weight":0.6,"direction":"max"},{"name":"ops","weight":0.4,"direction":"max"}]}'
+# Output: {"recorded": ..., "analysis": ..., "next": [...]}
+#   analysis: flips=false, stableRank=direct, perturbations=[] — direct scores 0.86 vs bedrock 0.78 at baseline; no ±20% perturbation of the cost weight (0.48–0.72) or any score flips the ranking.
+```
+
+### Prose Lenses
+Lens findings reference the hypothesis or criterion they bear on (`hyp-N`/`crit-N`) — unanchored findings are flagged by the lint report. The computed result is also recorded under its catalog name so the kind-core coverage check sees it.
+```bash
+bun scripts/think.ts --recordLens --lens "Sensitivity Analysis" --finding "±20% perturbation on the cost weight (0.48–0.72) and every score leaves hyp-1 (direct) the winner — stableRank=direct, 0 flips, so crit-1's price-parity evidence is robust."
+# Output: {"recorded": ..., "next": [...]}
+
+bun scripts/think.ts --recordLens --lens "Reversibility & One-Way Doors" --finding "Both hyp-1 and hyp-2 are Type 2 (reversible): provider choice is endpoint+credential config, not a one-way door; a bounded Bedrock experiment can precede commitment."
+# Output: {"recorded": ..., "next": [...]}
+
+bun scripts/think.ts --recordLens --lens "Contrarian & Worst-Option Defense" --finding "Worst-ranked hyp-2 becomes optimal only if the team already runs AWS VPC with IAM mandates — under that boundary crit-1 would favor Bedrock despite the latency penalty."
+# Output: {"recorded": ..., "next": [...]}
 ```
 
 ---
@@ -73,8 +113,9 @@ bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimTier 1 --claimTier 1 \
   --claimQuote "Prompt caching is supported for Anthropic Claude 3.5 Sonnet on Amazon Bedrock in the US East (N. Virginia) and US West (Oregon) regions." \
   --negativeQuery "AWS Bedrock Claude prompt caching limitations region availability" \
-  --negativeFinding "Negative search returned no contradicting source; it did confirm prompt caching was initially limited to us-east-1 and us-west-2, so the claim is scoped to those regions." \
+  --negativeFinding "search: AWS Bedrock Claude prompt caching limitations region availability\nresult: no contradicting source; docs confirm prompt caching was initially limited to us-east-1 and us-west-2, so the claim is scoped to those regions." \
   --claimNotes "Tier 1 AWS documentation and Anthropic documentation confirm prompt caching support; the negative search surfaced the regional restriction recorded above."
+# Output: {"verified": "claim-1", "status": "verified", "sources": [...], "next": [...]}
 ```
 
 2. **Verify Claim 2**:
@@ -89,14 +130,16 @@ bun scripts/think.ts --verifyClaim claim-2 --claimStatus verified \
   --claimTier 1 --claimTier 1 \
   --claimQuote "Claude 3.5 Sonnet: $3 per million input tokens, $15 per million output tokens." \
   --negativeQuery "Anthropic vs AWS Bedrock Claude 3.5 Sonnet price difference" \
-  --negativeFinding "Negative search found no source reporting a base-token price difference; only differing enterprise discount and commitment terms were mentioned." \
+  --negativeFinding "search: Anthropic vs AWS Bedrock Claude 3.5 Sonnet price difference\nresult: no source reporting a base-token price difference; only differing enterprise discount and commitment terms were mentioned." \
   --claimNotes "Both Tier 1 pricing tables confirm exact parity for on-demand base input/output tokens."
+# Output: {"verified": "claim-2", "status": "verified", "sources": [...], "next": [...]}
 ```
 
 ```bash
 bun scripts/think.ts \
   --thought "Both registered claims verified with dual Tier 1 sources. Negative search confirmed Bedrock prompt caching requires us-east-1 or us-west-2, meaning Taiwan traffic will incur transatlantic round-trip latency (~150-180ms network RTT) regardless of provider choice unless Anthropic direct Tokyo/Singapore endpoints are utilized." \
-  --thoughtNumber 3 --totalThoughts 6 --nextThoughtNeeded true
+  --thoughtNumber 3 --totalThoughts 7 --nextThoughtNeeded true
+# Output: [3/7] history=3 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3
 ```
 
 ---
@@ -104,8 +147,9 @@ bun scripts/think.ts \
 ## Thought 4: Anti-Hallucination Semantic Gates
 ```bash
 bun scripts/think.ts \
-  --thought 'Executing references/hallucination-gates.md P0 audit: (1) Entity & Metric: $3/$15 confirmed via Tier 1 docs; (2) Dual-source: Both claims backed by distinct authoritative endpoints; (3) Temporal: Reference date is the today field emitted by --status; every source age measured against it, source publish dates recorded via --claimDate as <YYYY-MM-DD>; (4) Negative search: Executed and surfaced regional routing constraints; (5) Tool compliance: Real results reported without embellishment. All 5 gates passed.' \
-  --thoughtNumber 4 --totalThoughts 6 --nextThoughtNeeded true
+  --thought 'Executing references/hallucination-gates.md P0 audit: (1) Entity & Metric: $3/$15 confirmed via Tier 1 docs; (2) Dual-source: Both claims backed by distinct authoritative endpoints; (3) Temporal: Reference date is the today field emitted by --status (local calendar date); every source age measured against it, source publish dates recorded via --claimDate as <YYYY-MM-DD>; (4) Negative search: Executed and surfaced regional routing constraints; (5) Tool compliance: Real results reported without embellishment. All 5 gates passed.' \
+  --thoughtNumber 4 --totalThoughts 7 --nextThoughtNeeded true
+# Output: [4/7] history=4 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3
 ```
 
 ---
@@ -113,48 +157,42 @@ bun scripts/think.ts \
 ## Thought 5: Synthesis & Decision Convergence
 ```bash
 bun scripts/think.ts \
-  --thought "Synthesizing findings: H2 (Bedrock) is favored if the organization already operates inside AWS VPC and requires IAM/data-perimeter compliance. However, if prompt caching is critical, calls route to US regions, negating any APAC regional latency advantage. H1 (Direct API) is favored for zero-AWS overhead and faster access to beta capabilities." \
-  --thoughtNumber 5 --totalThoughts 6 --nextThoughtNeeded true
+  --thought "Synthesizing findings: hyp-2 (Bedrock) is favored if the organization already operates inside AWS VPC and requires IAM/data-perimeter compliance. However, if prompt caching is critical, calls route to US regions, negating any APAC regional latency advantage. hyp-1 (Direct API) is favored for zero-AWS overhead and faster access to beta capabilities. Sensitivity analysis shows direct stays the winner under ±20% cost/ops perturbation; the decision is not brittle to scoring noise." \
+  --thoughtNumber 5 --totalThoughts 7 --nextThoughtNeeded true
+# Output: [5/7] history=5 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3
 ```
 
 ---
 
-## Thought 6: Resolve Hypotheses & Final Termination
-Before terminating, resolve all registered hypotheses:
+## Thought 6: Resolve Hypotheses
+Lenses were applied before this point; resolution now records the falsification outcome under the `survived:`/`falsified:` convention, and the selected hypothesis carries `--flipIf` (the observable condition that would overturn it).
 ```bash
 bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected \
-  --hypothesisNotes "H1 selected for agility and feature velocity unless Bedrock offers strictly equivalent latency" \
-  --falsificationResult "Falsification clause did not hold: no evidence of a >1 release-cycle lag was found, so the agility advantage stands."
+  --hypothesisNotes "hyp-1 selected for agility and feature velocity unless Bedrock offers strictly equivalent latency" \
+  --falsificationResult "survived: no evidence of a >1 release-cycle lag was found, so the agility advantage stands." \
+  --flipIf "Bedrock ships prompt caching in an APAC region AND matches Anthropic feature parity within one release cycle"
 # Output: {"resolved": "hyp-1", "status": "selected"}
 
 bun scripts/think.ts --resolveHypothesis hyp-2 --hypothesisStatus rejected \
-  --hypothesisNotes "H2 rejected for this team's lightweight cloud-agnostic profile, but retained as contingency if enterprise requirements change" \
-  --falsificationResult "Falsification clause held: Bedrock compliance controls were achievable, but the team's profile does not require them at the resulting cost."
+  --hypothesisNotes "[PREFERENCE] hyp-2 rejected for this team's lightweight cloud-agnostic profile, but retained as contingency if enterprise requirements change" \
+  --falsificationResult "survived: Bedrock compliance controls were achievable, but the team's profile does not require them at the resulting cost."
 # Output: {"resolved": "hyp-2", "status": "rejected"}
 ```
 
-Record the acceptance criteria and critical-lens findings, then converge. Path B termination is blocked until at least one criterion, two distinct lenses, and a converged final thought exist.
-```bash
-bun scripts/think.ts --addCriterion "Recommendation states an explicit provider choice with the pricing and caching evidence behind it"
-# Output: {"added": "crit-1", ...}
+---
 
+## Thought 7: Final Termination
+Check the acceptance criterion, then terminate with all claims and hypotheses resolved.
+```bash
 bun scripts/think.ts --checkCriterion crit-1 --met true
 # Output: {"checked": "crit-1", "met": true, ...}
 
-bun scripts/think.ts --recordLens --lens "Sensitivity Analysis" --finding "Token volume ±20% and caching hit rate swing the cost gap by under 5%, so pricing parity is robust to volume."
-
-bun scripts/think.ts --recordLens --lens "Pre-Mortem Red Team" --finding "Single-vendor lock-in is the main failure mode; the fallback is routing to the other provider's equivalent endpoint."
-
-bun scripts/think.ts --recordLens --lens "Blast Radius & Degraded Mode" --finding "Failover between direct API and Bedrock is a config change; no data migration is required."
-```
-
-Now terminate with all claims and hypotheses resolved:
-```bash
 bun scripts/think.ts \
   --thought "Final conclusion formulated following references/conclusion-card.md structure. All claims verified, all hypotheses resolved; closing session." \
-  --thoughtNumber 6 --totalThoughts 6 --nextThoughtNeeded false \
-  --newInsight false --newInsightNotes "Session closes the pricing and caching sub-questions; APAC latency remains an open operational item."
-# stdout: a `💭 Thought 6/6` block then the Reasoning Lint & Fact Sheet.
+  --thoughtNumber 6 --totalThoughts 7 --nextThoughtNeeded false \
+  --newInsight false --newInsightNotes "Session closes the pricing and caching sub-questions; APAC latency remains an open operational item and no further evidence would change the provider split."
+# Output: [6/7] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false ready=yes blockers=0
+# stdout: a `💭 Thought 6/7` block then the Reasoning Lint & Fact Sheet.
 ```
 
 > **Dates in this example are `<YYYY-MM-DD>` placeholders — copy the pattern, never the value.**
@@ -189,16 +227,16 @@ bun scripts/think.ts \
 ```markdown
 ## Reasoning Trace
 ### Hypotheses
-| id | statement | falsification | result | status | reason |
-| --- | --- | --- | --- | --- | --- |
-| hyp-1 | Direct Anthropic API is optimal for agile startup speed... | Anthropic direct API lags Bedrock by more than one release cycle... | Falsification clause did not hold: no evidence of a >1 release-cycle lag... | selected | H1 selected for agility and feature velocity... |
-| hyp-2 | AWS Bedrock is superior for enterprise compliance... | Bedrock cannot satisfy the required data-residency or IAM isolation controls... | Falsification clause held: Bedrock compliance controls were achievable... | rejected | H2 rejected for this team's lightweight cloud-agnostic profile... |
+| id | statement | falsification | result | status | flipIf | reason |
+| --- | --- | --- | --- | --- | --- | --- |
+| hyp-1 | Direct Anthropic API is optimal for agile startup speed... | Anthropic direct API lags Bedrock by more than one release cycle... | survived: no evidence of a >1 release-cycle lag... | selected | Bedrock ships prompt caching in an APAC region... | hyp-1 selected for agility and feature velocity... |
+| hyp-2 | AWS Bedrock is superior for enterprise compliance... | Bedrock cannot satisfy the required data-residency or IAM isolation controls... | survived: Bedrock compliance controls were achievable... | rejected |  | [PREFERENCE] hyp-2 rejected for this team's lightweight... |
 ### Lenses
 | lens | finding |
 | --- | --- |
-| Sensitivity Analysis | Token volume ±20% and caching hit rate swing the cost gap by under 5%... |
-| Pre-Mortem Red Team | Single-vendor lock-in is the main failure mode... |
-| Blast Radius & Degraded Mode | Failover between direct API and Bedrock is a config change... |
+| analyze:sensitivity | Sensitivity: winner direct stable under ±20% perturbation |
+| Pre-Mortem & Active Red Team | Single-vendor lock-in undermines hyp-1 and hyp-2 alike... |
+| Blast Radius & Degraded Mode | Failover between direct API and Bedrock is a config change for hyp-1... |
 ### Criteria
 | id | criterion | met | reason |
 | --- | --- | --- | --- |

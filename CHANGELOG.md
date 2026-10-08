@@ -3,6 +3,31 @@
 All notable changes to this skill are documented here.
 
 
+## [3.2.0] - 2026-10-08
+
+### Added
+
+- **11-lens `LENS_CATALOG` and `--listLenses`.** `scripts/think.ts` now carries a machine-readable catalog of 11 lenses (`lens-1`…`lens-11`) with id, name, aliases, type (`prose`/`state-delta`/`computed`), primary problem kinds, and required artifact. `--listLenses [--kind <kind>]` prints the catalog as JSON, sorting the kind's core lenses first.
+- **`--kind` problem kinds on Path B.** The first Path B thought may declare `--kind diagnostic|decision|design|optimization|innovation|planning` (immutable thereafter; Path A rejects it). Each kind maps to core and optional lenses (`KIND_CORE_LENSES`/`KIND_OPTIONAL_LENSES`); `pending` guidance names a kind's uncovered core lenses until they are recorded.
+- **`pendingActions(state)` per-step guidance.** A pure function previews every unmet termination prerequisite without blocking: pending claims/hypotheses, minimum-thought floor, `--needsMoreThoughts` expansion, unchecked/unmet criteria, distinct-lens count, kind-core lens coverage, convergence declaration, falsification results, and unclosed branches. Surfaced as `next: string[]` in every side-command's JSON output, `pending: string[]` in `--status`, and `ready=<yes|no> blockers=<n>` appended to every thought's status line.
+- **`--analyze` deterministic computed lenses.** `--analyze sensitivity|pareto|ach --data '<json>'` computes sensitivity rank-flip analysis (±20% weight/score perturbation with a 5% equivalence span), Pareto non-dominated frontier, or ACH inconsistency ranking. Results persist to `state.lenses` as `{ lens: "analyze:<kind>", computed: true, analysis }` and render into the `## Reasoning Trace` as a `Computed Analysis` table.
+- **`--flipIf` observable reversal condition.** Optional flag on `--resolveHypothesis` recorded on `Hypothesis.flipIf`, rendered as a `flipIf` column in the Reasoning Trace hypotheses table; a `selected`/`synthesized` hypothesis without it emits a lint WARN.
+- **`falsificationResult` convention linting.** Results conventionally prefix `survived:`/`falsified:`; the lint report warns on contradictions — `selected`/`synthesized` with `falsified:`, or `rejected` with `survived:` lacking a `[PREFERENCE]` marker in `--hypothesisNotes`.
+- **Weak-content lens WARNs.** The lint report flags lens findings under 20 characters, identical finding text shared across distinct lens names, lens names absent from `LENS_CATALOG` (INFO, suggests `--listLenses`), findings that cite no `hyp-N`/`crit-N` anchor (INFO), and short `--newInsightNotes` (<20 chars).
+
+### Fixed
+
+- **`pendingActions` convergence check ignored the terminating thought's declaration.** The gate-9 preview listed "Declare convergence…" even after the final thought recorded `--newInsight false` with notes; it now treats a recorded convergence declaration like a revision/branch in history, so `ready=yes blockers=0` is reachable after a converged termination.
+
+### Documentation
+
+- **`references/example-path-b-verify.md` rewritten** to the current execution contract: `--status` clock calibration first, `--kind decision` on the first thought, lenses (computed `--analyze sensitivity` plus catalog-named `--recordLens` findings anchored to `hyp-N`/`crit-N`) applied *before* `--resolveHypothesis`, `survived:`/`falsified:` falsification results, `--flipIf` on the selected hypothesis, `ready=`/`blockers=`/`next:` shown in documented outputs, and a Reasoning Trace mock carrying the `flipIf` column.
+- **`references/critical-lenses.md` aligned to the catalog** — 11 lenses keyed by `lens-N` id with types and primary kinds; the stale "Stage 5 & Modes" provenance and the unimplemented "Verifier Separation" lens are gone.
+- **`SKILL.md`** — Step -2 now states `today` is the **local** calendar date (not UTC); the Path B lens step lists all 11 catalog lenses and the `--kind`/`--listLenses`/`--analyze` surfaces; the flag reference gains `--kind`, `--flipIf`, `--listLenses`, `--analyze`, and `--data` rows; the status-line example shows `ready=`/`blockers=`.
+- **`README.md`** — lens bullet names the real 11-lens catalog (the phantom "Red-Team Attack"/"Edge Case" entries are removed), the usage block demos `--kind`/`--analyze`/`--flipIf` and the `survived:`/`falsified:` convention, and the tests paragraph lists the v3.2.0 surfaces.
+- **`references/hallucination-gates.md`** — Gate 3's reference-date line now says local calendar date, and the stale "Stage 5.5" subtitle is removed.
+- **`scripts/think.ts --help`** prints the new Path B helper flags (`--kind`, `--listLenses`, `--analyze`, `--flipIf`).
+
 ## [3.0.9] - 2026-10-07
 
 ### Added

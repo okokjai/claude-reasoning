@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 3.0.9
+version: 3.2.0
 description: "Use when reasoning through a decision, a design critique, an architecture tradeoff, a multi-step analysis, or an open-ended question needing verified external facts — before answering, not after. Structurally adaptive reasoning with claim-gated external verification. Routes by problem structure (closed-form vs open-ended), never by keyword or domain matching. Path A (closed-form): 3-5 thoughts with independent cross-validation, zero claim overhead. Path B (open-ended): adaptive depth, competing hypotheses, 2-4 critical lenses, conditional claim pre-registration with dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 3.0.9
+# claude-reasoning 3.2.0
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -15,7 +15,7 @@ State machine: `scripts/think.ts` (TypeScript, runs on `bun` or `npx tsx`). Pers
 ## Step -2: Calibrate clock
 
 Before the first thought, run `bun scripts/think.ts --status`. Its output carries
-`today` — the script's date, in UTC `YYYY-MM-DD`. That value is the **only**
+`today` — the script's local calendar date as `YYYY-MM-DD`. That value is the **only**
 date source for this session: every freshness judgement (Gate 3's six-month
 window, `--claimDate` comparisons, the card's "as of" line) references it, never
 a date inferred from search results, a source page, or memory. When a query needs
@@ -64,7 +64,7 @@ Announce the classification in Thought 1 so the routing is inspectable. Pass it 
 3. **Thought 3** — **Independently cross-validate with a different method**: reverse deduction, extreme-value substitution, set/complement enumeration, or brute-force state space.
 4. **Thoughts 4–5** — Only when Steps 2 and 3 disagree. Resolve the conflict, then terminate immediately.
 
-**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, any external search, depth expansion beyond 5. All seven side-commands (`--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`) are rejected with a Path A error — criteria (`--addCriterion`/`--checkCriterion`) and lens records (`--recordLens`) are Path B constructs.
+**Prohibited in Path A**: `--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, `--analyze`, `--kind`, any external search, depth expansion beyond 5. All eight side-commands (`--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`, `--addCriterion`, `--checkCriterion`, `--recordLens`, `--analyze`) are rejected with a Path A error — criteria (`--addCriterion`/`--checkCriterion`), lens records (`--recordLens`), and computed lens analyses (`--analyze`) are Path B constructs.
 
 Terminate as soon as the two independent methods agree: `--nextThoughtNeeded false`.
 
@@ -80,13 +80,18 @@ Do not send the first Path B thought until the four reference files in **Step -1
 
 1. **Decompose** — Split into essential sub-questions. Discard sub-questions that cannot change the decision.
 2. **Competing hypotheses** — For each load-bearing sub-question, state **≥ 2 mutually competing** hypotheses or options. A single option is not reasoning. Register each via `--registerHypothesis "<statement>" --falsification "<condition>"` (both flags required) and resolve each before terminating (`selected`, `rejected`, `synthesized`, or `merged`). Path B termination is rejected while fewer than 2 hypotheses are registered, any remains `pending`, merges leave fewer than 2 distinct surviving hypotheses, or **every resolved hypothesis is `rejected`** — at least one must be `selected` or `synthesized` to conclude. Terminal resolutions (`selected`/`rejected`/`synthesized`) **require `--hypothesisNotes <why>` and `--falsificationResult "<evidence/outcome>"`** (concrete description of whether the falsification condition held or broke). Use `merged` (with `--mergedInto…
-3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md`; record via `--recordLens --lens "<name>" --finding "<residual uncertainty>"`. Path B termination blocks with fewer than 2 distinct lens names recorded (Gate 8):
-   - **First principles & constraint reduction** — reduce to irreducible constraints.
-   - **Pre-mortem & active red team** — assume catastrophic failure 12 months out; identify what killed it.
-   - **Sensitivity analysis (±20% perturbation)** — perturb key numerical or capacity assumptions; check if rankings flip.
-   - **Scale & boundary stress (0.01× / 100×)** — evaluate non-linear cliffs at degenerate extremes.
-   - **Pareto frontier & trade-off explicitization** — make sacrifice explicit; identify non-dominated options.
-   - **Differential elimination** — systematically rule out hypotheses contradicted by verified facts.
+3. **Critical lenses** — Choose **2–4** that the task actually needs from `references/critical-lenses.md` (the full 11-lens catalog is also printed by `--listLenses`); record via `--recordLens --lens "<name>" --finding "<residual uncertainty>"`. Path B termination blocks with fewer than 2 distinct lens names recorded (Gate 8). When the first thought declares `--kind <kind>` (one of `diagnostic`, `decision`, `design`, `optimization`, `innovation`, `planning`), `pending`/`next` guidance names that kind's core lenses until they are covered; computed lenses (`sensitivity`, `pareto`, `ach`) may also be produced deterministically via `--analyze <kind> --data '<json>'`:
+   - **First Principles & Constraint Reduction** (lens-1) — reduce to irreducible constraints.
+   - **Pre-Mortem & Active Red Team** (lens-2) — assume catastrophic failure 12 months out; identify what killed it.
+   - **Contrarian & Worst-Option Defense** (lens-3) — argue the strongest case for the initially worst-ranked option.
+   - **Reversal & Assumption Inversion** (lens-4) — invert the central load-bearing assumption.
+   - **Scale & Boundary Stress** (lens-5, 0.01× / 100×) — evaluate non-linear cliffs at degenerate extremes.
+   - **Sensitivity Analysis** (lens-6, ±20% perturbation, `computed` via `--analyze sensitivity`) — perturb key numerical or capacity assumptions; check if rankings flip.
+   - **Pareto Frontier** (lens-7, `computed` via `--analyze pareto`) — make sacrifice explicit; identify non-dominated options.
+   - **Differential Elimination / ACH** (lens-8, `computed` via `--analyze ach`) — systematically rule out hypotheses contradicted by verified facts.
+   - **Second-Order & Incentive Effects** (lens-9) — downstream behaviors and perverse incentives once a choice is active.
+   - **Reversibility & One-Way Doors** (lens-10) — Type 1 vs Type 2 classification and unwind cost.
+   - **Blast Radius & Degraded Mode** (lens-11) — failure containment when dependencies crash.
    - **External verification** — **condition-gated, see below.**
 4. **Acceptance criteria** — Add target requirements via `--addCriterion "<text>"`. Check them as met or unmet via `--checkCriterion crit-N --met true|false [--criterionNotes "..."]`. Gate 6 blocks termination with no criterion registered or any unchecked criterion; Gate 7 blocks termination with an unmet criterion unless followed by a revision thought or explicit `--newInsightNotes` justification.
 5. **Anti-Hallucination Semantic Gates** — Before concluding, audit findings against the 5 P0 gates in `references/hallucination-gates.md`:
@@ -186,11 +191,16 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 # Start a session (run before every new task)
 bun scripts/think.ts --reset
 
-# Submit a thought (--mode required on the first thought of a session)
+# Submit a thought (--mode required on the first thought of a session;
+# --kind <kind> optional on the first Path B thought only, immutable thereafter)
 bun scripts/think.ts \
   --mode path-b \
+  --kind decision \
   --thought "analysis for this step" \
   --thoughtNumber 1 --totalThoughts 5 --nextThoughtNeeded true
+
+# Print the 11-lens catalog (optionally ordered so a kind's core lenses come first)
+bun scripts/think.ts --listLenses [--kind decision]
 
 # Revise an earlier thought (original is retained)
 bun scripts/think.ts --thought "corrected analysis" \
@@ -209,12 +219,19 @@ bun scripts/think.ts --thought "scope is larger than estimated" \
 # Hypothesis lifecycle (Path B)
 bun scripts/think.ts --registerHypothesis "<competing option or hypothesis>" --falsification "<condition that would falsify it>"
 bun scripts/think.ts --resolveHypothesis hyp-1 --hypothesisStatus selected \
-  --hypothesisNotes "wins on latency and ops cost" --falsificationResult broken
+  --hypothesisNotes "wins on latency and ops cost" \
+  --falsificationResult "survived: no lag evidence found" \
+  --flipIf "Bedrock matches feature parity within one release cycle"
 
 # Acceptance criteria and lenses (termination gates 6-8; convergence 9-11 checked at the end)
 bun scripts/think.ts --addCriterion "<target requirement>"
 bun scripts/think.ts --checkCriterion crit-1 --met true --criterionNotes "backed by two sources"
 bun scripts/think.ts --recordLens --lens "<lens name>" --finding "<residual uncertainty>"
+
+# Computed lenses (deterministic; persist as computed lens findings)
+bun scripts/think.ts --analyze sensitivity --data '{"candidates":[...],"criteria":[...]}'
+bun scripts/think.ts --analyze pareto      --data '{"candidates":[...],"objectives":[...]}'
+bun scripts/think.ts --analyze ach         --data '{"hypotheses":[...],"evidence":[...]}'
 
 # Claim lifecycle — --supports links each claim to a hypothesis
 bun scripts/think.ts --registerClaim "<pre-registered factual statement>" --supports hyp-1
@@ -242,14 +259,17 @@ bun scripts/think.ts --status
 Status line returned after each thought:
 
 ```
-[3/7] history=3 mode=path-b branches=alt-approach claims=claim-1,claim-2 next=true
+[3/7] history=3 mode=path-b branches=alt-approach claims=claim-1,claim-2 next=true ready=no blockers=4
 ```
+
+`ready=<yes|no>` reports whether every termination prerequisite is currently met; `blockers=<n>` counts the pending items. Side-command JSON carries the same guidance as `next: string[]`, and `--status` JSON as `pending: string[]`.
 
 ### Flag reference
 
 | Flag | Type | Notes |
 |---|---|---|
 | `--mode` | enum | `path-a` \| `path-b` — **required on the first thought**; immutable for the session |
+| `--kind` | enum | `diagnostic` \| `decision` \| `design` \| `optimization` \| `innovation` \| `planning` — optional on the **first Path B thought only**; immutable thereafter; Path A rejects it. Drives `pending`/`next` guidance for that kind's core lenses |
 | `--thought` | string | Thought content; a value starting with `-` needs `--thought=<value>`. **Standalone**: cannot be combined with any side-command (`--recordLens`, `--resolveHypothesis`, `--status`, …) — the thought would be silently discarded, so the combination exits 1 |
 | `--thoughtNumber` | int ≥ 1 | Current index; non-revisions must exceed every prior non-revision number (no repeats, no going backwards). A `--isRevision` thought may reuse the number it revises, and may carry any number — its position is `historyIndex`, not `thoughtNumber`; the next non-revision still has to exceed every prior non-revision |
 | `--totalThoughts` | int ≥ 1 | Estimate; auto-raised when `thoughtNumber` exceeds it (emits a `totalThoughts adjusted N->M` notice on stderr) |
@@ -266,13 +286,16 @@ Status line returned after each thought:
 | `--resolveHypothesis` | string | Target hypothesis id |
 | `--hypothesisStatus` | enum | `pending` \| `selected` \| `rejected` \| `synthesized` \| `merged`; **requires `--resolveHypothesis`** |
 | `--hypothesisNotes` | string | Rationale recorded on the hypothesis; **requires `--resolveHypothesis`**; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`) and `merged` |
-| `--falsificationResult` | string | Outcome of falsification test (`held`/`broken`); **requires `--resolveHypothesis`**; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`); **rejected** on `merged` — a merge is documented by `--mergedInto` alone, and a stale value is cleared when a resolved node is re-resolved to `merged` |
-| `--mergedInto` | string | **Requires `--resolveHypothesis`**; **required** when `--hypothesisStatus merged`; names the surviving hypothesis. Rejected with any other status, and for self-references, nonexistent ids, already-merged targets, already-rejected targets, or a resolving hypothesis that already absorbs another merge. A survivor still absorbing a member cannot itself be re-resolved to `rejected`/`pending` (re-point the member first) — `selected`/`synthesized` stay allowed |
+| `--falsificationResult` | string | Outcome of the falsification test — convention: prefix `survived:` or `falsified:` (contradictions like `selected` + `falsified:` or `rejected` + `survived:` without `[PREFERENCE]` in notes surface as lint WARNs); **requires `--resolveHypothesis`**; **required** for terminal resolutions (`selected`/`rejected`/`synthesized`); **rejected** on `merged` — a merge is documented by `--mergedInto` alone, and a stale value is cleared when a resolved node is re-resolved to `merged` |
+| `--flipIf` | string | Observable condition that would overturn a `selected`/`synthesized` hypothesis; **requires `--resolveHypothesis`**; a missing value on a surviving hypothesis emits a lint WARN asking what evidence would overturn the choice |
 | `--addCriterion` | string | Registers an acceptance criterion for the session (assigns `crit-N`) |
 | `--checkCriterion` | string | Criterion id to mark |
 | `--met` | `true`\|`false` | Mark criterion as met or unmet; **requires `--checkCriterion`** |
 | `--criterionNotes` | string | Context/notes for the criterion check; **requires `--checkCriterion`** |
 | `--recordLens` | flag | Records a critical evaluation lens; requires `--lens` and `--finding` |
+| `--listLenses` | flag | Prints the 11-entry `LENS_CATALOG` as JSON (`id`, `name`, `type`, `kinds`, `requiredArtifact`); with `--kind <kind>` the kind's core lenses sort first. Must run alone |
+| `--analyze` | enum | `sensitivity` \| `pareto` \| `ach` — computes a deterministic lens analysis from `--data` JSON and records it as a `computed` lens finding (`analyze:<kind>`); **requires `--data`**; Path B only |
+| `--data` | string | JSON input payload for `--analyze`: `sensitivity` takes `{candidates:[{id,scores}],criteria:[{name,weight,direction}]}`, `pareto` takes `{candidates:[{id,metrics}],objectives:[{name,direction}]}`, `ach` takes `{hypotheses:[{id}],evidence:[{id,matrix:{hypId:"C"|"I"|"N"}}]}`; **requires `--analyze`** |
 | `--lens` | string | Lens name (e.g. `pre-mortem`, `devil's advocate`); **requires `--recordLens`** |
 | `--finding` | string | Key finding/residual uncertainty from applying the lens; **requires `--recordLens`** |
 | `--registerClaim` | string | Pre-registration; assigns `claim-N`, status `pending`; **requires `--supports <hyp-id>`** in Path B |
@@ -314,7 +337,7 @@ Status line returned after each thought:
 
 ## State file
 
-`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`, `addCriterion`, `checkCriterion`, `recordLens`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
+`scripts/.think_state.json` — append-only `thoughtHistory`, `branches` keyed by branch id, `claims` keyed by claim id, and `auditTrail` recording every side-command (`registerClaim`, `verifyClaim`, `registerHypothesis`, `resolveHypothesis`, `addCriterion`, `checkCriterion`, `recordLens`, `analyze`) in invocation order. Survives across invocations; `--reset` clears it. `--status` exposes `auditTrail` alongside `fullHistory`, `branchDetails`, `claimDetails`, and `hypothesisDetails`.
 
 **Schema `v3`.** `ThoughtData` carries `historyIndex` — the 1-based position of the thought in the *timeline*, which is distinct from the caller-supplied `thoughtNumber` (revisions re-enter the history without renumbering it, so the two diverge). `AcceptanceCriterion` carries `checkedAtHistoryIndex`, the timeline position at which it was last checked. Any state file whose `schemaVersion` differs from the current `SCHEMA_VERSION` (v1 or v2) is migrated automatically on load and written back in the current form; the version is stored in the file as `schemaVersion`.
 
