@@ -10,6 +10,12 @@
 
 A Claude Code skill for **structurally adaptive reasoning** with **claim-gated external verification**. No MCP server required.
 
+## Architecture
+
+<p align="center">
+  <img src="assets/architecture-dashboard.svg" alt="claude-reasoning Architecture & Verification Dashboard" width="100%">
+</p>
+
 ## What it does
 
 - **Step 0 — Structural classifier.** Routes by the *structure* of the question (closed-form vs open-ended), never by topic keywords. `--mode` is **required on the first thought** and immutable for the rest of the session.
