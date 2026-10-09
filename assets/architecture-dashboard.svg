@@ -1,263 +1,259 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1260" width="100%" height="100%" style="background:#0e0e11; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1240" width="100%" height="100%" style="background:#111113; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,sans-serif;">
   <defs>
     <style>
       .mono { font-family: 'SF Mono', Consolas, Monaco, Menlo, monospace; }
-      .side-head { font-size: 12.5px; font-weight: 700; fill: #d4d4d8; }
-      .side-label { font-size: 11px; fill: #71717a; }
-      .node-title { font-size: 15px; font-weight: 800; fill: #ffffff; letter-spacing: -0.02em; }
-      .metric-label { font-size: 10px; font-weight: 600; fill: #71717a; text-transform: uppercase; letter-spacing: 0.04em; }
+      .anno { font-size: 11.5px; fill: #a1a1aa; }
+      .anno-head { font-size: 12.5px; font-weight: 700; fill: #e4e4e7; }
+      .anno-dim { font-size: 11px; fill: #71717a; }
+      .anno-cmd { font-size: 11px; fill: #d4d4d8; }
+      .hdr-label { font-size: 10px; font-weight: 600; fill: #71717a; text-transform: uppercase; letter-spacing: 0.05em; }
+      .ttl { font-size: 14.5px; font-weight: 800; fill: #ffffff; letter-spacing: -0.02em; }
     </style>
-    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 1 L 8 5 L 0 9 z" fill="#3f3f46"/>
     </marker>
   </defs>
 
   <!-- ================= TOP HEADER ================= -->
-  <g transform="translate(48, 44)">
+  <g transform="translate(44, 40)">
     <text x="0" y="24" font-size="26" font-weight="800" fill="#ffffff" letter-spacing="-0.03em">CLAUDE-REASONING</text>
     <rect x="272" y="7" width="54" height="22" rx="6" fill="#27272a"/>
     <text x="281" y="22" class="mono" font-size="11" font-weight="700" fill="#a1a1aa">v3.2.1</text>
     <text x="338" y="22" font-size="12" fill="#71717a">· claim-gated adaptive reasoning architecture</text>
   </g>
 
-  <!-- Vertical Divider separating Left Flow and Right Capabilities -->
-  <line x1="250" y1="110" x2="250" y2="1000" stroke="#222226" stroke-width="1.2" stroke-dasharray="4,4"/>
+  <!-- Divider between editorial column and system diagram -->
+  <line x1="244" y1="108" x2="244" y2="1150" stroke="#1f1f23" stroke-width="1"/>
 
-  <!-- ================= LEFT COLUMN: CONDENSED 5-STEP FLOW ================= -->
-  <text x="48" y="116" class="metric-label">workflow · 5 steps</text>
+  <!-- ================= LEFT COLUMN: EDITORIAL ANNOTATIONS ================= -->
+  <text x="44" y="118" class="hdr-label">operator notes</text>
 
-  <!-- Step 1: Start a session -->
-  <g transform="translate(48, 134)">
+  <!-- Block 1: start -->
+  <g transform="translate(44, 140)">
     <g>
-      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
-      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">1</text>
+      <rect width="30" height="30" rx="8" fill="#18181b" stroke="#27272a"/>
+      <text x="9" y="21" font-size="14" font-weight="800" fill="#f4f4f5">1</text>
     </g>
-    <text x="46" y="15" class="side-head">start session</text>
-    <text x="46" y="32" class="side-label">reset · stamp clock</text>
-    <g transform="translate(46, 44)">
-      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --reset</text>
-    </g>
+    <text x="42" y="13" class="anno-head">start</text>
+    <text x="42" y="29" class="anno-dim">fresh state · clock stamped</text>
+    <text x="42" y="56" class="mono anno-cmd">think.ts --reset</text>
+    <text x="42" y="74" class="mono anno-cmd">think.ts --status</text>
   </g>
 
-  <!-- Connector 1 -> 2 -->
-  <line x1="65" y1="212" x2="65" y2="242" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-
-  <!-- Step 2: Declare the structure -->
-  <g transform="translate(48, 252)">
+  <!-- Block 2: declare -->
+  <g transform="translate(44, 250)">
     <g>
-      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
-      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">2</text>
+      <rect width="30" height="30" rx="8" fill="#18181b" stroke="#27272a"/>
+      <text x="9" y="21" font-size="14" font-weight="800" fill="#f4f4f5">2</text>
     </g>
-    <text x="46" y="15" class="side-head">declare structure</text>
-    <text x="46" y="32" class="side-label">first thought locks mode</text>
-    <g transform="translate(46, 44)">
-      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">--mode path-a|path-b</text>
-    </g>
+    <text x="42" y="13" class="anno-head">declare</text>
+    <text x="42" y="29" class="anno-dim">first thought locks the mode</text>
+    <text x="42" y="56" class="mono anno-cmd">--mode path-a | path-b</text>
+    <text x="42" y="74" class="mono anno-cmd">--kind decision</text>
   </g>
 
-  <!-- Connector 2 -> 3 -->
-  <line x1="65" y1="330" x2="65" y2="360" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-
-  <!-- Step 3: Run the loop -->
-  <g transform="translate(48, 370)">
+  <!-- Block 3: run -->
+  <g transform="translate(44, 360)">
     <g>
-      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
-      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">3</text>
+      <rect width="30" height="30" rx="8" fill="#18181b" stroke="#27272a"/>
+      <text x="9" y="21" font-size="14" font-weight="800" fill="#f4f4f5">3</text>
     </g>
-    <text x="46" y="15" class="side-head">run the loop</text>
-    <text x="46" y="32" class="side-label">thoughts · hypotheses · lenses</text>
-    <g transform="translate(46, 44)">
-      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">--thought …</text>
-    </g>
+    <text x="42" y="13" class="anno-head">run</text>
+    <text x="42" y="29" class="anno-dim">thoughts · hypotheses · lenses</text>
+    <text x="42" y="56" class="mono anno-cmd">--thought …</text>
+    <text x="42" y="74" class="mono anno-cmd">--registerHypothesis …</text>
+    <text x="42" y="92" class="mono anno-cmd">--recordLens --lens …</text>
   </g>
 
-  <!-- Connector 3 -> 4 -->
-  <line x1="65" y1="448" x2="65" y2="478" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-
-  <!-- Step 4: Converge -->
-  <g transform="translate(48, 488)">
+  <!-- Block 4: converge -->
+  <g transform="translate(44, 500)">
     <g>
-      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
-      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">4</text>
+      <rect width="30" height="30" rx="8" fill="#18181b" stroke="#27272a"/>
+      <text x="9" y="21" font-size="14" font-weight="800" fill="#f4f4f5">4</text>
     </g>
-    <text x="46" y="15" class="side-head">converge</text>
-    <text x="46" y="32" class="side-label">declare no new insight</text>
-    <g transform="translate(46, 44)">
-      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">--newInsight false</text>
-    </g>
+    <text x="42" y="13" class="anno-head">converge</text>
+    <text x="42" y="29" class="anno-dim">declare: no new insight</text>
+    <text x="42" y="56" class="mono anno-cmd">--resolveHypothesis …</text>
+    <text x="42" y="74" class="mono anno-cmd">--nextThoughtNeeded false</text>
   </g>
 
-  <!-- Connector 4 -> 5 -->
-  <line x1="65" y1="566" x2="65" y2="596" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-
-  <!-- Step 5: Export -->
-  <g transform="translate(48, 606)">
+  <!-- Block 5: export -->
+  <g transform="translate(44, 610)">
     <g>
-      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
-      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">5</text>
+      <rect width="30" height="30" rx="8" fill="#18181b" stroke="#27272a"/>
+      <text x="9" y="21" font-size="14" font-weight="800" fill="#f4f4f5">5</text>
     </g>
-    <text x="46" y="15" class="side-head">export</text>
-    <text x="46" y="32" class="side-label">reasoning trace fact sheet</text>
-    <g transform="translate(46, 44)">
-      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --export</text>
+    <text x="42" y="13" class="anno-head">export</text>
+    <text x="42" y="29" class="anno-dim">fact sheet printed once</text>
+    <text x="42" y="56" class="mono anno-cmd">think.ts --export</text>
+    <text x="42" y="74" class="anno-dim">paste verbatim into report</text>
+  </g>
+
+  <!-- Editorial guard note -->
+  <g transform="translate(44, 720)">
+    <text x="0" y="0" class="anno-head" fill="#f87171">any guard violation</text>
+    <text x="0" y="18" class="mono anno-cmd" fill="#ef4444">exit 1 · --reset to restart</text>
+    <text x="0" y="44" class="anno-dim">never trust — verify first.</text>
+    <text x="0" y="62" class="anno-dim">depth is earned by insight,</text>
+    <text x="0" y="80" class="anno-dim">never by padding.</text>
+  </g>
+
+  <!-- ================= RIGHT COLUMN: SYSTEM DIAGRAM ================= -->
+
+  <!-- Root node: state machine (centered title) -->
+  <g transform="translate(274, 130)">
+    <rect width="642" height="76" rx="12" fill="#161618" stroke="#27272a" stroke-width="1.2"/>
+    <g transform="translate(321, 30)">
+      <circle cx="-176" cy="-5" r="4" fill="#22c55e"/>
+      <text x="-164" y="-1" class="mono" font-size="10.5" fill="#71717a">on call</text>
+      <text x="0" y="0" text-anchor="middle" class="ttl">think.ts · State Machine</text>
+      <text x="0" y="24" text-anchor="middle" font-size="12" fill="#a1a1aa">plans structure + enforces invariants · exit 1 hard stops</text>
+      <text x="160" y="-1" class="mono" font-size="10.5" fill="#71717a">zero MCP</text>
     </g>
   </g>
 
-  <!-- Hard stop guard note under left flow -->
-  <g transform="translate(48, 700)">
-    <rect width="216" height="60" rx="8" fill="#1a1214" stroke="#3b1d24"/>
-    <text x="12" y="22" class="mono" font-size="10.5" font-weight="700" fill="#fca5a5">any guard violation</text>
-    <text x="12" y="42" class="mono" font-size="11" font-weight="700" fill="#ef4444">exit 1 · --reset to restart</text>
-  </g>
+  <!-- Split connector: root -> path-a / path-b -->
+  <line x1="595" y1="206" x2="595" y2="230" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 437 230 L 753 230" fill="none" stroke="#3f3f46" stroke-width="1.2"/>
+  <line x1="437" y1="230" x2="437" y2="254" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="753" y1="230" x2="753" y2="254" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-  <!-- ================= RIGHT COLUMN: PATH A / PATH B CAPABILITIES ================= -->
-  <text x="280" y="116" class="metric-label">reasoning core · closed-form vs open-ended</text>
-
-  <!-- Top: State Machine root node (centered) -->
-  <g transform="translate(280, 132)">
-    <rect width="630" height="72" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-    <g transform="translate(315, 26)">
-      <text x="0" y="0" text-anchor="middle" class="node-title">think.ts · State Machine</text>
-      <text x="0" y="22" text-anchor="middle" font-size="12" fill="#a1a1aa">plans structure + enforces invariants · exit code 1 hard stops</text>
-    </g>
-  </g>
-
-  <!-- Connector to Path A / Path B split -->
-  <line x1="595" y1="204" x2="595" y2="228" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-  <line x1="437" y1="228" x2="753" y2="228" stroke="#3f3f46" stroke-width="1.2"/>
-  <line x1="437" y1="228" x2="437" y2="248" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-  <line x1="753" y1="228" x2="753" y2="248" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-
-  <!-- Path A Card (Left half) -->
-  <g transform="translate(280, 252)">
-    <rect width="305" height="312" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
+  <!-- ============ PATH A CARD (left half) ============ -->
+  <g transform="translate(274, 258)">
+    <rect width="314" height="326" rx="12" fill="#161618" stroke="#27272a" stroke-width="1.2"/>
     <g transform="translate(20, 22)">
-      <rect width="58" height="22" rx="6" fill="#2a1f0f" stroke="#78350f"/>
-      <text x="12" y="15" class="mono" font-size="10.5" font-weight="700" fill="#f59e0b">path-a</text>
-      <text x="70" y="16" class="node-title" font-size="14">closed-form</text>
+      <!-- header row -->
+      <rect width="54" height="20" rx="5" fill="#2a1f0f" stroke="#78350f"/>
+      <text x="11" y="14" class="mono" font-size="10" font-weight="700" fill="#f59e0b">path-a</text>
+      <text x="64" y="15" class="ttl" font-size="13.5">closed-form</text>
+      <text x="240" y="15" class="mono" font-size="10.5" fill="#71717a">3–5</text>
 
-      <text x="0" y="46" font-size="12" fill="#a1a1aa">Prove a single correct answer.</text>
+      <text x="0" y="44" font-size="11.5" fill="#a1a1aa">Prove a single correct answer.</text>
 
-      <rect x="0" y="60" width="265" height="1" fill="#222226"/>
+      <!-- capability rows -->
+      <g transform="translate(0, 62)">
+        <text x="0" y="0" class="hdr-label">pipeline</text>
+        <text x="0" y="18" font-size="12" fill="#e4e4e7">restate → derive → cross-validate</text>
+      </g>
+      <g transform="translate(0, 104)">
+        <text x="0" y="0" class="hdr-label">depth bound</text>
+        <text x="0" y="18" font-size="12" fill="#e4e4e7">3–5 thoughts, enforced in code</text>
+      </g>
+      <g transform="translate(0, 146)">
+        <text x="0" y="0" class="hdr-label">forbidden</text>
+        <text x="0" y="18" font-size="11.5" fill="#f87171">claims · hypotheses · external search</text>
+      </g>
+      <g transform="translate(0, 188)">
+        <text x="0" y="0" class="hdr-label">guard</text>
+        <text x="0" y="18" font-size="11.5" fill="#e4e4e7">depth &lt;3 or &gt;5 → exit 1</text>
+      </g>
 
-      <text x="0" y="82" class="metric-label">pipeline</text>
-      <text x="0" y="100" font-size="12" fill="#e4e4e7">restate → derive → cross-validate</text>
-
-      <text x="0" y="126" class="metric-label">depth bound</text>
-      <text x="0" y="144" font-size="12" fill="#e4e4e7">3–5 thoughts, enforced in code</text>
-
-      <text x="0" y="170" class="metric-label">forbidden</text>
-      <text x="0" y="188" font-size="11.5" fill="#f87171">claims · hypotheses · external search</text>
-
-      <text x="0" y="214" class="metric-label">guard</text>
-      <text x="0" y="232" font-size="11.5" fill="#e4e4e7">depth &lt;3 or &gt;5 → exit 1</text>
-
-      <g transform="translate(0, 250)">
+      <!-- running indicator -->
+      <g transform="translate(0, 236)">
         <circle cx="4" cy="4" r="3" fill="#f59e0b"/>
-        <text x="12" y="8" class="mono" font-size="10" fill="#f59e0b">deterministic proof</text>
+        <text x="14" y="8" class="mono" font-size="10" fill="#f59e0b">deterministic proof</text>
+        <text x="150" y="8" class="mono" font-size="10" fill="#71717a">never by padding</text>
       </g>
     </g>
   </g>
 
-  <!-- Path B Card (Right half) -->
-  <g transform="translate(605, 252)">
-    <rect width="305" height="312" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
+  <!-- ============ PATH B CARD (right half) ============ -->
+  <g transform="translate(602, 258)">
+    <rect width="314" height="326" rx="12" fill="#161618" stroke="#27272a" stroke-width="1.2"/>
     <g transform="translate(20, 22)">
-      <rect width="58" height="22" rx="6" fill="#0f2033" stroke="#1e40af"/>
-      <text x="12" y="15" class="mono" font-size="10.5" font-weight="700" fill="#38bdf8">path-b</text>
-      <text x="70" y="16" class="node-title" font-size="14">open-ended</text>
+      <rect width="54" height="20" rx="5" fill="#0f2033" stroke="#1e40af"/>
+      <text x="11" y="14" class="mono" font-size="10" font-weight="700" fill="#38bdf8">path-b</text>
+      <text x="64" y="15" class="ttl" font-size="13.5">open-ended</text>
+      <text x="238" y="15" class="mono" font-size="10.5" fill="#71717a">≥2</text>
 
-      <text x="0" y="46" font-size="12" fill="#a1a1aa">Converge on a defensible choice.</text>
+      <text x="0" y="44" font-size="11.5" fill="#a1a1aa">Converge on a defensible choice.</text>
 
-      <rect x="0" y="60" width="265" height="1" fill="#222226"/>
+      <g transform="translate(0, 62)">
+        <text x="0" y="0" class="hdr-label">hypotheses</text>
+        <text x="0" y="18" font-size="12" fill="#e4e4e7">≥2 registered + falsification clause</text>
+        <text x="0" y="36" font-size="11" fill="#71717a">resolved: survived: / falsified:</text>
+      </g>
+      <g transform="translate(0, 118)">
+        <text x="0" y="0" class="hdr-label">critical lenses</text>
+        <text x="0" y="18" font-size="12" fill="#e4e4e7">11-lens catalog, 2–4 per task</text>
+        <text x="0" y="36" font-size="11" fill="#c084fc">--analyze sensitivity · pareto · ach</text>
+      </g>
+      <g transform="translate(0, 174)">
+        <text x="0" y="0" class="hdr-label">external verify</text>
+        <text x="0" y="18" font-size="11.5" fill="#38bdf8">≥2 Tier 1/2 sources, claim-gated</text>
+      </g>
 
-      <text x="0" y="82" class="metric-label">hypotheses</text>
-      <text x="0" y="100" font-size="12" fill="#e4e4e7">≥2 registered + falsification clause</text>
-      <text x="0" y="118" font-size="11" fill="#71717a">resolved: survived: / falsified:</text>
-
-      <text x="0" y="144" class="metric-label">critical lenses</text>
-      <text x="0" y="162" font-size="12" fill="#e4e4e7">11-lens catalog, 2–4 per task</text>
-      <text x="0" y="180" font-size="11" fill="#c084fc">--analyze sensitivity · pareto · ach</text>
-
-      <text x="0" y="206" class="metric-label">external verify</text>
-      <text x="0" y="224" font-size="11.5" fill="#38bdf8">≥2 Tier 1/2 sources, claim-gated</text>
-
-      <g transform="translate(0, 250)">
+      <g transform="translate(0, 236)">
         <circle cx="4" cy="4" r="3" fill="#22c55e"/>
-        <text x="12" y="8" class="mono" font-size="10" fill="#22c55e">evidence-first convergence</text>
+        <text x="14" y="8" class="mono" font-size="10" fill="#22c55e">evidence-first convergence</text>
+        <text x="196" y="8" class="mono" font-size="10" fill="#71717a">never by scoring</text>
       </g>
     </g>
   </g>
+
+  <!-- Converge connector into Terminal Gates -->
+  <line x1="595" y1="584" x2="595" y2="608" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
 
   <!-- Terminal Gates bar -->
-  <line x1="595" y1="564" x2="595" y2="588" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
-  <g transform="translate(280, 592)">
-    <rect width="630" height="72" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-    <g transform="translate(20, 18)">
-      <text x="0" y="14" class="node-title" font-size="13.5">Terminal Gates 6–11</text>
-      <text x="180" y="14" class="mono" font-size="11" fill="#71717a">criteria · lenses · falsification · convergence</text>
-      <text x="0" y="38" font-size="11.5" fill="#a1a1aa">every termination checked by think.ts before exit</text>
-      <g transform="translate(490, 6)">
+  <g transform="translate(274, 612)">
+    <rect width="642" height="76" rx="12" fill="#161618" stroke="#27272a" stroke-width="1.2"/>
+    <g transform="translate(20, 20)">
+      <text x="0" y="14" class="ttl" font-size="13.5">Terminal Gates 6–11</text>
+      <text x="186" y="14" class="mono" font-size="10.5" fill="#71717a">auto_review checks approvals</text>
+      <text x="0" y="40" font-size="11.5" fill="#a1a1aa">criteria · lenses · falsification · convergence</text>
+      <g transform="translate(506, 8)">
         <rect width="110" height="28" rx="6" fill="#1f1416" stroke="#450a0a"/>
         <text x="14" y="18" class="mono" font-size="11" font-weight="700" fill="#ef4444">fail → exit 1</text>
       </g>
     </g>
   </g>
 
-  <!-- ================= STATE TRACE (BOTTOM RIGHT) ================= -->
-  <text x="280" y="700" class="metric-label">state trace</text>
-  <g transform="translate(280, 716)">
-    <rect width="630" height="224" rx="12" fill="#0b0b0d" stroke="#1f1f23" stroke-width="1.2"/>
+  <!-- ================= STATE TRACE ================= -->
+  <text x="274" y="726" class="hdr-label">session trace</text>
+  <g transform="translate(274, 742)">
+    <rect width="642" height="216" rx="12" fill="#0c0c0e" stroke="#1c1c20" stroke-width="1.2"/>
 
-    <!-- Titlebar -->
+    <!-- Titlebar (traffic lights, like the original) -->
     <g transform="translate(20, 18)">
-      <circle cx="4" cy="4" r="3" fill="#ef4444"/>
-      <circle cx="16" cy="4" r="3" fill="#f59e0b"/>
-      <circle cx="28" cy="4" r="3" fill="#22c55e"/>
-      <text x="44" y="8" class="mono" font-size="10.5" fill="#71717a">STATE TRACE · scripts/.think_state.json</text>
+      <circle cx="4" cy="4" r="3.5" fill="#ef4444"/>
+      <circle cx="17" cy="4" r="3.5" fill="#f59e0b"/>
+      <circle cx="30" cy="4" r="3.5" fill="#22c55e"/>
+      <text x="46" y="8" class="mono" font-size="10.5" fill="#71717a">session log</text>
+      <text x="520" y="8" class="mono" font-size="10" fill="#3f3f46">.think_state.json</text>
     </g>
 
-    <!-- 4 Structured Rows -->
-    <g transform="translate(20, 42)" class="mono" font-size="11">
-      <g transform="translate(0, 0)">
-        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="23" fill="#52525b">23:48:17</text>
-        <text x="76" y="23" font-weight="700" fill="#a1a1aa">step 0</text>
-        <text x="130" y="23" fill="#e4e4e7">topology → open-ended</text>
-        <text x="350" y="23" fill="#38bdf8">mode=path-b</text>
-        <text x="490" y="23" fill="#22c55e">locked</text>
+    <g transform="translate(20, 40)" class="mono" font-size="11">
+      <g>
+        <rect width="602" height="34" rx="5" fill="#111114" stroke="#19191d"/>
+        <text x="12" y="22" fill="#52525b">23:48:17</text>
+        <text x="76" y="22" font-weight="700" fill="#a1a1aa">step 0</text>
+        <text x="130" y="22" fill="#e4e4e7">topology → open-ended</text>
+        <text x="356" y="22" fill="#38bdf8">mode=path-b</text>
+        <text x="498" y="22" fill="#22c55e">locked</text>
       </g>
-
-      <g transform="translate(0, 42)">
-        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="23" fill="#52525b">23:48:18</text>
-        <text x="76" y="23" font-weight="700" fill="#a1a1aa">analyze</text>
-        <text x="130" y="23" fill="#e4e4e7">sensitivity flip ±20%</text>
-        <text x="350" y="23" fill="#c084fc">rank stable</text>
-        <text x="490" y="23" fill="#22c55e">persisted</text>
+      <g transform="translate(0, 40)">
+        <rect width="602" height="34" rx="5" fill="#111114" stroke="#19191d"/>
+        <text x="12" y="22" fill="#52525b">23:48:18</text>
+        <text x="76" y="22" font-weight="700" fill="#a1a1aa">analyze</text>
+        <text x="130" y="22" fill="#e4e4e7">sensitivity flip ±20%</text>
+        <text x="356" y="22" fill="#c084fc">rank stable</text>
+        <text x="498" y="22" fill="#22c55e">persisted</text>
       </g>
-
-      <g transform="translate(0, 84)">
-        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="23" fill="#52525b">23:48:19</text>
-        <text x="76" y="23" font-weight="700" fill="#a1a1aa">verify</text>
-        <text x="130" y="23" fill="#e4e4e7">aws.amazon.com + anthropic</text>
-        <text x="350" y="23" fill="#38bdf8">2x Tier 1</text>
-        <text x="490" y="23" fill="#22c55e">verified</text>
+      <g transform="translate(0, 80)">
+        <rect width="602" height="34" rx="5" fill="#111114" stroke="#19191d"/>
+        <text x="12" y="22" fill="#52525b">23:48:19</text>
+        <text x="76" y="22" font-weight="700" fill="#a1a1aa">verify</text>
+        <text x="130" y="22" fill="#e4e4e7">aws.amazon.com + anthropic</text>
+        <text x="356" y="22" fill="#38bdf8">2x Tier 1</text>
+        <text x="498" y="22" fill="#22c55e">verified</text>
       </g>
-
-      <g transform="translate(0, 126)">
-        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="23" fill="#52525b">23:48:20</text>
-        <text x="76" y="23" font-weight="700" fill="#a1a1aa">gates</text>
-        <text x="130" y="23" fill="#e4e4e7">Gates 6–11 verified</text>
-        <text x="350" y="23" fill="#a1a1aa">blockers=0</text>
-        <text x="490" y="23" fill="#22c55e" font-weight="700">export trace</text>
+      <g transform="translate(0, 120)">
+        <rect width="602" height="34" rx="5" fill="#111114" stroke="#19191d"/>
+        <text x="12" y="22" fill="#52525b">23:48:20</text>
+        <text x="76" y="22" font-weight="700" fill="#a1a1aa">gates</text>
+        <text x="130" y="22" fill="#e4e4e7">Gates 6–11 verified</text>
+        <text x="356" y="22" fill="#a1a1aa">blockers=0</text>
+        <text x="498" y="22" fill="#22c55e" font-weight="700">export trace</text>
       </g>
     </g>
   </g>
