@@ -61,25 +61,11 @@
   <g transform="translate(280, 110)">
     <rect width="630" height="110" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
     
-    <g transform="translate(24, 24)">
-      <!-- Main Label -->
-      <circle cx="6" cy="6" r="4.5" fill="#22c55e"/>
-      <text x="18" y="10" class="node-title">think.ts · State Machine</text>
-      <rect x="186" y="-4" width="56" height="20" rx="6" fill="#202024" stroke="#2e2e33"/>
-      <text x="194" y="10" class="chip-text" fill="#a1a1aa">main</text>
-
-      <text x="18" y="32" font-size="12" fill="#a1a1aa">plans structure + enforces invariants · exit code 1 hard stops</text>
-
-      <!-- Cost / Stat Pills -->
-      <g transform="translate(420, -4)">
-        <rect width="160" height="26" rx="6" fill="#1c1c1f" stroke="#27272a"/>
-        <text x="10" y="17" class="mono" font-size="10.5" fill="#a1a1aa">333 tests · zero-MCP</text>
-      </g>
-      
-      <g transform="translate(18, 54)">
-        <text x="0" y="14" class="metric-label">immutable session clock</text>
-        <text x="160" y="14" class="mono" font-size="11" fill="#38bdf8">startedAt · endedAt · today()</text>
-      </g>
+    <g transform="translate(315, 42)">
+      <!-- Centered main node title -->
+      <text x="0" y="0" text-anchor="middle" class="node-title" font-size="16">think.ts · State Machine</text>
+      <text x="0" y="24" text-anchor="middle" font-size="12" fill="#a1a1aa">plans structure + enforces invariants · exit code 1 hard stops</text>
+      <text x="0" y="46" text-anchor="middle" class="mono" font-size="11" fill="#38bdf8">startedAt · endedAt · today()</text>
     </g>
   </g>
 
@@ -118,12 +104,6 @@
       <text x="0" y="14" class="node-title">Step 0 · Fork Layer</text>
       <text x="140" y="14" class="mono" font-size="11" fill="#71717a">--mode required on thought 1</text>
       
-      <g transform="translate(420, -2)">
-        <text x="0" y="12" class="metric-label">catalog</text>
-        <text x="60" y="12" class="metric-label">depth</text>
-        <text x="0" y="28" class="metric-val">11 lenses</text>
-        <text x="60" y="28" class="metric-val">adaptive</text>
-      </g>
 
       <!-- 3 Branch Chips -->
       <g transform="translate(0, 48)">
