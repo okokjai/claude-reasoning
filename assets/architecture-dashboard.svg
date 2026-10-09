@@ -90,12 +90,17 @@
   </g>
 
   <!-- Editorial guard note -->
-  <g transform="translate(44, 720)">
-    <text x="0" y="0" class="anno-head" fill="#f87171">any guard violation</text>
-    <text x="0" y="18" class="mono anno-cmd" fill="#ef4444">exit 1 · --reset to restart</text>
-    <text x="0" y="44" class="anno-dim">never trust — verify first.</text>
-    <text x="0" y="62" class="anno-dim">depth is earned by insight,</text>
-    <text x="0" y="80" class="anno-dim">never by padding.</text>
+  <g transform="translate(44, 730)">
+    <rect width="212" height="64" rx="8" fill="#161618" stroke="#27272a" stroke-width="1.2"/>
+    <text x="14" y="24" class="anno-head" fill="#f87171">any guard violation</text>
+    <text x="14" y="44" class="mono anno-cmd" fill="#ef4444">exit 1 · --reset to restart</text>
+  </g>
+
+  <g transform="translate(44, 820)">
+    <text x="0" y="0" class="anno-dim">never trust — verify first.</text>
+    <text x="0" y="18" class="anno-dim">depth is earned by insight,</text>
+    <text x="0" y="36" class="anno-dim">never by padding.</text>
+    <text x="0" y="60" class="mono" font-size="10.5" fill="#3f3f46">scripts/.think_state.json</text>
   </g>
 
   <!-- ================= RIGHT COLUMN: SYSTEM DIAGRAM ================= -->
