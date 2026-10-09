@@ -25,7 +25,7 @@
   <g transform="translate(48, 44)">
     <text x="0" y="24" font-size="26" font-weight="800" fill="#ffffff" letter-spacing="-0.03em">CLAUDE-REASONING</text>
     <rect x="272" y="7" width="54" height="22" rx="6" fill="#27272a"/>
-    <text x="281" y="22" class="mono" font-size="11" font-weight="700" fill="#a1a1aa">v3.2.0</text>
+    <text x="281" y="22" class="mono" font-size="11" font-weight="700" fill="#a1a1aa">v3.2.1</text>
     <text x="338" y="22" font-size="12" fill="#71717a">· claim-gated adaptive reasoning architecture</text>
   </g>
 
@@ -33,18 +33,27 @@
   <line x1="250" y1="100" x2="250" y2="980" stroke="#222226" stroke-width="1.2" stroke-dasharray="4,4"/>
 
   <!-- ================= LEVEL 1: ARCHITECT / STATE MACHINE ================= -->
-  <!-- Left Side: Annotations -->
+  <!-- Left Side: Step 1 of the skill workflow -->
   <g transform="translate(48, 120)">
-    <text x="0" y="16" class="side-head">architect · on call</text>
-    <text x="0" y="34" class="side-label">before a thought round</text>
-    <text x="0" y="52" class="side-label" fill="#a1a1aa">effort: high</text>
-    <text x="0" y="70" class="mono" font-size="10.5" fill="#71717a">zero MCP · local state</text>
+    <g>
+      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
+      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">1</text>
+    </g>
+    <text x="46" y="15" class="side-head">start a session</text>
+    <text x="46" y="32" class="side-label">reset state, stamp clock</text>
 
-    <g transform="translate(0, 100)">
-      <text x="0" y="0" class="side-label">spawned only at</text>
-      <text x="0" y="16" class="side-label">three moments:</text>
-      <text x="0" y="34" class="side-head" fill="#e4e4e7">reads the mode,</text>
-      <text x="0" y="52" class="side-head" fill="#e4e4e7">diff and blockers</text>
+    <g transform="translate(46, 48)">
+      <rect width="172" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --reset</text>
+    </g>
+
+    <g transform="translate(0, 96)">
+      <text x="46" y="0" class="side-label">inspect readiness</text>
+      <text x="46" y="16" class="side-label" fill="#a1a1aa">any time · blockers listed</text>
+      <g transform="translate(46, 26)">
+        <rect width="172" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+        <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --status</text>
+      </g>
     </g>
   </g>
 
@@ -79,15 +88,24 @@
 
   <!-- ================= LEVEL 2: FORK LAYER (JEV STYLE) ================= -->
   <!-- Left Side: Annotations -->
-  <g transform="translate(48, 290)">
-    <text x="0" y="16" class="side-head">Step 0 classification</text>
-    <text x="0" y="34" class="side-label">topology routing,</text>
-    <text x="0" y="50" class="side-label">never topic keywords</text>
+  <g transform="translate(48, 300)">
+    <g>
+      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
+      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">2</text>
+    </g>
+    <text x="46" y="15" class="side-head">declare the structure</text>
+    <text x="46" y="32" class="side-label">first thought locks mode</text>
 
-    <g transform="translate(0, 80)">
-      <text x="0" y="0" class="side-label">routing rule:</text>
-      <text x="0" y="18" class="side-head" fill="#22c55e">valid → run in code</text>
-      <text x="0" y="36" class="side-head" fill="#ef4444">mutate → exit 1</text>
+    <g transform="translate(46, 48)">
+      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">think.ts --mode path-b</text>
+      <text x="10" y="33" class="mono" font-size="10.5" fill="#52525b">   --kind decision …</text>
+    </g>
+
+    <g transform="translate(0, 116)">
+      <text x="46" y="0" class="side-label">two kinds of question</text>
+      <text x="46" y="18" class="side-label" fill="#f59e0b">path-a: prove the answer</text>
+      <text x="46" y="36" class="side-label" fill="#38bdf8">path-b: converge on it</text>
     </g>
   </g>
 
@@ -144,16 +162,29 @@
 
   <!-- ================= LEVEL 3: ACTIVE ENGINES (3 COLUMNS) ================= -->
   <!-- Left Side: Annotations -->
-  <g transform="translate(48, 480)">
-    <text x="0" y="16" class="side-head">calls: 1–5</text>
-    <text x="0" y="34" class="side-head">thoughts: adaptive</text>
-    <text x="0" y="52" class="side-label">silent on routine turns</text>
+  <g transform="translate(48, 470)">
+    <g>
+      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
+      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">3</text>
+    </g>
+    <text x="46" y="15" class="side-head">run the loop</text>
+    <text x="46" y="32" class="side-label">submit thoughts, build evidence</text>
 
-    <g transform="translate(0, 90)">
-      <text x="0" y="0" class="side-label">never trusts</text>
-      <text x="0" y="16" class="side-label">ungrounded claims.</text>
-      <text x="0" y="34" class="side-head" fill="#e4e4e7">falsification must</text>
-      <text x="0" y="52" class="side-head" fill="#e4e4e7">be survived.</text>
+    <g transform="translate(46, 46)">
+      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">--registerHypothesis …</text>
+      <text x="10" y="33" class="mono" font-size="10.5" fill="#71717a">--recordLens --lens …</text>
+    </g>
+
+    <g transform="translate(46, 106)">
+      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">--registerClaim … --supports</text>
+      <text x="10" y="33" class="mono" font-size="10.5" fill="#71717a">--analyze sensitivity --data …</text>
+    </g>
+
+    <g transform="translate(0, 174)">
+      <text x="46" y="0" class="side-label">next: reported every step</text>
+      <text x="46" y="16" class="side-label" fill="#a1a1aa">ready=yes · blockers=N</text>
     </g>
   </g>
 
@@ -246,9 +277,23 @@
   <!-- ================= LEVEL 4: REVIEW & VERIFY (ASTRA "before done" BAR) ================= -->
   <!-- Left Side: Annotations -->
   <g transform="translate(48, 774)">
-    <text x="0" y="16" class="side-head">before done</text>
-    <text x="0" y="34" class="side-label">back to think.ts</text>
-    <text x="0" y="50" class="side-label">review + verify</text>
+    <g>
+      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
+      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">4</text>
+    </g>
+    <text x="46" y="15" class="side-head">converge</text>
+    <text x="46" y="32" class="side-label">declare no new insight</text>
+
+    <g transform="translate(46, 46)">
+      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">--resolveHypothesis …</text>
+      <text x="10" y="33" class="mono" font-size="10.5" fill="#71717a">--nextThoughtNeeded false</text>
+    </g>
+
+    <g transform="translate(0, 116)">
+      <text x="46" y="0" class="side-label">any blocker → keeps running</text>
+      <text x="46" y="16" class="side-label" fill="#f87171">exit 1 · --reset to restart</text>
+    </g>
   </g>
 
   <!-- Right Side: Level 4 Card -->
@@ -268,18 +313,29 @@
       </g>
     </g>
   </g>
+  <!-- ================= LEVEL 5: SESSION LOG (ASTRA SIGNATURE FEED) ================= -->
+  <!-- Left Side: Step 5 of the skill workflow (export) -->
+  <g transform="translate(48, 896)">
+    <g>
+      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
+      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">5</text>
+    </g>
+    <text x="46" y="15" class="side-head">export the proof</text>
+    <text x="46" y="32" class="side-label">fact sheet, printed once</text>
+
+    <g transform="translate(46, 46)">
+      <rect width="172" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --export</text>
+    </g>
+
+    <g transform="translate(0, 96)">
+      <text x="46" y="0" class="side-label">paste verbatim into the</text>
+      <text x="46" y="16" class="side-label" fill="#a1a1aa">conclusion card report</text>
+    </g>
+  </g>
 
   <!-- Loopback Line (from Review back to Architect if not converged) -->
   <path d="M 910 797 L 935 797 L 935 165 L 910 165" fill="none" stroke="#3f3f46" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
-  <text x="942" y="470" class="mono" font-size="9.5" fill="#71717a" transform="rotate(90, 942, 470)">loop back if blockers > 0</text>
-
-  <!-- ================= LEVEL 5: SESSION LOG (ASTRA SIGNATURE FEED) ================= -->
-  <!-- Left Side: Annotations -->
-  <g transform="translate(48, 890)">
-    <text x="0" y="16" class="side-head">session log</text>
-    <text x="0" y="34" class="side-label">deterministic trace</text>
-    <text x="0" y="50" class="side-label">machine-derived</text>
-  </g>
 
   <!-- Right Side: Session Log Terminal -->
   <g transform="translate(280, 864)">
