@@ -25,11 +25,28 @@ describe("SKILL.md description: selector visibility", () => {
     expect(d.slice(0, SELECTOR_WINDOW)).toContain("Use when");
   });
 
+  it("frontmatter enforces mandatory trigger wording and core engineering keywords", () => {
+    const d = skillDescription();
+    expect(d).toMatch(/^Use (?:when|before answering)/i);
+    expect(d).toMatch(/\b(?:debug|root-cause|architecture|decision)\b/i);
+  });
+
   it("keeps package.json description byte-identical to SKILL.md (drift guard)", () => {
     const pkg = JSON.parse(
       readFileSync(join(CWD, "package.json"), "utf-8"),
     ) as { description?: string };
     expect(pkg.description).toBe(skillDescription());
+  });
+
+  it("keeps all version surfaces aligned across the repository (drift guard)", () => {
+    const pkg = JSON.parse(readFileSync(join(CWD, "package.json"), "utf-8")).version;
+    const skillFm = /^version:\s*(\S+)/m.exec(readFileSync(join(CWD, "SKILL.md"), "utf-8"))?.[1];
+    const skillTitle = /^# claude-reasoning (\S+)/m.exec(readFileSync(join(CWD, "SKILL.md"), "utf-8"))?.[1];
+    const readme = /^# claude-reasoning (\S+)/m.exec(readFileSync(join(CWD, "README.md"), "utf-8"))?.[1];
+    const thinkHeader = /claude-reasoning (\S+) -/.exec(readFileSync(join(CWD, "scripts", "think.ts"), "utf-8"))?.[1];
+    const svgVersion = /class="mono"[^>]*>v(\S+)<\/text>/.exec(readFileSync(join(CWD, "assets", "architecture-dashboard.svg"), "utf-8"))?.[1];
+
+    expect([skillFm, skillTitle, readme, thinkHeader, svgVersion]).toEqual([pkg, pkg, pkg, pkg, pkg]);
   });
 });
 

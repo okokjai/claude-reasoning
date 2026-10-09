@@ -500,6 +500,16 @@ describe("Task 6: --analyze sensitivity/pareto/ach", () => {
     expect(r.err + r.out).toMatch(/Invalid --analyze|sensitivity|pareto|ach/);
   });
 
+  it("--analyze sensitivity safely rejects criteria with prototype keys or invalid non-numeric scores", () => {
+    const badData = JSON.stringify({
+      candidates: [{ id: "A", scores: { safe: "invalid" } }, { id: "B", scores: { safe: 10 } }],
+      criteria: [{ name: "__proto__", weight: 1, direction: "max" }],
+    });
+    const r = run(["--mode", "path-b", "--analyze", "sensitivity", "--data", badData]);
+    expect(r.code).toBe(1);
+    expect(r.err + r.out).toMatch(/criterion name|non-numeric|invalid/i);
+  });
+
   it("computed --analyze lens satisfies kind-core coverage in pending", () => {
     // kind=decision core lenses: lens-6 (Sensitivity), lens-10 (Reversibility), lens-3 (Contrarian).
     run(["--mode", "path-b", "--kind", "decision", "--thought", "t1", "--thoughtNumber", "1", "--totalThoughts", "4", "--nextThoughtNeeded", "true"]);

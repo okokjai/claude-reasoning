@@ -3,6 +3,17 @@
 All notable changes to this skill are documented here.
 
 
+## [3.2.1] - 2026-10-09
+
+### Fixed
+
+- **Gate-count contract test was tautological.** `tests/changelog-structure.test.ts` derived `GATE_COUNT` by calling `Object.keys()` on the *raw regex capture* (a string). On a string, `Object.keys` returns per-character indices, so the count was always the capture length (134) — `expect(134).toBeGreaterThanOrEqual(11)` could never fail even if every gate were deleted from `scripts/think.ts`. The derivation now splits the captured switchboard block into lines, filters to real `key: value` rows, and asserts `5 + switchboardCount === 11` exactly. Mutation-verified: deleting `branchClosure: true` from the `GATES` switchboard turns this test red (expected 11, received 10).
+- **README test-file count drift.** `README.md:209` hard-coded "across 12 files" while the suite actually ran 13 files (a `round8.test.ts`/`state-isolation.test.ts` addition was not reflected). Corrected to "across the regression suite" — hard-coded test/file counts are forbidden in docs so the metric can never drift again; a guard in `tests/changelog-structure.test.ts` rejects any `/across \d+ files/` regression.
+- **Repository-wide version surface drift guard.** Added an automated regression test in `tests/skill-frontmatter.test.ts` to assert that all 5+1 version surfaces (`package.json`, `SKILL.md` frontmatter & title, `README.md`, `scripts/think.ts` header, and `assets/architecture-dashboard.svg`) remain byte-aligned across upgrades.
+- **Sensitivity input validation & prototype key protection.** `--analyze sensitivity` now validates that candidate scores are valid numbers (rejects `NaN` and non-numeric values) and forbids prototype-polluting criterion names (`__proto__`, `prototype`, `constructor`). Pinned by `tests/round7.test.ts`.
+- **Skill frontmatter mandatory triggers.** Refined `description` in `SKILL.md` and `package.json` to feature explicit action triggers and engineering keywords (`architecture tradeoff`, `debugging`, `root-cause investigation`, `decision`), paired with regression tests in `tests/skill-frontmatter.test.ts`.
+
+
 ## [3.2.0] - 2026-10-08
 
 ### Added

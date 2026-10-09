@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.2.0 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.2.1 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -132,6 +132,21 @@ function analyzeSensitivity(input: AnalyzeInput): Record<string, unknown> {
   }
   if (!Array.isArray(criteria) || criteria.length === 0) {
     fail("--analyze sensitivity requires at least 1 criterion in --data");
+  }
+  const disallowedKeys = new Set(["__proto__", "prototype", "constructor"]);
+  for (const crit of criteria) {
+    if (!crit.name || disallowedKeys.has(crit.name)) {
+      fail(`--analyze sensitivity: invalid criterion name '${crit.name}'`);
+    }
+  }
+  for (const c of candidates) {
+    if (c.scores != null) {
+      for (const [k, v] of Object.entries(c.scores)) {
+        if (typeof v !== "number" || isNaN(v)) {
+          fail(`--analyze sensitivity: non-numeric score for candidate '${c.id}', criterion '${k}'`);
+        }
+      }
+    }
   }
   const norm = candidates.map(c => ({ id: c.id, scores: c.scores ?? {} }));
 

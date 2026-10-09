@@ -1,4 +1,4 @@
-# claude-reasoning 3.2.0
+# claude-reasoning 3.2.1
 
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat-square&logo=github)](https://github.com/okokjai/claude-reasoning/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
@@ -206,7 +206,7 @@ The session clock is stamped by the script: `startedAt` on the first thought, `e
 bun run typecheck && bun test
 ```
 
-Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), the `--thought` standalone-mode guard, the v3.0.8 surfaces (session clock, `--claimDate` alignment/freshness, reasoning-trace tables, `escapeCell` escaping), and the v3.2.0 surfaces (`LENS_CATALOG`/`--listLenses`, `--kind` problem kinds, `pendingActions` per-step guidance, `--analyze sensitivity|pareto|ach`, `--flipIf`, weak-content lint WARNs). `bun test` runs the comprehensive regression suite across 12 files.
+Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), the `--thought` standalone-mode guard, the v3.0.8 surfaces (session clock, `--claimDate` alignment/freshness, reasoning-trace tables, `escapeCell` escaping), and the v3.2.0 surfaces (`LENS_CATALOG`/`--listLenses`, `--kind` problem kinds, `pendingActions` per-step guidance, `--analyze sensitivity|pareto|ach`, `--flipIf`, weak-content lint WARNs). `bun test` runs the comprehensive regression suite.
 
 ## Design notes
 

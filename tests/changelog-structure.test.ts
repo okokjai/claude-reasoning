@@ -38,6 +38,16 @@ describe("CHANGELOG.md structure", () => {
     }
     expect(dupes).toEqual([]);
   });
+  it("documents repository-wide version surface drift guard in latest CHANGELOG version", () => {
+    const changelog = readFileSync(join(CWD, "CHANGELOG.md"), "utf-8");
+    const latestSection = changelog.split(/^## \[/m)[1] ?? "";
+    expect(latestSection).toContain("Repository-wide version surface drift guard");
+  });
+  it("does not hard-code numeric test-file counts in README.md", () => {
+    const readme = readFileSync(join(CWD, "README.md"), "utf-8");
+    expect(readme).not.toMatch(/across \d+ files/);
+    expect(readme).toContain("runs the comprehensive regression suite.");
+  });
 });
 
 /**
@@ -46,13 +56,13 @@ describe("CHANGELOG.md structure", () => {
  * not a cosmetic one — it tells the reader the new gate does not exist.
  */
 describe("gate-range references stay in sync with the GATES switchboard", () => {
-  const GATE_COUNT = Object.keys(
-    /\bconst GATES = \{([^}]*)\}/.exec(readFileSync(join(CWD, "scripts", "think.ts"), "utf-8"))?.[1] ?? "",
-  ).filter(k => k.trim().length > 0).length;
 
   it("derives the gate count from the switchboard itself", () => {
-    // Guard against the derivation silently becoming 0 (regex drift).
-    expect(GATE_COUNT).toBeGreaterThanOrEqual(11);
+    // Derive switchboard keys count by splitting the capture block by line.
+    const rawGates = /\bconst GATES = \{([^}]*)\}/.exec(readFileSync(join(CWD, "scripts", "think.ts"), "utf-8"))?.[1] ?? "";
+    const switchboardCount = rawGates.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("//") && l.includes(":")).length;
+    const TOTAL_GATES = 5 + switchboardCount;
+    expect(TOTAL_GATES).toBe(11);
   });
 
   it.each(["scripts/think.ts", "SKILL.md", "README.md"])("%s has no stale gate range", (file) => {
