@@ -44,10 +44,11 @@ describe("SKILL.md description: selector visibility", () => {
     const skillTitle = /^# claude-reasoning (\S+)/m.exec(readFileSync(join(CWD, "SKILL.md"), "utf-8"))?.[1];
     const readme = /^# claude-reasoning (\S+)/m.exec(readFileSync(join(CWD, "README.md"), "utf-8"))?.[1];
     const thinkHeader = /claude-reasoning (\S+) -/.exec(readFileSync(join(CWD, "scripts", "think.ts"), "utf-8"))?.[1];
-    const svgVersion = /class="mono"[^>]*>v(\S+)<\/text>/.exec(readFileSync(join(CWD, "assets", "architecture-dashboard.svg"), "utf-8"))?.[1];
+    const svgContent = readFileSync(join(CWD, "assets", "architecture-dashboard.svg"), "utf-8");
     const changelogTop = /^## \[(.+?)\]/m.exec(readFileSync(join(CWD, "CHANGELOG.md"), "utf-8"))?.[1];
 
-    expect([skillFm, skillTitle, readme, thinkHeader, svgVersion, changelogTop]).toEqual([pkg, pkg, pkg, pkg, pkg, pkg]);
+    expect([skillFm, skillTitle, readme, thinkHeader, changelogTop]).toEqual([pkg, pkg, pkg, pkg, pkg]);
+    expect(svgContent).not.toMatch(/>v\d+\.\d+\.\d+<\/text>/);
   });
 });
 
