@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.2.1 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.2.2 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -133,23 +133,44 @@ function analyzeSensitivity(input: AnalyzeInput): Record<string, unknown> {
   if (!Array.isArray(criteria) || criteria.length === 0) {
     fail("--analyze sensitivity requires at least 1 criterion in --data");
   }
+  const seenCritNames = new Set<string>();
   const disallowedKeys = new Set(["__proto__", "prototype", "constructor"]);
   for (const crit of criteria) {
     if (!crit.name || disallowedKeys.has(crit.name)) {
       fail(`--analyze sensitivity: invalid criterion name '${crit.name}'`);
     }
+    if (seenCritNames.has(crit.name)) {
+      fail(`--analyze sensitivity: Duplicate criterion name '${crit.name}'`);
+    }
+    seenCritNames.add(crit.name);
+    if (crit.direction !== "min" && crit.direction !== "max") {
+      fail(`--analyze sensitivity: Invalid direction '${crit.direction}' for criterion '${crit.name}' (must be 'min' or 'max')`);
+    }
+    if (typeof crit.weight !== "number" || !Number.isFinite(crit.weight) || crit.weight <= 0) {
+      fail(`--analyze sensitivity: Weight for criterion '${crit.name}' must be a finite positive number`);
+    }
   }
+  const seenCandIds = new Set<string>();
   for (const c of candidates) {
-    if (c.scores != null) {
-      for (const [k, v] of Object.entries(c.scores)) {
-        if (typeof v !== "number" || isNaN(v)) {
-          fail(`--analyze sensitivity: non-numeric score for candidate '${c.id}', criterion '${k}'`);
-        }
+    if (!c.id) fail("--analyze sensitivity: candidate missing id");
+    if (seenCandIds.has(c.id)) {
+      fail(`--analyze sensitivity: Duplicate candidate id '${c.id}'`);
+    }
+    seenCandIds.add(c.id);
+    if (!c.scores || typeof c.scores !== "object") {
+      fail(`--analyze sensitivity: candidate '${c.id}' missing scores object`);
+    }
+    for (const crit of criteria) {
+      const v = c.scores[crit.name];
+      if (v === undefined) {
+        fail(`--analyze sensitivity: Missing score for candidate '${c.id}', criterion '${crit.name}'`);
+      }
+      if (typeof v !== "number" || !Number.isFinite(v)) {
+        fail(`--analyze sensitivity: non-numeric score for candidate '${c.id}', criterion '${crit.name}'`);
       }
     }
   }
   const norm = candidates.map(c => ({ id: c.id, scores: c.scores ?? {} }));
-
   const spanOk = (crits: typeof criteria, cands: typeof norm): boolean => {
     const scores = cands.map(c => weightedScore(c.scores, crits));
     const max = Math.max(...scores);
@@ -217,6 +238,31 @@ function analyzePareto(input: AnalyzeInput): Record<string, unknown> {
   if (!Array.isArray(objectives) || objectives.length === 0) {
     fail("--analyze pareto requires at least 1 objective in --data");
   }
+  for (const o of objectives) {
+    if (!o || typeof o.name !== "string" || !o.name.trim()) {
+      fail("--analyze pareto: each objective must have a non-empty name");
+    }
+    if (o.direction !== "min" && o.direction !== "max") {
+      fail(`--analyze pareto: Objective '${o.name}' has invalid direction '${o.direction}' (must be 'min' or 'max')`);
+    }
+  }
+  const reqMetrics = objectives.map(o => o.name);
+  const reqSet = new Set(reqMetrics);
+  for (const c of candidates) {
+    if (!c.metrics || typeof c.metrics !== "object" || Object.keys(c.metrics).length === 0) {
+      fail(`--analyze pareto: Candidate '${c.id}' has empty or missing metrics`);
+    }
+    for (const m of reqMetrics) {
+      if (c.metrics[m] === undefined || typeof c.metrics[m] !== "number" || !Number.isFinite(c.metrics[m])) {
+        fail(`--analyze pareto: Candidate '${c.id}' is missing required metric '${m}'`);
+      }
+    }
+    for (const k of Object.keys(c.metrics)) {
+      if (!reqSet.has(k)) {
+        fail(`--analyze pareto: Candidate '${c.id}' has undeclared metric '${k}'`);
+      }
+    }
+  }
   const frontier: { id: string; metrics: Record<string, number> }[] = [];
   const dominated: { id: string; dominatedBy: string }[] = [];
   for (const c of candidates) {
@@ -231,7 +277,6 @@ function analyzePareto(input: AnalyzeInput): Record<string, unknown> {
   return { frontier, dominated };
 }
 
-/** ACH: rank hypotheses by inconsistency count; eliminate all but rank 1. */
 function analyzeAch(input: AnalyzeInput): Record<string, unknown> {
   const hypotheses = input.hypotheses;
   const evidence = input.evidence;
@@ -241,10 +286,48 @@ function analyzeAch(input: AnalyzeInput): Record<string, unknown> {
   if (!Array.isArray(evidence) || evidence.length === 0) {
     fail("--analyze ach requires at least 1 evidence item in --data");
   }
+  const hypIds = new Set<string>();
+  for (const h of hypotheses) {
+    if (!h || typeof h.id !== "string" || !h.id.trim()) {
+      fail("--analyze ach: each hypothesis must have a non-empty id");
+    }
+    if (hypIds.has(h.id)) {
+      fail(`--analyze ach: Duplicate hypothesis id '${h.id}'`);
+    }
+    hypIds.add(h.id);
+  }
+  const evIds = new Set<string>();
+  for (const e of evidence) {
+    if (!e || typeof e.id !== "string" || !e.id.trim()) {
+      fail("--analyze ach: each evidence item must have a non-empty id");
+    }
+    if (evIds.has(e.id)) {
+      fail(`--analyze ach: Duplicate evidence id '${e.id}'`);
+    }
+    evIds.add(e.id);
+    if (!e.matrix || typeof e.matrix !== "object") {
+      fail(`--analyze ach: evidence '${e.id}' missing matrix object`);
+    }
+    for (const [hId, verdictRaw] of Object.entries(e.matrix)) {
+      if (!hypIds.has(hId)) {
+        fail(`--analyze ach: Unknown hypothesis id '${hId}' in evidence '${e.id}' matrix`);
+      }
+      const v = typeof verdictRaw === "string" ? verdictRaw.toUpperCase() : "";
+      if (v !== "C" && v !== "I" && v !== "N") {
+        fail(`--analyze ach: Invalid verdict '${verdictRaw}' for evidence '${e.id}' x hypothesis '${hId}' (must be C, I, or N)`);
+      }
+    }
+    for (const hId of hypIds) {
+      if (!(hId in e.matrix)) {
+        fail(`--analyze ach: Evidence '${e.id}' matrix is missing verdict for hypothesis '${hId}'`);
+      }
+    }
+  }
   const rows = hypotheses.map(h => {
     let inconsistencies = 0, consistent = 0, neutral = 0;
     for (const e of evidence) {
-      const mark = e.matrix?.[h.id];
+      const markRaw = e.matrix?.[h.id];
+      const mark = typeof markRaw === "string" ? markRaw.toUpperCase() : undefined;
       if (mark === "I") inconsistencies++;
       else if (mark === "C") consistent++;
       else neutral++;
@@ -254,11 +337,17 @@ function analyzeAch(input: AnalyzeInput): Record<string, unknown> {
   const ranking = [...rows].sort((a, b) =>
     a.inconsistencies - b.inconsistencies ||
     hypotheses.findIndex(h => h.id === a.id) - hypotheses.findIndex(h => h.id === b.id));
-  const eliminated = ranking.slice(1).map(r => ({
-    id: r.id,
-    reason: `${r.inconsistencies} inconsistent evidence item(s) vs ${ranking[0].inconsistencies} for ${ranking[0].id}`,
-  }));
-  return { ranking, eliminated };
+  const minInconsistencies = ranking[0].inconsistencies;
+  const bestRows = ranking.filter(r => r.inconsistencies === minInconsistencies);
+  const isTie = bestRows.length > 1;
+  // Strictly worse than the best score are eliminated; tied winners are not eliminated
+  const eliminated = ranking
+    .filter(r => r.inconsistencies > minInconsistencies)
+    .map(r => ({
+      id: r.id,
+      reason: `${r.inconsistencies} inconsistent evidence item(s) vs ${minInconsistencies} for ${ranking[0].id}`,
+    }));
+  return { ranking, eliminated, tie: isTie };
 }
 
 /** Human-readable one-line summary stored as the lens finding text. */
@@ -466,6 +555,22 @@ export function pendingActions(state: State): string[] {
     pending.push("Select or synthesize at least one hypothesis");
   }
 
+  // Gate 3b (advisory): Hypothesis eliminated by ACH but resolved as survived/selected
+  const achEliminatedIds = new Set<string>();
+  for (const l of state.lenses) {
+    if (l.computed === true && l.lens === "analyze:ach") {
+      const analysis = l.analysis as { eliminated?: { id: string }[] } | undefined;
+      if (analysis && Array.isArray(analysis.eliminated)) {
+        for (const e of analysis.eliminated) achEliminatedIds.add(e.id);
+      }
+    }
+  }
+  for (const h of hypList) {
+    const resolvedSurvived = h.status === "selected" || h.status === "synthesized" || (h.falsificationResult != null && /^survived\b/i.test(h.falsificationResult.trim()));
+    if (achEliminatedIds.has(h.id) && resolvedSurvived) {
+      pending.push(`Hypothesis '${h.id}' was previously eliminated by ACH analysis but resolved as ${h.status}`);
+    }
+  }
   // Gate 4: at least 2 prior thoughts before termination
   if (state.thoughtHistory.length < 2) {
     pending.push(`Requires at least 2 prior thoughts before termination (current: ${state.thoughtHistory.length})`);
@@ -521,6 +626,13 @@ export function pendingActions(state: State): string[] {
         // Computed --analyze entries are recorded as 'analyze:<name>'; the
         // suffix (sensitivity/pareto/ach) aliases the corresponding catalog
         // lens, so they satisfy core coverage the same as a --recordLens name.
+        // A6: Hollow sensitivity (<2 criteria or <2 candidates) does NOT satisfy core lens coverage.
+        if (l.computed === true && l.lens === "analyze:sensitivity") {
+          const analysis = l.analysis as { criteriaCount?: number; candidatesCount?: number } | undefined;
+          if (analysis && ((analysis.criteriaCount ?? 0) < 2 || (analysis.candidatesCount ?? 0) < 2)) {
+            return false;
+          }
+        }
         const raw = l.computed === true && l.lens.startsWith("analyze:")
           ? l.lens.slice("analyze:".length)
           : l.lens;
@@ -671,11 +783,23 @@ function loadState(): State {
  * A lock older than STALE_MS belongs to a crashed process and is stolen.
  */
 const LOCK_DIR = STATE_FILE + ".lock";
-// The wait must outlast the staleness window, otherwise a crashed process's
-// lock cannot be stolen before the waiter gives up and tells the user to delete
-// it by hand.
-const LOCK_STALE_MS = 30_000;
-const LOCK_WAIT_MS = LOCK_STALE_MS + 10_000;
+function resolveLockTimeouts(): { staleMs: number; waitMs: number } {
+  const rawStale = process.env.THINK_LOCK_STALE_MS;
+  const rawWait = process.env.THINK_LOCK_WAIT_MS;
+  const defaultStale = 30_000;
+  const defaultWait = 40_000;
+  const parsedStale = rawStale ? Number(rawStale) : NaN;
+  const parsedWait = rawWait ? Number(rawWait) : NaN;
+  const staleValid = Number.isInteger(parsedStale) && parsedStale > 0;
+  const waitValid = Number.isInteger(parsedWait) && parsedWait > 0;
+  const staleMs = staleValid ? parsedStale : defaultStale;
+  const waitMs = waitValid ? parsedWait : defaultWait;
+  if (waitMs <= staleMs) {
+    return { staleMs: defaultStale, waitMs: defaultWait };
+  }
+  return { staleMs, waitMs };
+}
+const { staleMs: LOCK_STALE_MS, waitMs: LOCK_WAIT_MS } = resolveLockTimeouts();
 let lockHeld = false;
 
 function sleepSync(ms: number): void {
@@ -1849,6 +1973,20 @@ if (values.resolveHypothesis != null) {
   }
 
   const updated = state.hypotheses![hyp.id];
+  // A5: If hypothesis was previously eliminated by ACH but resolved to survived/selected, warn
+  const resolvedSurvived = status === "selected" || status === "synthesized" || (values.falsificationResult != null && /^survived\b/i.test(values.falsificationResult.trim()));
+  if (resolvedSurvived) {
+    const eliminatedByAch = state.lenses.some(l => {
+      if (l.computed === true && l.lens === "analyze:ach") {
+        const analysis = l.analysis as { eliminated?: { id: string }[] } | undefined;
+        return analysis?.eliminated?.some(e => e.id === hyp.id);
+      }
+      return false;
+    });
+    if (eliminatedByAch) {
+      console.log(`WARN: Hypothesis '${hyp.id}' was previously eliminated by ACH analysis`);
+    }
+  }
 
   recordAudit(state, { op: "resolveHypothesis", target: hyp.id, detail: status === "merged" ? `merged->${values.mergedInto}` : status });
   saveState(state);
@@ -1931,9 +2069,16 @@ if (values.analyze != null) {
   } catch {
     fail(`--data is not valid JSON: could not parse the ${kind} input.`);
   }
+  if (input == null || typeof input !== "object" || Array.isArray(input)) {
+    fail(`Error: --data must be a non-null object for ${kind} analysis.`);
+  }
   const analysis = kind === "sensitivity" ? analyzeSensitivity(input)
     : kind === "pareto" ? analyzePareto(input)
     : analyzeAch(input);
+  if (kind === "sensitivity") {
+    analysis.criteriaCount = input.criteria?.length ?? 0;
+    analysis.candidatesCount = input.candidates?.length ?? 0;
+  }
   const entry: LensFinding = {
     lens: `analyze:${kind}`,
     finding: analyzeFinding(kind, analysis),

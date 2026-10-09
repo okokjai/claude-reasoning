@@ -1,6 +1,6 @@
 {
   "name": "claude-reasoning",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "Use when or before answering any architecture tradeoff, debugging, root-cause investigation, decision, design critique, multi-step analysis, or open-ended question needing verified facts. Structurally adaptive reasoning with claim-gated verification (Path A closed-form, Path B open-ended), 11 hallucination gates, and dual-source enforcement. Zero MCP dependencies.",
   "scripts": {
     "think": "bun scripts/think.ts",

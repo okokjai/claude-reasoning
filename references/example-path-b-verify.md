@@ -134,7 +134,7 @@ bun scripts/think.ts --verifyClaim claim-2 --claimStatus verified \
 
 ```bash
 bun scripts/think.ts \
-  --thought "Both registered claims verified with dual Tier 1 sources. Negative search confirmed Bedrock prompt caching requires us-east-1 or us-west-2, meaning Taiwan traffic will incur transatlantic round-trip latency (~150-180ms network RTT) regardless of provider choice unless Anthropic direct Tokyo/Singapore endpoints are utilized." \
+  --thought "Both registered claims verified with dual Tier 1 sources. Negative search confirmed Bedrock prompt caching requires us-east-1 or us-west-2, meaning Taiwan traffic will incur transpacific round-trip latency (~150-180ms network RTT) regardless of provider choice unless Anthropic direct Tokyo/Singapore endpoints are utilized." \
   --thoughtNumber 3 --totalThoughts 7 --nextThoughtNeeded true
 # Output: [3/7] history=3 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3
 ```
@@ -186,10 +186,10 @@ bun scripts/think.ts --checkCriterion crit-1 --met true
 
 bun scripts/think.ts \
   --thought "Final conclusion formulated following references/conclusion-card.md structure. All claims verified, all hypotheses resolved; closing session." \
-  --thoughtNumber 6 --totalThoughts 7 --nextThoughtNeeded false \
+  --thoughtNumber 7 --totalThoughts 7 --nextThoughtNeeded false \
   --newInsight false --newInsightNotes "Session closes the pricing and caching sub-questions; APAC latency remains an open operational item and no further evidence would change the provider split."
-# Output: [6/7] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false ready=yes blockers=0
-# stdout: a `💭 Thought 6/7` block then the Reasoning Lint & Fact Sheet.
+# Output: [7/7] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false ready=yes blockers=0
+# stdout: a `💭 Thought 7/7` block then the Reasoning Lint & Fact Sheet.
 ```
 
 > **Dates in this example are `<YYYY-MM-DD>` placeholders — copy the pattern, never the value.**
@@ -204,15 +204,15 @@ bun scripts/think.ts \
 **as of `<YYYY-MM-DD>`**（抄自 `--status` 的 `today` 欄位）
 
 - **Primary Recommendation / Finding**:
-  - `[Probable]` 若貴團隊已有 AWS 基礎設施且重視合規/企業帳單，**建議優先採用 AWS Bedrock**；若講求最快獲得新功能更新且架構為多雲/輕量部署，直接呼叫 Anthropic API 更加靈活。
+  - `[Probable]` **建議優先採用 Anthropic Direct API** 以獲得最高靈活性與即時功能支援（對齊選定假說 hyp-1）；若團隊後續具備嚴格 AWS IAM/VPC 合規要求，可切換至 AWS Bedrock。
 
 **Calibrated Findings**
 
 | Tag | Finding | Sources | Source date |
 |---|---|---|---|
 | `[Confirmed]` | **計費標準**：Base Token 價格完全一致（Input $3/M, Output $15/M） | Anthropic Pricing, AWS Bedrock Pricing | `<YYYY-MM-DD>` |
-| `[Confirmed]` | **Prompt Caching**：AWS Bedrock 已支援 Claude 3.5 Sonnet Prompt Caching，限於 us-east-1 / us-west-2 | AWS Bedrock User Guide, AWS What's New | `<YYYY-MM-DD>` |
-| `[Probable]` | **台灣連線延遲**：Bedrock US 節點約 150–180ms RTT；若 Anthropic 直連近端（日本/新加坡）約 35–60ms | — | — |
+| `[Confirmed]` | **Prompt Caching**：AWS Bedrock 已支援 Claude 3.5 Sonnet Prompt Caching，限於 us-east-1 / us-west-2 | AWS Bedrock User Guide, Anthropic Prompt Caching Guide | `<YYYY-MM-DD>` |
+| `[Unverified]` | **台灣連線延遲**：Bedrock US 節點約 150–180ms RTT；若 Anthropic 直連近端（日本/新加坡）約 35–60ms（實測預估，尚無跨雲量測報告佐證） | — | — |
 | `[Plausible]` | **營運開銷**：Bedrock 透過 IAM 與 VPC Endpoint 提供更高等級網路隔離 | — | — |
 
 - **Confidence Assessment**:

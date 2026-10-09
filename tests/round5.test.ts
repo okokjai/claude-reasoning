@@ -73,20 +73,20 @@ describe("Bug 2: a stale lock that cannot be removed must not busy-spin", () => 
     // Backdate past LOCK_STALE_MS so the steal path is taken.
     const old = new Date(Date.now() - 120_000);
     require("fs").utimesSync(LOCK_DIR, old, old);
-    const res = run(["--status"]);
+    const res = run(["--status"], { THINK_LOCK_STALE_MS: "300", THINK_LOCK_WAIT_MS: "800" });
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/timed out/i);
     expect(res.stderr).not.toMatch(/\n\s+at /); // no raw stack trace
-  }, 60_000);
+  }, 5_000);
 
   it("a non-empty directory at the lock path times out with a message instead of spinning", () => {
     mkdirSync(join(LOCK_DIR, "sub"), { recursive: true });
     const old = new Date(Date.now() - 120_000);
     require("fs").utimesSync(LOCK_DIR, old, old);
-    const res = run(["--status"]);
+    const res = run(["--status"], { THINK_LOCK_STALE_MS: "300", THINK_LOCK_WAIT_MS: "800" });
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/timed out/i);
-  }, 60_000);
+  }, 5_000);
 });
 
 describe("Bug 3: LOCK_WAIT_MS must outlast LOCK_STALE_MS", () => {
@@ -95,19 +95,17 @@ describe("Bug 3: LOCK_WAIT_MS must outlast LOCK_STALE_MS", () => {
     // never be stolen before the waiter gives up and tells the user to delete
     // it by hand. Read the two constants straight from the source.
     const src = require("fs").readFileSync(SCRIPT, "utf-8");
-    const staleM = /const LOCK_STALE_MS = ([\d_]+);/.exec(src);
-    const waitM = /const LOCK_WAIT_MS = ([^;]+);/.exec(src);
-    expect(staleM).not.toBeNull();
-    expect(waitM).not.toBeNull();
-    const stale = Number(staleM![1].replace(/_/g, ""));
-    // The wait is expressed as `LOCK_STALE_MS + N`; evaluate it as arithmetic
-    // rather than a bare Number() so the addition form is handled.
-    const waitExpr = waitM![1].replace("LOCK_STALE_MS", String(stale)).replace(/_/g, "");
-    expect(/^[0-9 +\-*/().]+$/.test(waitExpr)).toBe(true); // arithmetic only
-    const wait = Number(new Function(`return (${waitExpr});`)());
+    const defaultStaleM = /defaultStale\s*=\s*([\d_]+);/.exec(src);
+    const defaultWaitM = /defaultWait\s*=\s*([\d_]+);/.exec(src);
+    expect(defaultStaleM).not.toBeNull();
+    expect(defaultWaitM).not.toBeNull();
+    const stale = Number(defaultStaleM![1].replace(/_/g, ""));
+    const wait = Number(defaultWaitM![1].replace(/_/g, ""));
     expect(Number.isFinite(stale)).toBe(true);
     expect(Number.isFinite(wait)).toBe(true);
     expect(wait).toBeGreaterThan(stale);
+    expect(src).toContain("THINK_LOCK_STALE_MS");
+    expect(src).toContain("THINK_LOCK_WAIT_MS");
   });
 });
 

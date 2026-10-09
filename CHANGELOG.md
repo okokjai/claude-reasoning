@@ -3,6 +3,25 @@
 All notable changes to this skill are documented here.
 
 
+## [3.2.2] - 2026-10-10
+
+### Fixed
+
+- **Computed `--analyze` input validation & crash prevention (A1–A4) (`scripts/think.ts`, `tests/round6-analyze-fixes.test.ts`).**
+  - `--data` now rejects `null`, arrays, and non-object JSON payloads cleanly with exit 1 instead of throwing an unhandled `TypeError` (A1).
+  - `--analyze ach` validates that every matrix entry is `"C"`, `"I"`, or `"N"` (case-insensitive), rejects duplicate or undeclared hypothesis/evidence IDs, requires complete hypothesis coverage in every evidence matrix, and adds `tie: true` when multiple top-ranked hypotheses share the minimum inconsistency count without eliminating tied winners (A2).
+  - `--analyze sensitivity` validates that every criterion `direction` is `"min"` or `"max"` and `weight` is a finite positive number (`> 0`), rejects duplicate candidate or criterion IDs, and requires complete finite numeric scores for every criterion across all candidates instead of defaulting missing scores to `0` (A3).
+  - `--analyze pareto` validates objective directions (`"min"` | `"max"`) and requires identical, complete finite metric keys across all candidates (A4).
+- **ACH-eliminated hypothesis resolution warning (A5) (`scripts/think.ts`, `tests/round6-analyze-fixes.test.ts`).** Resolving a hypothesis previously eliminated by `--analyze ach` as `selected`/`synthesized` (or with a `survived:` falsification outcome) now emits `WARN: Hypothesis '<id>' was previously eliminated by ACH analysis` and surfaces an advisory item in `pendingActions`.
+- **Hollow sensitivity excluded from core lens coverage (A6) (`scripts/think.ts`, `tests/round6-analyze-fixes.test.ts`).** A `--analyze sensitivity` run with fewer than 2 criteria or fewer than 2 candidates is recorded in `state.lenses` with `criteriaCount` and `candidatesCount` metadata, but does not satisfy the `lens-6` (Sensitivity Analysis) core-lens requirement in `pendingActions`.
+- **Configurable lock timeouts & faster lock regression suite (B1–B2) (`scripts/think.ts`, `SKILL.md`, `tests/round5.test.ts`).** Documented shell `&&` chaining in `SKILL.md` (B1) and added `THINK_LOCK_STALE_MS` (default `30000`) and `THINK_LOCK_WAIT_MS` (default `40000`) environment variable overrides with automatic fallback on invalid values or `wait <= stale` (B2), cutting lock contention test duration in `tests/round5.test.ts` by >85%.
+- **Path B worked example alignment (C3) (`references/example-path-b-verify.md`).** Fixed five self-contradictions: aligned Primary Recommendation with the selected hypothesis (`hyp-1`), relabeled unmeasured Taiwan RTT latency from `[Probable]` to `[Unverified]`, corrected "trans-Atlantic" to "transpacific", replaced the unsearched "AWS What's New" citation with the retrieved Anthropic Prompt Caching Guide, and aligned the final section header and `--thoughtNumber` to `7/7`.
+- **Repository-wide version surface drift guard & catalog drift guard (C4) (`tests/round6-analyze-fixes.test.ts`, `tests/skill-frontmatter.test.ts`, `README.md`).** Added a drift guard verifying 1:1 ID and name alignment between `references/critical-lenses.md` and `LENS_CATALOG` (11 lenses), alongside the repository-wide version surface drift guard, and updated `README.md` to accurately describe `references/hallucination-gates.md`.
+
+### Breaking Changes
+
+- None. `SCHEMA_VERSION` remains `3` (backward-compatible with v3.0.x and v3.2.0 state files); malformed `--analyze` inputs that previously crashed or silently coerced missing values to `0` now exit `1` with an explicit validation message.
+
 ## [3.2.1] - 2026-10-09
 
 ### Fixed

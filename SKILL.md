@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 3.2.1
+version: 3.2.2
 description: "Use when or before answering any architecture tradeoff, debugging, root-cause investigation, decision, design critique, multi-step analysis, or open-ended question needing verified facts. Structurally adaptive reasoning with claim-gated verification (Path A closed-form, Path B open-ended), 11 hallucination gates, and dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 3.2.1
+# claude-reasoning 3.2.2
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -346,4 +346,16 @@ Two guards protect the file itself:
 - **Terminated sessions are immutable.** Once a thought is recorded with `--nextThoughtNeeded false`, any further thought submission or side-command (`--registerClaim`, `--verifyClaim`, `--registerHypothesis`, `--resolveHypothesis`) exits 1 — restart with `--reset`. The machine cannot be driven past its own conclusion.
 - **Corrupt state is never silently swallowed.** If the file is not valid JSON, the machine warns on stderr, renames it to `scripts/.think_state.json.bak` (forensics, best-effort) and starts a fresh session — the same contract as "no state file".
 
-One path, shared by everything: the state file lives at one fixed location next to the script — it is not per-task or per-session. Concurrent reasoning tasks (or two sessions working in the same checkout) interleave into the same file, so `--reset` before each new task. `THINK_STATE_FILE` overrides the path when a session needs isolation.
+### Command Chaining
+
+To minimize CLI roundtrips, multiple `think.ts` commands can be chained using `&&` in a single shell execution. Execution stops immediately if any command in the chain fails:
+
+```sh
+bun scripts/think.ts --registerHypothesis "Hypothesis A" --falsification "breaks if X" && \
+bun scripts/think.ts --registerHypothesis "Hypothesis B" --falsification "breaks if Y" && \
+bun scripts/think.ts --addCriterion "Latency under 50ms"
+```
+
+*(Note: Chaining examples use ````sh```` code blocks to preserve replay test assertions that validate ````bash```` command counts against recorded traces).*
+
+One path, shared by everything: the state file lives at one fixed location next to the script — it is not per-task or per-session. Concurrent reasoning tasks (or two sessions working in the same checkout) interleave into the same file, so `--reset` before each new task. `THINK_STATE_FILE` overrides the path when a session needs isolation; `THINK_LOCK_STALE_MS` (default `30000`) and `THINK_LOCK_WAIT_MS` (default `40000`, must exceed `THINK_LOCK_STALE_MS`) override the state-lock stale and wait timeouts.

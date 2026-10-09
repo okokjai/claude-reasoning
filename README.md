@@ -1,4 +1,4 @@
-# claude-reasoning 3.2.1
+# claude-reasoning 3.2.2
 
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat-square&logo=github)](https://github.com/okokjai/claude-reasoning/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
@@ -28,7 +28,7 @@ A Claude Code skill for **structurally adaptive reasoning** with **claim-gated e
 - **Integrated High-Value References (ported & cleaned from 1.2.0):**
   - `references/source-tiers.md`: 4-tier credibility hierarchy (Tier 1 Primary to Tier 4 AI Summaries) with 2-source corroboration rule.
   - `references/critical-lenses.md`: 11-lens catalog (First Principles, Pre-Mortem & Active Red Team, Contrarian, Reversal, Scale & Boundary Stress, Sensitivity Analysis, Pareto Frontier, Differential Elimination / ACH, Second-Order, Reversibility, Blast Radius) — mirrored by `--listLenses`; `sensitivity`/`pareto`/`ach` are computed via `--analyze`.
-  - `references/hallucination-gates.md`: 5 P0 semantic anti-hallucination gates (Verifier Separation, Entity Check, Honest Tool Absence).
+  - `references/hallucination-gates.md`: 5 P0 semantic anti-hallucination gates (Entity Check, Dual Independent Sources, Temporal Currency, Negative Search & Disconfirmation, Honest Tool Absence) operating as an auditor-style separation check.
   - `references/conclusion-card.md`: conclusion-first card with 5 calibrated confidence labels (`Confirmed`, `Probable`, `Plausible`, `Unverified`, `Contested`), a findings table with per-source dates, and a mandatory verbatim-pasted Reasoning Trace.
 
 ## Install
@@ -206,7 +206,7 @@ The session clock is stamped by the script: `startedAt` on the first thought, `e
 bun run typecheck && bun test
 ```
 
-Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file. Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), the `--thought` standalone-mode guard, the v3.0.8 surfaces (session clock, `--claimDate` alignment/freshness, reasoning-trace tables, `escapeCell` escaping), and the v3.2.0 surfaces (`LENS_CATALOG`/`--listLenses`, `--kind` problem kinds, `pendingActions` per-step guidance, `--analyze sensitivity|pareto|ach`, `--flipIf`, weak-content lint WARNs). `bun test` runs the comprehensive regression suite.
+Tests live in `tests/` — offline, no network calls, no API keys. Each suite pins `THINK_STATE_FILE` to a per-process path so concurrent `bun test` invocations cannot share a state file (lock stale/wait timeouts default to `30000` / `40000` ms and are configurable via `THINK_LOCK_STALE_MS` / `THINK_LOCK_WAIT_MS`). Covers the thinking loop (submit / revise / branch), terminated-session immutability, corrupt-state backup, mode declaration and immutability, Path A minimum-depth, maximum-depth cap (5), and side-command prohibitions (claims, hypotheses, acceptance criteria, and lens records), Path B hypothesis lifecycle and convergence gates (including the all-rejected termination block, merge-chain and stale-survivor handling), the `--thought` standalone-mode guard, the v3.0.8 surfaces (session clock, `--claimDate` alignment/freshness, reasoning-trace tables, `escapeCell` escaping), and the v3.2.0 surfaces (`LENS_CATALOG`/`--listLenses`, `--kind` problem kinds, `pendingActions` per-step guidance, `--analyze sensitivity|pareto|ach`, `--flipIf`, weak-content lint WARNs). `bun test` runs the comprehensive regression suite.
 
 ## Design notes
 
