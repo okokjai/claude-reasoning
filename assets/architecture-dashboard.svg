@@ -1,23 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1280" width="100%" height="100%" style="background:#0e0e11; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1260" width="100%" height="100%" style="background:#0e0e11; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,sans-serif;">
   <defs>
     <style>
       .mono { font-family: 'SF Mono', Consolas, Monaco, Menlo, monospace; }
-      .side-label { font-size: 11px; fill: #71717a; line-height: 1.4; }
-      .side-head { font-size: 12px; font-weight: 700; fill: #d4d4d8; }
-      .node-title { font-size: 13.5px; font-weight: 700; fill: #ffffff; letter-spacing: -0.01em; }
+      .side-head { font-size: 12.5px; font-weight: 700; fill: #d4d4d8; }
+      .side-label { font-size: 11px; fill: #71717a; }
+      .node-title { font-size: 15px; font-weight: 800; fill: #ffffff; letter-spacing: -0.02em; }
       .metric-label { font-size: 10px; font-weight: 600; fill: #71717a; text-transform: uppercase; letter-spacing: 0.04em; }
-      .metric-val { font-size: 13px; font-weight: 700; fill: #f4f4f5; }
-      .chip-text { font-size: 10px; font-weight: 600; }
     </style>
-    <!-- Arrow marker for connectors -->
     <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 1 L 8 5 L 0 9 z" fill="#3f3f46"/>
-    </marker>
-    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 8 5 L 0 9 z" fill="#22c55e"/>
-    </marker>
-    <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 8 5 L 0 9 z" fill="#ef4444"/>
     </marker>
   </defs>
 
@@ -29,298 +20,200 @@
     <text x="338" y="22" font-size="12" fill="#71717a">· claim-gated adaptive reasoning architecture</text>
   </g>
 
-  <!-- Vertical Divider separating Left Annotation Column and Right Pipeline -->
-  <line x1="250" y1="100" x2="250" y2="980" stroke="#222226" stroke-width="1.2" stroke-dasharray="4,4"/>
+  <!-- Vertical Divider separating Left Flow and Right Capabilities -->
+  <line x1="250" y1="110" x2="250" y2="1000" stroke="#222226" stroke-width="1.2" stroke-dasharray="4,4"/>
 
-  <!-- ================= LEVEL 1: ARCHITECT / STATE MACHINE ================= -->
-  <!-- Left Side: Step 1 of the skill workflow -->
-  <g transform="translate(48, 120)">
+  <!-- ================= LEFT COLUMN: CONDENSED 5-STEP FLOW ================= -->
+  <text x="48" y="116" class="metric-label">workflow · 5 steps</text>
+
+  <!-- Step 1: Start a session -->
+  <g transform="translate(48, 134)">
     <g>
       <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
       <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">1</text>
     </g>
-    <text x="46" y="15" class="side-head">start a session</text>
-    <text x="46" y="32" class="side-label">reset state, stamp clock</text>
-
-    <g transform="translate(46, 48)">
-      <rect width="172" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+    <text x="46" y="15" class="side-head">start session</text>
+    <text x="46" y="32" class="side-label">reset · stamp clock</text>
+    <g transform="translate(46, 44)">
+      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
       <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --reset</text>
     </g>
-
-    <g transform="translate(0, 96)">
-      <text x="46" y="0" class="side-label">inspect readiness</text>
-      <text x="46" y="16" class="side-label" fill="#a1a1aa">any time · blockers listed</text>
-      <g transform="translate(46, 26)">
-        <rect width="172" height="24" rx="6" fill="#131316" stroke="#27272a"/>
-        <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --status</text>
-      </g>
-    </g>
   </g>
 
-  <!-- Right Side: Node 1 (think.ts Architect Box) -->
-  <g transform="translate(280, 110)">
-    <rect width="630" height="110" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-    
-    <g transform="translate(315, 42)">
-      <!-- Centered main node title -->
-      <text x="0" y="0" text-anchor="middle" class="node-title" font-size="16">think.ts · State Machine</text>
-      <text x="0" y="24" text-anchor="middle" font-size="12" fill="#a1a1aa">plans structure + enforces invariants · exit code 1 hard stops</text>
-      <text x="0" y="46" text-anchor="middle" class="mono" font-size="11" fill="#38bdf8">startedAt · endedAt · today()</text>
-    </g>
-  </g>
+  <!-- Connector 1 -> 2 -->
+  <line x1="65" y1="212" x2="65" y2="242" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-  <!-- Connector from Level 1 to Level 2 -->
-  <line x1="595" y1="220" x2="595" y2="260" stroke="#3f3f46" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-  <!-- ================= LEVEL 2: FORK LAYER (JEV STYLE) ================= -->
-  <!-- Left Side: Annotations -->
-  <g transform="translate(48, 300)">
+  <!-- Step 2: Declare the structure -->
+  <g transform="translate(48, 252)">
     <g>
       <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
       <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">2</text>
     </g>
-    <text x="46" y="15" class="side-head">declare the structure</text>
+    <text x="46" y="15" class="side-head">declare structure</text>
     <text x="46" y="32" class="side-label">first thought locks mode</text>
-
-    <g transform="translate(46, 48)">
-      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">think.ts --mode path-b</text>
-      <text x="10" y="33" class="mono" font-size="10.5" fill="#52525b">   --kind decision …</text>
-    </g>
-
-    <g transform="translate(0, 116)">
-      <text x="46" y="0" class="side-label">two kinds of question</text>
-      <text x="46" y="18" class="side-label" fill="#f59e0b">path-a: prove the answer</text>
-      <text x="46" y="36" class="side-label" fill="#38bdf8">path-b: converge on it</text>
+    <g transform="translate(46, 44)">
+      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">--mode path-a|path-b</text>
     </g>
   </g>
 
-  <!-- Right Side: Node 2 (Fork Layer Card) -->
-  <g transform="translate(280, 260)">
-    <rect width="630" height="154" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-    
-    <g transform="translate(24, 20)">
-      <!-- Title & Counters -->
-      <text x="0" y="14" class="node-title">Step 0 · Fork Layer</text>
-      <text x="140" y="14" class="mono" font-size="11" fill="#71717a">--mode required on thought 1</text>
-      
+  <!-- Connector 2 -> 3 -->
+  <line x1="65" y1="330" x2="65" y2="360" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-      <!-- 3 Branch Chips -->
-      <g transform="translate(0, 48)">
-        <!-- Path A Branch -->
-        <g transform="translate(0, 0)">
-          <rect width="186" height="58" rx="8" fill="#18181b" stroke="#27272a"/>
-          <text x="12" y="22" font-size="11.5" font-weight="600" fill="#ffffff">closed-form</text>
-          <text x="100" y="22" class="mono" font-size="10.5" fill="#f59e0b">path-a</text>
-          <text x="12" y="42" class="mono" font-size="10" fill="#71717a">3–5 thoughts · no search</text>
-        </g>
-
-        <!-- Path B Branch -->
-        <g transform="translate(198, 0)">
-          <rect width="186" height="58" rx="8" fill="#18181b" stroke="#27272a"/>
-          <text x="12" y="22" font-size="11.5" font-weight="600" fill="#ffffff">open-ended</text>
-          <text x="100" y="22" class="mono" font-size="10.5" fill="#38bdf8">path-b</text>
-          <text x="12" y="42" class="mono" font-size="10" fill="#71717a">≥2 hypotheses + lenses</text>
-        </g>
-
-        <!-- Exit 1 Guard -->
-        <g transform="translate(396, 0)">
-          <rect width="186" height="58" rx="8" fill="#1a1214" stroke="#3b1d24"/>
-          <text x="12" y="22" font-size="11.5" font-weight="600" fill="#fca5a5">illegal change</text>
-          <text x="110" y="22" class="mono" font-size="10.5" font-weight="700" fill="#ef4444">exit 1</text>
-          <text x="12" y="42" class="mono" font-size="10" fill="#f87171">immutable mode guard</text>
-        </g>
-      </g>
-
-      <!-- Bottom Status Rule -->
-      <text x="0" y="124" class="mono" font-size="10.5" fill="#a1a1aa">sharp → runs in state machine <tspan fill="#52525b">|</tspan> split → evaluate convergence</text>
-    </g>
-  </g>
-
-  <!-- Connector from Level 2 to Level 3 -->
-  <line x1="595" y1="414" x2="595" y2="454" stroke="#3f3f46" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-  <!-- ================= LEVEL 3: ACTIVE ENGINES (3 COLUMNS) ================= -->
-  <!-- Left Side: Annotations -->
-  <g transform="translate(48, 470)">
+  <!-- Step 3: Run the loop -->
+  <g transform="translate(48, 370)">
     <g>
       <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
       <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">3</text>
     </g>
     <text x="46" y="15" class="side-head">run the loop</text>
-    <text x="46" y="32" class="side-label">submit thoughts, build evidence</text>
-
-    <g transform="translate(46, 46)">
-      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">--registerHypothesis …</text>
-      <text x="10" y="33" class="mono" font-size="10.5" fill="#71717a">--recordLens --lens …</text>
-    </g>
-
-    <g transform="translate(46, 106)">
-      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">--registerClaim … --supports</text>
-      <text x="10" y="33" class="mono" font-size="10.5" fill="#71717a">--analyze sensitivity --data …</text>
-    </g>
-
-    <g transform="translate(0, 174)">
-      <text x="46" y="0" class="side-label">next: reported every step</text>
-      <text x="46" y="16" class="side-label" fill="#a1a1aa">ready=yes · blockers=N</text>
+    <text x="46" y="32" class="side-label">thoughts · hypotheses · lenses</text>
+    <g transform="translate(46, 44)">
+      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">--thought …</text>
     </g>
   </g>
 
-  <!-- Right Side: Level 3 Container -->
-  <g transform="translate(280, 454)">
-    <!-- Sub-header -->
-    <text x="0" y="14" class="metric-label">active engines · parallel evaluation</text>
-    <text x="380" y="14" class="mono" font-size="10" fill="#71717a">zero pseudo-quant scoring</text>
+  <!-- Connector 3 -> 4 -->
+  <line x1="65" y1="448" x2="65" y2="478" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-    <!-- 3 Agent Cards Side-by-Side -->
-    <g transform="translate(0, 26)">
-      <!-- Card 1: Hypotheses -->
-      <g transform="translate(0, 0)">
-        <rect width="202" height="236" rx="10" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-        <g transform="translate(16, 18)">
-          <text x="0" y="12" font-size="12.5" font-weight="700" fill="#ffffff">hypotheses</text>
-          <text x="0" y="28" class="mono" font-size="10" fill="#71717a">≥2 registered</text>
-
-          <rect x="0" y="40" width="170" height="1" fill="#222226"/>
-
-          <text x="0" y="58" class="metric-label">falsification</text>
-          <text x="0" y="74" class="mono" font-size="10.5" fill="#38bdf8">--falsification</text>
-          <text x="0" y="90" font-size="10.5" fill="#a1a1aa">mandatory test</text>
-
-          <text x="0" y="118" class="metric-label">resolution</text>
-          <text x="0" y="134" class="mono" font-size="10" fill="#e4e4e7">survived: / falsified:</text>
-          <text x="0" y="150" class="mono" font-size="10" fill="#f59e0b">--flipIf &lt;cond&gt;</text>
-
-          <!-- Running indicator -->
-          <g transform="translate(0, 188)">
-            <circle cx="4" cy="4" r="3" fill="#22c55e"/>
-            <text x="12" y="7" class="mono" font-size="10" fill="#22c55e">audited</text>
-          </g>
-        </g>
-      </g>
-
-      <!-- Card 2: Lenses & Analyze -->
-      <g transform="translate(214, 0)">
-        <rect width="202" height="236" rx="10" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-        <g transform="translate(16, 18)">
-          <text x="0" y="12" font-size="12.5" font-weight="700" fill="#ffffff">critical lenses</text>
-          <text x="0" y="28" class="mono" font-size="10" fill="#71717a">11 catalog</text>
-
-          <rect x="0" y="40" width="170" height="1" fill="#222226"/>
-
-          <text x="0" y="58" class="metric-label">qualitative</text>
-          <text x="0" y="74" font-size="11" fill="#e4e4e7">First Principles</text>
-          <text x="0" y="90" font-size="11" fill="#e4e4e7">Pre-Mortem, ACH</text>
-
-          <text x="0" y="118" class="metric-label">deterministic</text>
-          <text x="0" y="134" class="mono" font-size="10" fill="#c084fc">--analyze sensitivity</text>
-          <text x="0" y="150" class="mono" font-size="10" fill="#c084fc">pareto frontier</text>
-
-          <g transform="translate(0, 188)">
-            <circle cx="4" cy="4" r="3" fill="#22c55e"/>
-            <text x="12" y="7" class="mono" font-size="10" fill="#22c55e">computed TS</text>
-          </g>
-        </g>
-      </g>
-
-      <!-- Card 3: Claims -->
-      <g transform="translate(428, 0)">
-        <rect width="202" height="236" rx="10" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-        <g transform="translate(16, 18)">
-          <text x="0" y="12" font-size="12.5" font-weight="700" fill="#ffffff">claim verify</text>
-          <text x="0" y="28" class="mono" font-size="10" fill="#71717a">external gate</text>
-
-          <rect x="0" y="40" width="170" height="1" fill="#222226"/>
-
-          <text x="0" y="58" class="metric-label">dual-source</text>
-          <text x="0" y="74" font-size="11" fill="#38bdf8">≥2 Root Domains</text>
-          <text x="0" y="90" font-size="11" fill="#38bdf8">Tier 1 &amp; Tier 2 only</text>
-
-          <text x="0" y="118" class="metric-label">counter-evidence</text>
-          <text x="0" y="134" class="mono" font-size="10" fill="#e4e4e7">--claimQuote</text>
-          <text x="0" y="150" class="mono" font-size="10" fill="#e4e4e7">--negativeFinding</text>
-
-          <g transform="translate(0, 188)">
-            <circle cx="4" cy="4" r="3" fill="#22c55e"/>
-            <text x="12" y="7" class="mono" font-size="10" fill="#22c55e">grounded</text>
-          </g>
-        </g>
-      </g>
-    </g>
-  </g>
-
-  <!-- Connector from Level 3 to Level 4 -->
-  <line x1="595" y1="720" x2="595" y2="760" stroke="#3f3f46" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-  <!-- ================= LEVEL 4: REVIEW & VERIFY (ASTRA "before done" BAR) ================= -->
-  <!-- Left Side: Annotations -->
-  <g transform="translate(48, 774)">
+  <!-- Step 4: Converge -->
+  <g transform="translate(48, 488)">
     <g>
       <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
       <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">4</text>
     </g>
     <text x="46" y="15" class="side-head">converge</text>
     <text x="46" y="32" class="side-label">declare no new insight</text>
-
-    <g transform="translate(46, 46)">
-      <rect width="188" height="44" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="17" class="mono" font-size="10.5" fill="#71717a">--resolveHypothesis …</text>
-      <text x="10" y="33" class="mono" font-size="10.5" fill="#71717a">--nextThoughtNeeded false</text>
-    </g>
-
-    <g transform="translate(0, 116)">
-      <text x="46" y="0" class="side-label">any blocker → keeps running</text>
-      <text x="46" y="16" class="side-label" fill="#f87171">exit 1 · --reset to restart</text>
+    <g transform="translate(46, 44)">
+      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">--newInsight false</text>
     </g>
   </g>
 
-  <!-- Right Side: Level 4 Card -->
-  <g transform="translate(280, 760)">
-    <rect width="630" height="74" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
-    
-    <g transform="translate(24, 18)">
-      <text x="0" y="14" class="node-title">Terminal Gates 6–11</text>
-      <text x="170" y="14" class="mono" font-size="11" fill="#71717a">auto_review checks approvals</text>
+  <!-- Connector 4 -> 5 -->
+  <line x1="65" y1="566" x2="65" y2="596" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-      <text x="0" y="36" font-size="11.5" fill="#a1a1aa">criteria checked · lenses ≥ 2 · falsification verified · newInsight=false</text>
+  <!-- Step 5: Export -->
+  <g transform="translate(48, 606)">
+    <g>
+      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
+      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">5</text>
+    </g>
+    <text x="46" y="15" class="side-head">export</text>
+    <text x="46" y="32" class="side-label">reasoning trace fact sheet</text>
+    <g transform="translate(46, 44)">
+      <rect width="180" height="24" rx="6" fill="#131316" stroke="#27272a"/>
+      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --export</text>
+    </g>
+  </g>
 
-      <!-- Exit 1 Pill on Right -->
-      <g transform="translate(480, 6)">
+  <!-- Hard stop guard note under left flow -->
+  <g transform="translate(48, 700)">
+    <rect width="216" height="60" rx="8" fill="#1a1214" stroke="#3b1d24"/>
+    <text x="12" y="22" class="mono" font-size="10.5" font-weight="700" fill="#fca5a5">any guard violation</text>
+    <text x="12" y="42" class="mono" font-size="11" font-weight="700" fill="#ef4444">exit 1 · --reset to restart</text>
+  </g>
+
+  <!-- ================= RIGHT COLUMN: PATH A / PATH B CAPABILITIES ================= -->
+  <text x="280" y="116" class="metric-label">reasoning core · closed-form vs open-ended</text>
+
+  <!-- Top: State Machine root node (centered) -->
+  <g transform="translate(280, 132)">
+    <rect width="630" height="72" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
+    <g transform="translate(315, 26)">
+      <text x="0" y="0" text-anchor="middle" class="node-title">think.ts · State Machine</text>
+      <text x="0" y="22" text-anchor="middle" font-size="12" fill="#a1a1aa">plans structure + enforces invariants · exit code 1 hard stops</text>
+    </g>
+  </g>
+
+  <!-- Connector to Path A / Path B split -->
+  <line x1="595" y1="204" x2="595" y2="228" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="437" y1="228" x2="753" y2="228" stroke="#3f3f46" stroke-width="1.2"/>
+  <line x1="437" y1="228" x2="437" y2="248" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="753" y1="228" x2="753" y2="248" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+  <!-- Path A Card (Left half) -->
+  <g transform="translate(280, 252)">
+    <rect width="305" height="312" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
+    <g transform="translate(20, 22)">
+      <rect width="58" height="22" rx="6" fill="#2a1f0f" stroke="#78350f"/>
+      <text x="12" y="15" class="mono" font-size="10.5" font-weight="700" fill="#f59e0b">path-a</text>
+      <text x="70" y="16" class="node-title" font-size="14">closed-form</text>
+
+      <text x="0" y="46" font-size="12" fill="#a1a1aa">Prove a single correct answer.</text>
+
+      <rect x="0" y="60" width="265" height="1" fill="#222226"/>
+
+      <text x="0" y="82" class="metric-label">pipeline</text>
+      <text x="0" y="100" font-size="12" fill="#e4e4e7">restate → derive → cross-validate</text>
+
+      <text x="0" y="126" class="metric-label">depth bound</text>
+      <text x="0" y="144" font-size="12" fill="#e4e4e7">3–5 thoughts, enforced in code</text>
+
+      <text x="0" y="170" class="metric-label">forbidden</text>
+      <text x="0" y="188" font-size="11.5" fill="#f87171">claims · hypotheses · external search</text>
+
+      <text x="0" y="214" class="metric-label">guard</text>
+      <text x="0" y="232" font-size="11.5" fill="#e4e4e7">depth &lt;3 or &gt;5 → exit 1</text>
+
+      <g transform="translate(0, 250)">
+        <circle cx="4" cy="4" r="3" fill="#f59e0b"/>
+        <text x="12" y="8" class="mono" font-size="10" fill="#f59e0b">deterministic proof</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Path B Card (Right half) -->
+  <g transform="translate(605, 252)">
+    <rect width="305" height="312" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
+    <g transform="translate(20, 22)">
+      <rect width="58" height="22" rx="6" fill="#0f2033" stroke="#1e40af"/>
+      <text x="12" y="15" class="mono" font-size="10.5" font-weight="700" fill="#38bdf8">path-b</text>
+      <text x="70" y="16" class="node-title" font-size="14">open-ended</text>
+
+      <text x="0" y="46" font-size="12" fill="#a1a1aa">Converge on a defensible choice.</text>
+
+      <rect x="0" y="60" width="265" height="1" fill="#222226"/>
+
+      <text x="0" y="82" class="metric-label">hypotheses</text>
+      <text x="0" y="100" font-size="12" fill="#e4e4e7">≥2 registered + falsification clause</text>
+      <text x="0" y="118" font-size="11" fill="#71717a">resolved: survived: / falsified:</text>
+
+      <text x="0" y="144" class="metric-label">critical lenses</text>
+      <text x="0" y="162" font-size="12" fill="#e4e4e7">11-lens catalog, 2–4 per task</text>
+      <text x="0" y="180" font-size="11" fill="#c084fc">--analyze sensitivity · pareto · ach</text>
+
+      <text x="0" y="206" class="metric-label">external verify</text>
+      <text x="0" y="224" font-size="11.5" fill="#38bdf8">≥2 Tier 1/2 sources, claim-gated</text>
+
+      <g transform="translate(0, 250)">
+        <circle cx="4" cy="4" r="3" fill="#22c55e"/>
+        <text x="12" y="8" class="mono" font-size="10" fill="#22c55e">evidence-first convergence</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Terminal Gates bar -->
+  <line x1="595" y1="564" x2="595" y2="588" stroke="#3f3f46" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <g transform="translate(280, 592)">
+    <rect width="630" height="72" rx="12" fill="#141416" stroke="#27272a" stroke-width="1.2"/>
+    <g transform="translate(20, 18)">
+      <text x="0" y="14" class="node-title" font-size="13.5">Terminal Gates 6–11</text>
+      <text x="180" y="14" class="mono" font-size="11" fill="#71717a">criteria · lenses · falsification · convergence</text>
+      <text x="0" y="38" font-size="11.5" fill="#a1a1aa">every termination checked by think.ts before exit</text>
+      <g transform="translate(490, 6)">
         <rect width="110" height="28" rx="6" fill="#1f1416" stroke="#450a0a"/>
         <text x="14" y="18" class="mono" font-size="11" font-weight="700" fill="#ef4444">fail → exit 1</text>
       </g>
     </g>
   </g>
-  <!-- ================= LEVEL 5: SESSION LOG (ASTRA SIGNATURE FEED) ================= -->
-  <!-- Left Side: Step 5 of the skill workflow (export) -->
-  <g transform="translate(48, 896)">
-    <g>
-      <rect width="34" height="34" rx="9" fill="#1a1a1d" stroke="#2e2e33"/>
-      <text x="10" y="23" font-size="15" font-weight="800" fill="#f4f4f5">5</text>
-    </g>
-    <text x="46" y="15" class="side-head">export the proof</text>
-    <text x="46" y="32" class="side-label">fact sheet, printed once</text>
 
-    <g transform="translate(46, 46)">
-      <rect width="172" height="24" rx="6" fill="#131316" stroke="#27272a"/>
-      <text x="10" y="16" class="mono" font-size="11" fill="#71717a">think.ts --export</text>
-    </g>
+  <!-- ================= STATE TRACE (BOTTOM RIGHT) ================= -->
+  <text x="280" y="700" class="metric-label">state trace</text>
+  <g transform="translate(280, 716)">
+    <rect width="630" height="224" rx="12" fill="#0b0b0d" stroke="#1f1f23" stroke-width="1.2"/>
 
-    <g transform="translate(0, 96)">
-      <text x="46" y="0" class="side-label">paste verbatim into the</text>
-      <text x="46" y="16" class="side-label" fill="#a1a1aa">conclusion card report</text>
-    </g>
-  </g>
-
-  <!-- Loopback Line (from Review back to Architect if not converged) -->
-  <path d="M 910 797 L 935 797 L 935 165 L 910 165" fill="none" stroke="#3f3f46" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
-
-  <!-- Right Side: Session Log Terminal -->
-  <g transform="translate(280, 864)">
-    <rect width="630" height="240" rx="12" fill="#0b0b0d" stroke="#1f1f23" stroke-width="1.2"/>
-    
     <!-- Titlebar -->
     <g transform="translate(20, 18)">
       <circle cx="4" cy="4" r="3" fill="#ef4444"/>
@@ -331,44 +224,40 @@
 
     <!-- 4 Structured Rows -->
     <g transform="translate(20, 42)" class="mono" font-size="11">
-      <!-- Row 1 -->
       <g transform="translate(0, 0)">
-        <rect width="590" height="38" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="24" fill="#52525b">23:48:17</text>
-        <text x="76" y="24" font-weight="700" fill="#a1a1aa">step 0</text>
-        <text x="130" y="24" fill="#e4e4e7">topology → open-ended</text>
-        <text x="350" y="24" fill="#38bdf8">mode=path-b</text>
-        <text x="490" y="24" fill="#22c55e">sharp → code</text>
+        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
+        <text x="12" y="23" fill="#52525b">23:48:17</text>
+        <text x="76" y="23" font-weight="700" fill="#a1a1aa">step 0</text>
+        <text x="130" y="23" fill="#e4e4e7">topology → open-ended</text>
+        <text x="350" y="23" fill="#38bdf8">mode=path-b</text>
+        <text x="490" y="23" fill="#22c55e">locked</text>
       </g>
 
-      <!-- Row 2 -->
-      <g transform="translate(0, 44)">
-        <rect width="590" height="38" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="24" fill="#52525b">23:48:18</text>
-        <text x="76" y="24" font-weight="700" fill="#a1a1aa">analyze</text>
-        <text x="130" y="24" fill="#e4e4e7">sensitivity flip ±20%</text>
-        <text x="350" y="24" fill="#c084fc">rank stable</text>
-        <text x="490" y="24" fill="#22c55e">persisted</text>
+      <g transform="translate(0, 42)">
+        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
+        <text x="12" y="23" fill="#52525b">23:48:18</text>
+        <text x="76" y="23" font-weight="700" fill="#a1a1aa">analyze</text>
+        <text x="130" y="23" fill="#e4e4e7">sensitivity flip ±20%</text>
+        <text x="350" y="23" fill="#c084fc">rank stable</text>
+        <text x="490" y="23" fill="#22c55e">persisted</text>
       </g>
 
-      <!-- Row 3 -->
-      <g transform="translate(0, 88)">
-        <rect width="590" height="38" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="24" fill="#52525b">23:48:19</text>
-        <text x="76" y="24" font-weight="700" fill="#a1a1aa">verify</text>
-        <text x="130" y="24" fill="#e4e4e7">aws.amazon.com + anthropic</text>
-        <text x="350" y="24" fill="#38bdf8">2x Tier 1</text>
-        <text x="490" y="24" fill="#22c55e">verified</text>
+      <g transform="translate(0, 84)">
+        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
+        <text x="12" y="23" fill="#52525b">23:48:19</text>
+        <text x="76" y="23" font-weight="700" fill="#a1a1aa">verify</text>
+        <text x="130" y="23" fill="#e4e4e7">aws.amazon.com + anthropic</text>
+        <text x="350" y="23" fill="#38bdf8">2x Tier 1</text>
+        <text x="490" y="23" fill="#22c55e">verified</text>
       </g>
 
-      <!-- Row 4 -->
-      <g transform="translate(0, 132)">
-        <rect width="590" height="38" rx="6" fill="#121215" stroke="#1a1a1e"/>
-        <text x="12" y="24" fill="#52525b">23:48:20</text>
-        <text x="76" y="24" font-weight="700" fill="#a1a1aa">gates</text>
-        <text x="130" y="24" fill="#e4e4e7">Gates 6–11 verified</text>
-        <text x="350" y="24" fill="#a1a1aa">blockers=0</text>
-        <text x="490" y="24" fill="#22c55e" font-weight="700">export trace</text>
+      <g transform="translate(0, 126)">
+        <rect width="590" height="36" rx="6" fill="#121215" stroke="#1a1a1e"/>
+        <text x="12" y="23" fill="#52525b">23:48:20</text>
+        <text x="76" y="23" font-weight="700" fill="#a1a1aa">gates</text>
+        <text x="130" y="23" fill="#e4e4e7">Gates 6–11 verified</text>
+        <text x="350" y="23" fill="#a1a1aa">blockers=0</text>
+        <text x="490" y="23" fill="#22c55e" font-weight="700">export trace</text>
       </g>
     </g>
   </g>
