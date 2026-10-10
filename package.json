@@ -5,7 +5,8 @@
   "scripts": {
     "think": "bun scripts/think.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sync": "bun scripts/sync-local.ts"
   },
   "keywords": [
     "claude-code",

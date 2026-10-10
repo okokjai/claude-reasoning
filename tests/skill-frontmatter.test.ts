@@ -56,6 +56,23 @@ describe("SKILL.md description: selector visibility", () => {
     expect(row?.description?.slice(0, SELECTOR_WINDOW)).toBe(expectedPrefix);
   });
 
+  it("keeps installed .omp and .claude skill directories synchronized if present (install drift guard)", () => {
+    const home = process.env.USERPROFILE || process.env.HOME || "";
+    const pkg = JSON.parse(readFileSync(join(CWD, "package.json"), "utf-8")).version;
+
+    const ompSkillFm = join(home, ".omp", "agent", "skills", "claude-reasoning", "SKILL.md");
+    if (existsSync(ompSkillFm)) {
+      const v = /^version:\s*(\S+)/m.exec(readFileSync(ompSkillFm, "utf-8"))?.[1];
+      expect(v).toBe(pkg);
+    }
+
+    const claudeSkillFm = join(home, ".claude", "skills", "claude-reasoning", "SKILL.md");
+    if (existsSync(claudeSkillFm)) {
+      const v = /^version:\s*(\S+)/m.exec(readFileSync(claudeSkillFm, "utf-8"))?.[1];
+      expect(v).toBe(pkg);
+    }
+  });
+
   it("keeps all version surfaces aligned across the repository (drift guard)", () => {
     const pkg = JSON.parse(readFileSync(join(CWD, "package.json"), "utf-8")).version;
     const skillFm = /^version:\s*(\S+)/m.exec(readFileSync(join(CWD, "SKILL.md"), "utf-8"))?.[1];
