@@ -1,4 +1,4 @@
-# claude-reasoning 3.3.0
+# claude-reasoning 3.3.1
 
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat-square&logo=github)](https://github.com/okokjai/claude-reasoning/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)

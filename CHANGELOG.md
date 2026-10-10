@@ -3,6 +3,25 @@
 All notable changes to this skill are documented here.
 
 
+## [3.3.1] - 2026-10-10
+
+### Fixed
+- `sync-local.ts`: the CLI sync block is now wrapped in an `import.meta.main`
+  guard, so importing `computeKey`/`syncDb` in tests or other modules executes
+  zero side effects (no file copies or DB writes). `PROMPT_TEMPLATE_PATH` is
+  also safe when `HOME`/`USERPROFILE` is unset.
+- `sync-local.ts`: `syncDb` now deletes stale rows matching the skill
+  description prefix where `key != currentKey`, so legacy cache rows written
+  before `.sync-state.json` tracking existed are garbage-collected instead of
+  persisting forever.
+- `router-heuristics.ts` + `extensions/skill-router.ts`: `OPEN_ENDED_RE` now
+  includes `root.?cause|debug|bug|crash(?:ed)?`, so short debugging queries
+  (`"Debug"`, `"怎麼老是有bug?"`, `"system crashed, root cause?"`) trigger the
+  structured-reasoning injection instead of being silently dropped.
+- Repository-wide version surface drift guard verified across all release surfaces
+  after the `3.3.0` → `3.3.1` bump (`package.json`, `SKILL.md` frontmatter +
+  title, `README.md` title, `scripts/think.ts` header).
+
 ## [3.3.0] - 2026-10-10
 
 ### Added
@@ -18,18 +37,6 @@ All notable changes to this skill are documented here.
 - `SKILL.md`/`package.json` description: trigger conditions front-loaded inside
   the ~100-char selector preview window.
 - Repository-wide version surface drift guard verified across all release surfaces.
-- `sync-local.ts`: the CLI sync block is now wrapped in an `import.meta.main`
-  guard, so importing `computeKey`/`syncDb` in tests or other modules executes
-  zero side effects (no file copies or DB writes). `PROMPT_TEMPLATE_PATH` is
-  also safe when `HOME`/`USERPROFILE` is unset.
-- `sync-local.ts`: `syncDb` now deletes stale rows matching the skill
-  description prefix where `key != currentKey`, so legacy cache rows written
-  before `.sync-state.json` tracking existed are garbage-collected instead of
-  persisting forever.
-- `router-heuristics.ts` + `extensions/skill-router.ts`: `OPEN_ENDED_RE` now
-  includes `root.?cause|debug|bug|crash(?:ed)?`, so short debugging queries
-  (`"Debug"`, `"怎麼老是有bug?"`, `"system crashed, root cause?"`) trigger the
-  structured-reasoning injection instead of being silently dropped.
 
 ### Known limitations
 - First-turn inputs that are open-ended but structurally featureless (flat single
