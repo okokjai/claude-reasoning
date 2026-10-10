@@ -3,6 +3,27 @@
 All notable changes to this skill are documented here.
 
 
+## [3.3.0] - 2026-10-10
+
+### Added
+- `extensions/skill-router.ts`: omp `context`-hook extension injecting a forced
+  `skill://claude-reasoning` read on structural signals or ≥2 repeated failures
+  (`OMP_SKILL_ROUTER_DEBUG=1` for diagnostics). Deployed by sync-local.ts.
+- `scripts/router-heuristics.ts`: pure deterministic scoring module.
+
+### Fixed
+- `sync-local.ts`: description cache writes now use the runtime-computed key
+  `sha256(compressPrompt+NUL+name+NUL+description)` instead of a hardcoded stale
+  key; orphan rows written by earlier runs are GC'd via `scripts/.sync-state.json`.
+- `SKILL.md`/`package.json` description: trigger conditions front-loaded inside
+  the ~100-char selector preview window.
+- Repository-wide version surface drift guard verified across all release surfaces.
+
+### Known limitations
+- First-turn inputs that are open-ended but structurally featureless (flat single
+  sentence, no contrast/options/paths) in a session with zero prior failures do
+  not trigger the gate; they fall back to description-driven model selection.
+
 ## [3.2.2] - 2026-10-10
 
 ### Fixed
