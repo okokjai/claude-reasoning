@@ -16,10 +16,9 @@ import { join } from "path";
 const CWD = join(__dirname, "..");
 const HOME = process.env.USERPROFILE || process.env.HOME || "";
 const STATE_FILE = join(CWD, "scripts", ".sync-state.json");
-const PROMPT_TEMPLATE_PATH = join(
-  HOME, ".bun", "install", "global", "node_modules",
-  "@oh-my-pi", "pi-coding-agent", "src", "prompts", "skills", "compress-description.md",
-);
+const PROMPT_TEMPLATE_PATH = HOME
+  ? join(HOME, ".bun", "install", "global", "node_modules", "@oh-my-pi", "pi-coding-agent", "src", "prompts", "skills", "compress-description.md")
+  : "";
 
 export function computeKey(promptTemplate: string, name: string, description: string): string {
   return new Bun.CryptoHasher("sha256")
@@ -57,8 +56,15 @@ export function syncDb(
   const db = new Database(dbPath);
   try {
     db.run("INSERT OR REPLACE INTO skill_descriptions (key, description) VALUES (?, ?)", [key, description]);
+    const stale = db
+      .query("SELECT key FROM skill_descriptions WHERE description LIKE ? AND key != ?")
+      .all(`${description.slice(0, 20)}%`, key) as { key: string }[];
+    for (const s of stale) {
+      db.run("DELETE FROM skill_descriptions WHERE key = ?", [s.key]);
+      removed.push(s.key);
+    }
     for (const oldKey of state.writtenKeys) {
-      if (oldKey === key) continue;
+      if (oldKey === key || removed.includes(oldKey)) continue;
       db.run("DELETE FROM skill_descriptions WHERE key = ?", [oldKey]);
       removed.push(oldKey);
     }
@@ -69,12 +75,13 @@ export function syncDb(
   return { key, removed };
 }
 
-if (!HOME) {
+if (!import.meta.main) {
+  // Pure helper import: no side-effects
+} else if (!HOME) {
   console.error("FAIL: Unable to determine HOME / USERPROFILE directory.");
   process.exit(1);
-}
-
-console.log("=== Syncing claude-reasoning to local host targets ===");
+} else {
+  console.log("=== Syncing claude-reasoning to local host targets ===");
 
 // 1. Skill directories
 const targets = [
@@ -113,3 +120,4 @@ if (existsSync(extSrc)) {
 }
 
 console.log("=== Local synchronization complete ===");
+}

@@ -83,4 +83,10 @@ describe("shouldInject", () => {
     const r = shouldInject([user("A vs B?")], { marker: INJECTION_MARKER });
     expect(r.reason.length).toBeGreaterThan(0);
   });
+  it("injects on short debug/root-cause triggers", () => {
+    for (const t of ["Debug", "怎麼老是有bug ?", "system crashed, root cause?"]) {
+      const r = shouldInject([{ role: "user", content: t }], { marker: INJECTION_MARKER });
+      expect(r.inject).toBe(true);
+    }
+  });
 });

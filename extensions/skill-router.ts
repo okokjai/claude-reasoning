@@ -22,7 +22,7 @@ const INJECTION_TEXT =
   `MUST read skill://claude-reasoning before further analysis or edits. ` +
   `Skip only if the task is trivially closed-form.`;
 const CONTRAST_RE = /\b(?:vs\.?|versus)\b|(?:\b\w+\b\s+or\s+\b\w+\b)|[比較對比]|哪個|哪一種|該選|怎麼挑|A\s*跟\s*B/i;
-const OPEN_ENDED_RE = /\b(?:why|how should|which|trade.?offs?|pros and cons)\b|如何|該|為什麼|有什麼(?:問題|風險|優缺點)/i;
+const OPEN_ENDED_RE = /\b(?:why|how should|which|trade.?offs?|pros and cons|root.?cause|debug|bug|crash(?:ed)?)\b|如何|該|為什麼|有什麼(?:問題|風險|優缺點)/i;
 const MULTI_PATH_RE = /(?:[\w./-]+\.[a-z0-9]+).*(?:[\w./-]+\.[a-z0-9]+)/i;
 const FAILURE_RE = /(?:\berror\b|FAIL\b|exit(?:ed)?\s+(?:with\s+)?code\s+[1-9]|AssertionError|Expected\b.*\bReceived|at\s+\w+\s+\([^)]+\.ts:\d+)/i;
 

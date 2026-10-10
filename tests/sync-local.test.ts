@@ -74,4 +74,20 @@ describe("syncDb", () => {
     expect(foreign).not.toBeNull();
     rmSync(dir, { recursive: true });
   });
+
+  it("removes legacy rows written before tracking was introduced", () => {
+    const { dir, dbPath } = tmpDb();
+    const state = join(dir, ".state.json");
+    const { Database } = require("bun:sqlite");
+    const init = new Database(dbPath);
+    init.run("INSERT INTO skill_descriptions (key, description) VALUES ('legacy-key', 'Use when or before answering test description v3.2.2 older text')");
+    init.close();
+    const r = syncDb(dbPath, PROMPT, NAME, DESC, state);
+    expect(r.removed).toContain("legacy-key");
+    const dbCheck = new Database(dbPath);
+    const stale = dbCheck.query("SELECT key FROM skill_descriptions WHERE key = 'legacy-key'").get();
+    dbCheck.close();
+    expect(stale).toBeNull();
+    rmSync(dir, { recursive: true });
+  });
 });
