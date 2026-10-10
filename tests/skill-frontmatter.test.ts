@@ -41,19 +41,24 @@ describe("SKILL.md description: selector visibility", () => {
   it("keeps host .omp skill-descriptions.db synchronized if present (cache drift guard)", () => {
     const home = process.env.USERPROFILE || process.env.HOME || "";
     const dbPath = join(home, ".omp", "agent", "skill-descriptions.db");
-    if (!existsSync(dbPath)) return;
+    const promptPath = join(home, ".bun", "install", "global", "node_modules",
+      "@oh-my-pi", "pi-coding-agent", "src", "prompts", "skills", "compress-description.md");
+    if (!existsSync(dbPath) || !existsSync(promptPath)) return;
 
-    // Dynamic import to avoid hard dependency in environments without bun:sqlite
+    const prompt = readFileSync(promptPath, "utf-8");
+    const key = new Bun.CryptoHasher("sha256")
+      .update(prompt).update("\0").update("claude-reasoning").update("\0")
+      .update(skillDescription()).digest("hex");
+
     const { Database } = require("bun:sqlite");
     const db = new Database(dbPath);
-    const row = db.query(
-      "SELECT description FROM skill_descriptions WHERE key = '9a1cc97e6681acc302dd40c332bf76c2b39d34ace2e7a6fe3ba920b2687994bf'"
-    ).get() as { description?: string } | null;
+    const row = db.query("SELECT description FROM skill_descriptions WHERE key = ?").get(key) as
+      | { description?: string }
+      | null;
+    db.close();
 
     expect(row).not.toBeNull();
-    // Host cache description must start with the exact selector window trigger from SKILL.md
-    const expectedPrefix = skillDescription().slice(0, SELECTOR_WINDOW);
-    expect(row?.description?.slice(0, SELECTOR_WINDOW)).toBe(expectedPrefix);
+    expect(row?.description).toBe(skillDescription());
   });
 
   it("keeps installed .omp and .claude skill directories synchronized if present (install drift guard)", () => {
