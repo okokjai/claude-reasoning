@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const CWD = join(__dirname, "..");
@@ -36,6 +36,24 @@ describe("SKILL.md description: selector visibility", () => {
       readFileSync(join(CWD, "package.json"), "utf-8"),
     ) as { description?: string };
     expect(pkg.description).toBe(skillDescription());
+  });
+
+  it("keeps host .omp skill-descriptions.db synchronized if present (cache drift guard)", () => {
+    const home = process.env.USERPROFILE || process.env.HOME || "";
+    const dbPath = join(home, ".omp", "agent", "skill-descriptions.db");
+    if (!existsSync(dbPath)) return;
+
+    // Dynamic import to avoid hard dependency in environments without bun:sqlite
+    const { Database } = require("bun:sqlite");
+    const db = new Database(dbPath);
+    const row = db.query(
+      "SELECT description FROM skill_descriptions WHERE key = '9a1cc97e6681acc302dd40c332bf76c2b39d34ace2e7a6fe3ba920b2687994bf'"
+    ).get() as { description?: string } | null;
+
+    expect(row).not.toBeNull();
+    // Host cache description must start with the exact selector window trigger from SKILL.md
+    const expectedPrefix = skillDescription().slice(0, SELECTOR_WINDOW);
+    expect(row?.description?.slice(0, SELECTOR_WINDOW)).toBe(expectedPrefix);
   });
 
   it("keeps all version surfaces aligned across the repository (drift guard)", () => {
