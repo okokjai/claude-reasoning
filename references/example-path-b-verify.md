@@ -29,7 +29,7 @@ bun scripts/think.ts \
   --kind decision \
   --thought "Step 0: Open-ended architecture evaluation (kind=decision). Deconstruct into 3 load-bearing sub-questions: (1) Pricing parity and prompt caching support, (2) Multi-region network latency from Taiwan, (3) Enterprise operational overhead. Pre-registering real-world factual claims before performing any web search." \
   --thoughtNumber 1 --totalThoughts 7 --nextThoughtNeeded true
-# Output: [1/7] history=1 mode=path-b next=true ready=no blockers=6
+# Output: [1/7] history=1 mode=path-b next=true ready=no blockers=6 today=<YYYY-MM-DD>
 ```
 
 ### Pre-Registering Hypotheses (Mandatory for Path B)
@@ -71,7 +71,7 @@ Lenses are applied BEFORE any resolution — the `pending` output names the kind
 bun scripts/think.ts \
   --thought "Selecting the 3 core lenses for kind=decision (see --listLenses --kind decision): (1) Sensitivity Analysis (lens-6, computed — cost/ops weight and score perturbation), (2) Reversibility & One-Way Doors (lens-10 — unwind cost of each provider choice), (3) Contrarian & Worst-Option Defense (lens-3 — argue the case for the initially weaker option). Evaluating registered hypotheses hyp-1 and hyp-2 against operational reality before resolving either." \
   --thoughtNumber 2 --totalThoughts 7 --nextThoughtNeeded true
-# Output: [2/7] history=2 mode=path-b next=true ready=no blockers=6
+# Output: [2/7] history=2 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=6 today=<YYYY-MM-DD>
 ```
 
 ### Computed Lens: Sensitivity Analysis (lens-6)
@@ -98,7 +98,7 @@ bun scripts/think.ts --recordLens --lens "Contrarian & Worst-Option Defense" --f
 Now invoke session search tools (whatever search/fetch capability this environment provides).
 
 1. **Verify Claim 1**:
-   - Query: `AWS Bedrock Claude 3.5 Sonnet prompt caching support`
+   - Query: `AWS Bedrock Claude 3.5 Sonnet prompt caching support <YYYY-MM>`
    - Negative Search Query: `AWS Bedrock Claude prompt caching limitations region availability`
    - Retrieved Tier 1 docs: `https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html` and `https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching`
    - Finding: Supported, but initially only in US regions (us-east-1, us-west-2).
@@ -116,7 +116,7 @@ bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
 ```
 
 2. **Verify Claim 2**:
-   - Query: `Anthropic Claude 3.5 Sonnet pricing direct vs AWS Bedrock`
+   - Query: `Anthropic Claude 3.5 Sonnet pricing direct vs AWS Bedrock <YYYY-MM>`
    - Retrieved Tier 1 Anthropic: `https://www.anthropic.com/pricing` ($3/$15)
    - Retrieved Tier 1 AWS: `https://aws.amazon.com/bedrock/pricing/` ($0.003/$0.015 per 1k = $3/$15 per 1M)
 
@@ -136,7 +136,7 @@ bun scripts/think.ts --verifyClaim claim-2 --claimStatus verified \
 bun scripts/think.ts \
   --thought "Both registered claims verified with dual Tier 1 sources. Negative search confirmed Bedrock prompt caching requires us-east-1 or us-west-2, meaning Taiwan traffic will incur transpacific round-trip latency (~150-180ms network RTT) regardless of provider choice unless Anthropic direct Tokyo/Singapore endpoints are utilized." \
   --thoughtNumber 3 --totalThoughts 7 --nextThoughtNeeded true
-# Output: [3/7] history=3 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3
+# Output: [3/7] history=3 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3 today=<YYYY-MM-DD>
 ```
 
 ---
@@ -146,7 +146,7 @@ bun scripts/think.ts \
 bun scripts/think.ts \
   --thought 'Executing references/hallucination-gates.md P0 audit: (1) Entity & Metric: $3/$15 confirmed via Tier 1 docs; (2) Dual-source: Both claims backed by distinct authoritative endpoints; (3) Temporal: Reference date is the today field emitted by --status (local calendar date); every source age measured against it, source publish dates recorded via --claimDate as <YYYY-MM-DD>; (4) Negative search: Executed and surfaced regional routing constraints; (5) Tool compliance: Real results reported without embellishment. All 5 gates passed.' \
   --thoughtNumber 4 --totalThoughts 7 --nextThoughtNeeded true
-# Output: [4/7] history=4 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3
+# Output: [4/7] history=4 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3 today=<YYYY-MM-DD>
 ```
 
 ---
@@ -156,7 +156,7 @@ bun scripts/think.ts \
 bun scripts/think.ts \
   --thought "Synthesizing findings: hyp-2 (Bedrock) is favored if the organization already operates inside AWS VPC and requires IAM/data-perimeter compliance. However, if prompt caching is critical, calls route to US regions, negating any APAC regional latency advantage. hyp-1 (Direct API) is favored for zero-AWS overhead and faster access to beta capabilities. Sensitivity analysis shows direct stays the winner under ±20% cost/ops perturbation; the decision is not brittle to scoring noise." \
   --thoughtNumber 5 --totalThoughts 7 --nextThoughtNeeded true
-# Output: [5/7] history=5 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3
+# Output: [5/7] history=5 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=true ready=no blockers=3 today=<YYYY-MM-DD>
 ```
 
 ---
@@ -188,7 +188,7 @@ bun scripts/think.ts \
   --thought "Final conclusion formulated following references/conclusion-card.md structure. All claims verified, all hypotheses resolved; closing session." \
   --thoughtNumber 7 --totalThoughts 7 --nextThoughtNeeded false \
   --newInsight false --newInsightNotes "Session closes the pricing and caching sub-questions; APAC latency remains an open operational item and no further evidence would change the provider split."
-# Output: [7/7] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false ready=yes blockers=0
+# Output: [7/7] history=6 mode=path-b claims=claim-1,claim-2 hypotheses=hyp-1,hyp-2 next=false ready=yes blockers=0 today=<YYYY-MM-DD>
 # stdout: a `💭 Thought 7/7` block then the Reasoning Lint & Fact Sheet.
 ```
 

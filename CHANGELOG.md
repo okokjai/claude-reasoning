@@ -3,9 +3,39 @@
 All notable changes to this skill are documented here.
 
 
+## [3.3.2] - 2026-10-14
+
+### Fixed
+- `references/example-path-b-verify.md` + `SKILL.md`: seven documented thought
+  status lines omitted the `today=<YYYY-MM-DD>` field that `scripts/think.ts`
+  prints on every status line (introduced in 3.3.1). The replay test only
+  checked documented tokens against real output, never the reverse, so the
+  omission was invisible to CI.
+- `tests/example-replay.test.ts`: status-line comparison is now symmetric —
+  every `key=` field on the printed status line must appear in the documented
+  `# Output:` line, and the `today=<YYYY-MM-DD>` placeholder is validated as a
+  date shape so the example pins the pattern rather than a stale literal date.
+
+### Changed
+- Version 3.3.2 across all release surfaces: `package.json`, `SKILL.md`
+  (frontmatter + title), `README.md` (title), `scripts/think.ts` (header).
+- Repository-wide version surface drift guard verified across all release surfaces
+  after the `3.3.1` → `3.3.2` bump (`package.json`, `SKILL.md` frontmatter + title,
+  `README.md` title, `scripts/think.ts` header, top `CHANGELOG.md` heading).
+
 ## [3.3.1] - 2026-10-10
 
 ### Fixed
+- `scripts/think.ts`: thought status line now explicitly carries `today=${today()}`
+  to ensure runtime alignment with the calibrated session clock.
+- `scripts/think.ts`: `--registerClaim` output JSON now includes `today` and `searchMonth`
+  (`YYYY-MM`) for explicit time-anchoring prior to search tool queries.
+- `scripts/think.ts`: `--verifyClaim` output JSON now includes `today` to calibrate
+  freshness comparisons.
+- `references/hallucination-gates.md`, `references/example-path-b-verify.md`, `SKILL.md`,
+  `README.md`: replaced hardcoded legacy release dates with dynamic template
+  placeholders (`<YYYY-MM-DD>`, `<YYYY-MM>`, `<model>`) to eliminate stale year anchors.
+
 - `sync-local.ts`: the CLI sync block is now wrapped in an `import.meta.main`
   guard, so importing `computeKey`/`syncDb` in tests or other modules executes
   zero side effects (no file copies or DB writes). `PROMPT_TEMPLATE_PATH` is

@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 3.3.1
+version: 3.3.2
 description: "Use when a question is open-ended, has competing approaches, involves architecture or debugging trade-offs, or follows repeated failed fixes. Structurally adaptive reasoning (Path A closed-form, Path B open-ended) with claim-gated verification and dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 3.3.1
+# claude-reasoning 3.3.2
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -117,7 +117,7 @@ If the open-ended sub-questions are purely internal (design taste, team fit, arc
 
 1. **Pre-register before searching.**
    ```bash
-   bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-1
+   bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude <model>" --supports hyp-1
    ```
    `--supports <hyp-id>` links the claim to the hypothesis it bears on; registering without it (or naming a nonexistent hypothesis) exits 1. Registration happens *before* any search call. Formulating a claim after seeing results is post-hoc rationalization and is prohibited by this contract.
 
@@ -259,10 +259,10 @@ bun scripts/think.ts --status
 Status line returned after each thought:
 
 ```
-[3/7] history=3 mode=path-b branches=alt-approach claims=claim-1,claim-2 next=true ready=no blockers=4
+[3/7] history=3 mode=path-b branches=alt-approach claims=claim-1,claim-2 next=true ready=no blockers=4 today=<YYYY-MM-DD>
 ```
 
-`ready=<yes|no>` reports whether every termination prerequisite is currently met; `blockers=<n>` counts the pending items. Side-command JSON carries the same guidance as `next: string[]`, and `--status` JSON as `pending: string[]`.
+`ready=<yes|no>` reports whether every termination prerequisite is currently met; `blockers=<n>` counts the pending items; `today=<YYYY-MM-DD>` echoes the session's calibrated clock date (Step -2). Side-command JSON carries the same guidance as `next: string[]`, and `--status` JSON as `pending: string[]`.
 
 ### Flag reference
 

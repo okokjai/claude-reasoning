@@ -44,6 +44,32 @@ describe("Session clock", () => {
     expect(s.startedAt).toMatch(ISO);
     expect(s.endedAt).toMatch(ISO);
   });
+
+  it("thought status line carries today", () => {
+    const r = run(["--mode","path-b","--thought","t","--thoughtNumber","1","--totalThoughts","3","--nextThoughtNeeded","true"]);
+    expect(r.out).toMatch(/blockers=\d+ today=\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("registerClaim output carries today and searchMonth", () => {
+    run(["--mode","path-b","--registerHypothesis","h1","--falsification","f1"]);
+    const j = JSON.parse(run(["--registerClaim","c1","--supports","hyp-1"]).out);
+    expect(j.today).toMatch(ISO);
+    expect(j.searchMonth).toBe(j.today.slice(0, 7));
+  });
+
+  it("verifyClaim output carries today", () => {
+    run(["--mode","path-b","--registerHypothesis","h1","--falsification","f1"]);
+    run(["--registerClaim","c1","--supports","hyp-1"]);
+    const j = JSON.parse(run(["--verifyClaim","claim-1","--claimStatus","single_source","--claimSource","https://a.com","--claimNotes","n"]).out);
+    expect(j.today).toMatch(ISO);
+  });
+
+  it("references do not contain hardcoded stale years (2020-2025)", () => {
+    const gates = readFileSync(join(ROOT, "references", "hallucination-gates.md"), "utf-8");
+    const verifyDoc = readFileSync(join(ROOT, "references", "example-path-b-verify.md"), "utf-8");
+    expect(gates).not.toMatch(/202[0-5]-\d{2}-\d{2}/);
+    expect(verifyDoc).not.toMatch(/202[0-5]-\d{2}-\d{2}/);
+  });
 });
 
 describe("--claimDate", () => {

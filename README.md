@@ -1,4 +1,4 @@
-# claude-reasoning 3.3.1
+# claude-reasoning 3.3.2
 
 [![GitHub Stars](https://img.shields.io/github/stars/okokjai/claude-reasoning?style=flat-square&logo=github)](https://github.com/okokjai/claude-reasoning/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
@@ -91,7 +91,7 @@ bun scripts/think.ts --recordLens --lens "first-principles" --finding "egress is
 bun scripts/think.ts --analyze sensitivity --data '{"candidates":[{"id":"a","scores":{"cost":0.9}},{"id":"b","scores":{"cost":0.7}}],"criteria":[{"name":"cost","weight":1,"direction":"max"}]}'
 
 # Pre-register a claim BEFORE searching — --supports links it to a hypothesis
-bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude 3.5 Sonnet" --supports hyp-1
+bun scripts/think.ts --registerClaim "AWS Bedrock supports prompt caching for Claude <model>" --supports hyp-1
 bun scripts/think.ts --verifyClaim claim-1 --claimStatus verified \
   --claimSource "https://aws.amazon.com/bedrock/pricing/" \
   --claimSource "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" \

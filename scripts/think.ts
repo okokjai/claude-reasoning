@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * claude-reasoning 3.3.1 - Sequential thinking state machine with claim-gated verification.
+ * claude-reasoning 3.3.2 - Sequential thinking state machine with claim-gated verification.
  * Zero MCP dependencies. Persistent state in .think_state.json.
  *
  * Upstream foundation: thedotmack/sequential-thinking-skill (MIT License)
@@ -1826,7 +1826,7 @@ if (values.registerClaim != null) {
   state.claims[claimId] = claim;
   recordAudit(state, { op: "registerClaim", target: claimId, detail: values.registerClaim });
   saveState(state);
-  console.log(JSON.stringify({ registered: claimId, statement: values.registerClaim, status: "pending", next: pendingActions(state) }, null, 2));
+  console.log(JSON.stringify({ registered: claimId, statement: values.registerClaim, status: "pending", today: today(), searchMonth: today().slice(0, 7), next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -2371,7 +2371,7 @@ if (values.verifyClaim != null) {
 
   recordAudit(state, { op: "verifyClaim", target: claim.id, detail: status });
   saveState(state);
-  console.log(JSON.stringify({ verified: claim.id, status: projected.status, sources: projected.sources, notes: projected.notes, next: pendingActions(state) }, null, 2));
+  console.log(JSON.stringify({ verified: claim.id, status: projected.status, sources: projected.sources, notes: projected.notes, today: today(), next: pendingActions(state) }, null, 2));
   process.exit(0);
 }
 
@@ -2703,7 +2703,7 @@ const hypList = status.hypotheses.length > 0 ? ` hypotheses=${status.hypotheses.
 const modeStr = status.mode ? ` mode=${status.mode}` : "";
 const pendingList = pendingActions(state);
 const readyStr = pendingList.length === 0 ? "yes" : "no";
-console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.thoughtHistoryLength}${modeStr}${branchList}${claimList}${hypList} next=${status.nextThoughtNeeded} ready=${readyStr} blockers=${pendingList.length}`);
+console.log(`[${status.thoughtNumber}/${status.totalThoughts}] history=${status.thoughtHistoryLength}${modeStr}${branchList}${claimList}${hypList} next=${status.nextThoughtNeeded} ready=${readyStr} blockers=${pendingList.length} today=${today()}`);
 
 if (!nextThoughtNeeded) {
   console.log("");

@@ -150,9 +150,23 @@ describe("references/example-path-b-verify.md is executable", () => {
               else if (real[k] !== documented) failures.push(`value mismatch "${k}": documented ${v}, real ${JSON.stringify(real[k])} for: ${argvOf(pending).join(" ").slice(0, 60)}`);
             }
           } else {
-            // status line: every documented token must appear verbatim.
+            // status line: every documented token must appear verbatim. The
+            // `today=<YYYY-MM-DD>` placeholder asserts a date shape instead, so
+            // the example pins the pattern rather than a value that goes stale.
             for (const token of expected.split(/\s+/)) {
-              if (!res.stdout.includes(token)) failures.push(`missing token "${token}" for: ${argvOf(pending).join(" ").slice(0, 60)}`);
+              const ok = token === "today=<YYYY-MM-DD>"
+                ? /today=\d{4}-\d{2}-\d{2}/.test(res.stdout)
+                : res.stdout.includes(token);
+              if (!ok) failures.push(`missing token "${token}" for: ${argvOf(pending).join(" ").slice(0, 60)}`);
+            }
+            // Symmetric direction: every `key=` field on the status line (the
+            // first stdout line) must be documented too, so a newly added field
+            // cannot drift silently out of the docs.
+            const statusLine = res.stdout.split("\n")[0];
+            for (const key of new Set([...statusLine.matchAll(/\b([a-z]+)=/g)].map(m => m[1]))) {
+              if (!new RegExp("\\b" + key + "=").test(expected)) {
+                failures.push(`undocumented status field "${key}=" for: ${argvOf(pending).join(" ").slice(0, 60)}`);
+              }
             }
           }
           pending = [];
