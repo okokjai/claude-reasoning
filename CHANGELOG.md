@@ -23,6 +23,10 @@ All notable changes to this skill are documented here.
   after the `3.3.1` → `3.3.2` bump (`package.json`, `SKILL.md` frontmatter + title,
   `README.md` title, `scripts/think.ts` header, top `CHANGELOG.md` heading).
 
+### Breaking Changes
+
+- None — documentation and test-alignment only; no public flag, output field, or state-file contract changed.
+
 ## [3.3.1] - 2026-10-10
 
 ### Fixed
