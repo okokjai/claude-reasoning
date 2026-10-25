@@ -35,7 +35,7 @@ bun scripts/think.ts \
 *Output*:
 ```
 💭 Thought 1/4
-[1/4] history=1 mode=path-a next=true
+[1/4] history=1 mode=path-a next=true ready=no blockers=1 today=<YYYY-MM-DD>
 ```
 
 ### 3. Thought 2 — Primary Derivation
@@ -52,7 +52,7 @@ bun scripts/think.ts \
 *Output*:
 ```
 💭 Thought 2/4
-[2/4] history=2 mode=path-a next=true
+[2/4] history=2 mode=path-a next=true ready=yes blockers=0 today=<YYYY-MM-DD>
 ```
 
 ### 4. Thought 3 — Independent Cross-Validation
@@ -72,10 +72,10 @@ bun scripts/think.ts \
 *Output*:
 ```
 💭 Thought 3/4
-[3/4] history=3 mode=path-a next=false
+[3/4] history=3 mode=path-a next=false ready=yes blockers=0 today=<YYYY-MM-DD>
 ```
 
-*(因兩方法一致，無需 Thought 4/5，直接在 Thought 3 設 `--nextThoughtNeeded false` 結案)*
+*(因兩方法一致，無需 Thought 4/4，直接在 Thought 3 設 `--nextThoughtNeeded false` 結案)*
 
 ---
 

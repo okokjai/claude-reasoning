@@ -1,9 +1,8 @@
 /**
  * extensions/skill-router.ts — deployed to ~/.omp/agent/extensions/ by sync-local.ts
  *
- * Deterministic Gate A: on every context assembly, scan messages for
- * structural signals in the last user turn or repeated failure bursts;
- * when triggered, inject a user-role directive forcing skill://claude-reasoning.
+ * Gate A: inject the claude-reasoning directive only when the user's own last
+ * message explicitly names the skill. No heuristic triggers, ever.
  *
  * Heuristics below MUST stay byte-identical to scripts/router-heuristics.ts
  * (enforced by tests/extension-drift.test.ts).
@@ -14,83 +13,87 @@ interface ExtensionAPI {
 }
 
 // ---- begin synced block: router-heuristics ----
-interface ChatMessage { role: string; content?: unknown }
+interface ChatMessage {
+  role: string;
+  content?: unknown;
+}
+
 const INJECTION_MARKER = "claude-reasoning-deterministic-gate";
+
 const INJECTION_TEXT =
-  `[${INJECTION_MARKER}] This session has hit signals that warrant ` +
-  `structured reasoning (open-ended structure or repeated failed attempts). ` +
-  `MUST read skill://claude-reasoning before further analysis or edits. ` +
-  `Skip only if the task is trivially closed-form.`;
-const CONTRAST_RE = /\b(?:vs\.?|versus)\b|(?:\b\w+\b\s+or\s+\b\w+\b)|[比較對比]|哪個|哪一種|該選|怎麼挑|A\s*跟\s*B/i;
-const OPEN_ENDED_RE = /\b(?:why|how should|which|trade.?offs?|pros and cons|root.?cause|debug|bug|crash(?:ed)?)\b|如何|該|為什麼|有什麼(?:問題|風險|優缺點)/i;
-const MULTI_PATH_RE = /(?:[\w./-]+\.[a-z0-9]+).*(?:[\w./-]+\.[a-z0-9]+)/i;
-const FAILURE_RE = /(?:\berror\b|FAIL\b|exit(?:ed)?\s+(?:with\s+)?code\s+[1-9]|AssertionError|Expected\b.*\bReceived|at\s+\w+\s+\([^)]+\.ts:\d+)/i;
+  `[${INJECTION_MARKER}] You asked for the claude-reasoning skill. ` +
+  `MUST read skill://claude-reasoning before analysis or edits.`;
+
+/**
+ * Matches an opting-in request: the skill name (hyphen / underscore / space)
+ * preceded by a verb that asks for it, or a direct `skill://` reference.
+ * A bare mention ("this skill is noisy") is not a designation.
+ */
+const EXPLICIT_REQUEST_RE =
+  /(?:(?:use|run|invoke|read|load|apply|activate|enable|switch\s+to|指定|使用|啟用|改用|套用|載入|讀取|用)\s*(?:the\s+)?(?:skill\s+)?(?:claude[-_ ]reasoning|skill:\/\/claude-reasoning))|(?:skill:\/\/claude-reasoning)/i;
+
+/** Complaint/negation adjacent to the skill name vetoes the match:
+ *  "老是用claude reasoning skill !?" is an accusation, not a designation. */
+const NEGATION_RE =
+  /(?:不再|不要|不用|別|勿|老是|總是|never|don'?t|stop|avoid|remove|disable|uninstall|討厭|煩|吵|關掉|關閉)\s*[^，。！？!.,;:]{0,8}(?:claude[-_ ]reasoning|skill)/i;
 
 function messageText(message: ChatMessage): string {
   const c = message.content;
   if (typeof c === "string") return c;
   if (!Array.isArray(c)) return "";
   return c
-    .filter((p): p is { type: string; text: string } =>
-      !!p && typeof p === "object" && (p as { type?: unknown }).type === "text" &&
-      typeof (p as { text?: unknown }).text === "string")
-    .map(p => p.text).join("\n");
+    .filter(
+      (p): p is { type: string; text: string } =>
+        !!p && typeof p === "object" && (p as { type?: unknown }).type === "text" &&
+        typeof (p as { text?: unknown }).text === "string",
+    )
+    .map(p => p.text)
+    .join("\n");
 }
-function structuralScore(text: string): number {
-  let s = 0;
-  if (CONTRAST_RE.test(text)) s++;
-  if (OPEN_ENDED_RE.test(text)) s++;
-  if (MULTI_PATH_RE.test(text)) s++;
-  return s;
-}
-function countFailures(messages: ChatMessage[], sinceIndex: number): number {
-  let n = 0;
-  for (let i = sinceIndex + 1; i < messages.length; i++)
-    if (FAILURE_RE.test(messageText(messages[i]))) n++;
-  return n;
-}
-function findSkillLoadIndex(messages: ChatMessage[], marker: string): number {
-  let idx = -1;
-  for (let i = 0; i < messages.length; i++)
-    if (messageText(messages[i]).includes(marker)) idx = i;
-  return idx;
-}
+
+/**
+ * The last user turn, skipping the gate's own injected directive so the
+ * directive can never be mistaken for a new user request.
+ */
 function lastUserText(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "user") {
-      const t = messageText(messages[i]);
-      if (t.includes(INJECTION_MARKER)) continue;
-      return t;
-    }
+    if (messages[i].role !== "user") continue;
+    const t = messageText(messages[i]);
+    if (t.includes(INJECTION_MARKER)) continue;
+    return t;
   }
   return "";
 }
-function shouldInject(messages: ChatMessage[], opts: { marker: string; failureThreshold?: number; scoreThreshold?: number }): { inject: boolean; reason: string } {
-  const { marker, failureThreshold = 2, scoreThreshold = 1 } = opts;
-  const loadIdx = findSkillLoadIndex(messages, marker);
-  if (loadIdx >= 0) {
-    if (countFailures(messages, loadIdx) < failureThreshold)
-      return { inject: false, reason: "marker present, no new failure burst" };
-    return { inject: true, reason: `failures since last load >= ${failureThreshold}` };
-  }
-  const score = structuralScore(lastUserText(messages));
-  if (score >= scoreThreshold)
-    return { inject: true, reason: `structural score ${score} >= ${scoreThreshold}` };
-  const failures = countFailures(messages, -1);
-  if (failures >= failureThreshold)
-    return { inject: true, reason: `failure count ${failures} >= ${failureThreshold}` };
-  return { inject: false, reason: `score ${score}, failures ${failures} — below thresholds` };
+
+function shouldInject(messages: ChatMessage[]): { inject: boolean; reason: string } {
+  const text = lastUserText(messages);
+  if (!text) return { inject: false, reason: "no user turn" };
+  if (!EXPLICIT_REQUEST_RE.test(text) || NEGATION_RE.test(text))
+    return { inject: false, reason: "user did not request claude-reasoning" };
+
+  // Idempotency when the directive IS in the transcript (e.g. tests, or a
+  // persisted copy). The runtime latch lives in extensions/skill-router.ts.
+  const alreadyPresent = messages.some(m => messageText(m).includes(INJECTION_MARKER));
+  if (alreadyPresent) return { inject: false, reason: "directive already in context" };
+
+  return { inject: true, reason: "user explicitly requested claude-reasoning" };
 }
 // ---- end synced block: router-heuristics ----
 
 const DEBUG = process.env.OMP_SKILL_ROUTER_DEBUG === "1";
 
+/** Session-scoped one-shot: the runtime never persists a context-hook injection,
+ *  so transcript scanning cannot serve as the latch. Module state can. */
+let injected = false;
+
 export default function skillRouter(pi: ExtensionAPI): void {
   pi.on("context", async (event) => {
+    if (injected) return;
     const messages = (event as { messages?: ChatMessage[] }).messages ?? [];
-    const decision = shouldInject(messages, { marker: INJECTION_MARKER });
+    const decision = shouldInject(messages);
     if (DEBUG) console.error(`[skill-router] inject=${decision.inject} reason=${decision.reason}`);
     if (!decision.inject) return;
+    injected = true;
 
     const injection = {
       role: "user" as const,

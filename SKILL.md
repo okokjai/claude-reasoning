@@ -1,10 +1,10 @@
 ---
 name: claude-reasoning
-version: 3.3.2
+version: 3.3.4
 description: "Use when a question is open-ended, has competing approaches, involves architecture or debugging trade-offs, or follows repeated failed fixes. Structurally adaptive reasoning (Path A closed-form, Path B open-ended) with claim-gated verification and dual-source enforcement. Zero MCP dependencies."
 ---
 
-# claude-reasoning 3.3.2
+# claude-reasoning 3.3.4
 
 Reasoning cost is allocated by **problem structure**, not by fixed frameworks or keyword routing.
 
@@ -332,7 +332,7 @@ Status line returned after each thought:
 
 ## Examples
 
-- `references/example-path-a.md` — closed-form kinship trap, 4 thoughts, zero claims.
+- `references/example-path-a.md` — closed-form kinship trap, 3 thoughts, zero claims.
 - `references/example-path-b-verify.md` — open-ended architecture decision with pre-registration and mixed verification outcomes.
 
 ## State file

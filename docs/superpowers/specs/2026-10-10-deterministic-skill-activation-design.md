@@ -1,5 +1,9 @@
 # Deterministic Skill Activation — Design Spec
 
+> **Status: superseded (2026-10-25, v3.3.4).** Gate A auto-activation was removed entirely:
+> the router now injects only when the user explicitly names claude-reasoning.
+> Code samples below describe the retired heuristic design and are kept as history.
+
 **Date:** 2026-10-10
 **Repo:** `claude-reasoning`
 **Status:** Approved scope (Layer A only — no `~/.omp/agent/rules/` modifications)

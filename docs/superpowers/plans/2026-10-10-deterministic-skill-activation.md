@@ -1,5 +1,9 @@
 # Deterministic Skill Activation Implementation Plan
 
+> **Status: superseded (2026-10-25, v3.3.4).** Gate A auto-activation was removed entirely:
+> the router now injects only when the user explicitly names claude-reasoning.
+> Code samples below describe the retired heuristic design and are kept as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `claude-reasoning` activate deterministically under omp — a `context`-hook extension injects a forced `read skill://claude-reasoning` directive on structural signals or repeated failures, `sync-local.ts` writes the full description under the correctly computed cache key with orphan GC, and `SKILL.md` front-loads trigger semantics inside the ~93-char preview window.

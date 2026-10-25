@@ -240,6 +240,79 @@ describe("references/example-path-b-verify.md is executable", () => {
   });
 });
 
+describe("references/example-path-a.md is executable", () => {
+  const EXAMPLE_A = join(CWD, "references", "example-path-a.md");
+
+  /** Parse one shell-ish argv from a whole bash block, honouring `\`-newline
+   *  continuations and quoted strings that span physical lines (Path A's
+   *  multi-line `--thought "..."` bodies). */
+  function argvOfBlock(block: string): string[] {
+    const joined = block.replace(/\\\r?\n/g, " ");
+    const argv: string[] = [];
+    const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(joined)) !== null) argv.push((m[1] ?? m[2] ?? m[3]).replace(/\r/g, ""));
+    return argv.filter((_, i) => i >= 2);
+  }
+
+  it("runs every bash invocation in document order without a non-zero exit", () => {
+    const blocks = bashBlocks(readFileSync(EXAMPLE_A, "utf-8"));
+    expect(blocks.length).toBeGreaterThan(0);
+
+    const failures: string[] = [];
+    let commandCount = 0;
+    for (const block of blocks) {
+      const argv = argvOfBlock(block);
+      commandCount++;
+      const res = run(argv);
+      if (res.code !== 0) {
+        failures.push(`exit ${res.code}: ${argv.join(" ").slice(0, 80)}\n    ${res.stderr.trim().split("\n")[0]}`);
+      }
+    }
+    expect(commandCount).toBeGreaterThan(0);
+    expect(failures).toEqual([]);
+  });
+
+  it("every documented [N/M] status line matches what the command actually prints", () => {
+    // Status lines under `*Output*:` fences are paired with their command by
+    // document position, then verified token-by-token — the same contract as
+    // the path-b suite, so a status line cannot drift out of sync silently.
+    const markdown = readFileSync(EXAMPLE_A, "utf-8");
+    const sections = [...markdown.matchAll(
+      /```bash\r?\n([^`]*?)```\s*\r?\n\*Output\*:\s*\r?\n```[^\n]*\r?\n([^`]*?)```/g,
+    )];
+    expect(sections.length).toBeGreaterThan(0);
+
+    const failures: string[] = [];
+    for (const m of sections) {
+      const argv = argvOfBlock(m[1]);
+      const res = run(argv);
+      if (res.code !== 0) {
+        failures.push(`exit ${res.code}: ${argv.join(" ").slice(0, 80)}`);
+        continue;
+      }
+      const documented = m[2].split(/\r?\n/).find(l => /\[\d+\/\d+\]/.test(l))?.trim();
+      const real = res.stdout.split(/\r?\n/).find(l => /\[\d+\/\d+\]/.test(l))?.trim();
+      if (!documented || !real) {
+        failures.push(`missing [N/M] status line (doc=${!!documented}, real=${!!real}) for: ${argv.join(" ").slice(0, 60)}`);
+        continue;
+      }
+      for (const token of documented.split(/\s+/)) {
+        const ok = token === "today=<YYYY-MM-DD>"
+          ? /today=\d{4}-\d{2}-\d{2}/.test(real)
+          : real.includes(token);
+        if (!ok) failures.push(`missing token "${token}": documented "${documented}", real "${real}"`);
+      }
+      for (const key of new Set([...real.matchAll(/\b([a-z]+)=/g)].map(x => x[1]))) {
+        if (!new RegExp("\\b" + key + "=").test(documented)) {
+          failures.push(`undocumented status field "${key}=": documented "${documented}", real "${real}"`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+});
+
 describe("README capability summary lists every verified-claim requirement", () => {
   it("names --claimTier alongside the evidence trio in the feature list", () => {
     const line = readFileSync(README, "utf-8")

@@ -3,6 +3,88 @@
 All notable changes to this skill are documented here.
 
 
+## [3.3.4] - 2026-10-25
+
+### Breaking Changes
+
+- **Gate A heuristic auto-activation removed entirely.** The router no
+  longer guesses when to inject. `CONTRAST_RE`, `OPEN_ENDED_RE`,
+  `MULTI_PATH_RE`, `FAILURE_RE`, `structuralScore`, `countFailures`, and
+  `findSkillLoadIndex` are deleted from both
+  `scripts/router-heuristics.ts` and `extensions/skill-router.ts`. The
+  `context` hook now fires **only** when the user's own last message
+  explicitly names the skill (`use/run/指定/使用 … claude-reasoning`, or a
+  `skill://claude-reasoning` reference); a complaint adjacent to the name
+  ("老是用claude reasoning skill") is vetoed. Every other prompt —
+  including decision shapes like "Redis vs SQLite?" and sessions full of
+  tool failures — stays quiet, regardless of Path A or Path B suitability.
+- The old triggers were unfixable at any threshold: `countFailures`
+  accumulated across the whole session (no window, no reset), and the
+  runtime never persists a `context`-hook injection (`emitContext` output
+  is per-request only), so the transcript-scan latch added in 3.3.3 was
+  unreachable dead code. Root fix is a single explicit-request rule plus a
+  session-scoped module latch in the extension.
+
+### Fixed
+
+- Misfire class "ordinary prompt triggers the gate" is eliminated by
+  construction, not by tuning: with no heuristic regexes left, there is no
+  signal to misread. Tests cover the actual misfired prompts,
+  failure-burst sessions, and decision-shaped questions.
+- `tests/extension-drift.test.ts` now asserts the synced block equals the
+  canonical module body verbatim (the old token-list comparison could not
+  catch `shouldInject` body drift) and pins the removed symbols' absence.
+
+- **`references/example-path-a.md` status-line drift (Thoughts 2–3).** The
+  3.3.4 status-line fields were backfilled from the Path B template: T2/T3
+  documented `ready=no blockers=1`, but Path A's `pendingActions()` emits
+  zero blockers from `history >= 2` on (only T1, `history=1`, blocks), so
+  the real lines are `ready=yes blockers=0`. The closing footnote's
+  "無需 Thought 4/5" also contradicted the example's own `--totalThoughts
+  4` (now "4/4"). 410 tests stayed green throughout because the replay
+  suite only covered `example-path-b-verify.md` — the same gap that hid
+  path-b's missing `today=` in 3.3.2. `tests/example-replay.test.ts` now
+  replays `example-path-a.md` too: exit-code replay of every bash block
+  (CRLF-safe, multi-line `--thought` quotes honored) plus token-by-token
+  status-line verification against live output, so an example can no
+  longer drift without a red test.
+
+### Changed
+
+- Version 3.3.4 across all release surfaces: `package.json`, `SKILL.md`
+  (frontmatter + title), `README.md` (title), `scripts/think.ts` (header).
+  Repository-wide version surface drift guard verified after the `3.3.3`
+  → `3.3.4` bump: zero `3.3.3` remnants across all five surfaces.
+
+## [3.3.3] - 2026-10-25
+
+### Fixed
+- **Skill router infinite re-injection loop (Gate A).** `shouldInject`
+  re-armed the injection whenever ≥2 failure-pattern matches appeared after
+  the marker. Any session whose output legitimately quotes error text
+  (meta-debugging, changelog quotes, test failure reports — the very task
+  type the skill targets) satisfied the regexes every turn, so the router
+  re-injected on every context assembly: one source, endless false
+  positives. `extensions/skill-router.ts` and `scripts/router-heuristics.ts`
+  now use a one-shot latch: once the marker is in the transcript the gate
+  stays quiet for the rest of the session (`"marker present — one-shot
+  latch"`). Matches the design spec's idempotency requirement (spec line
+  69/101: "skip if present") that the re-arm branch had silently violated.
+- `tests/router-heuristics.test.ts`: two regression tests pin the latch —
+  post-load failure-pattern output and a 3-failure burst must both stay
+  quiet (RED→GREEN verified).
+
+### Changed
+- Version 3.3.3 across all release surfaces: `package.json`, `SKILL.md`
+  (frontmatter + title), `README.md` (title), `scripts/think.ts` (header).
+  Repository-wide version surface drift guard verified after the `3.3.2`
+  → `3.3.3` bump: zero `3.3.2` remnants across all five surfaces.
+
+### Breaking Changes
+
+- None — router behavior only; no public flag, output field, or state-file
+  contract changed.
+
 ## [3.3.2] - 2026-10-14
 
 ### Fixed
